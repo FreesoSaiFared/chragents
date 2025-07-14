@@ -726,12 +726,17 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
       if (!networkRequest) {
         return;
       }
+      // Or clause is never hit, but is here because we can't use non-null assertions.
+      const backendRequestId = networkRequest.backendRequestId() || requestId;
+      requestId = backendRequestId;
     }
     networkRequest.setSignedExchangeInfo(info);
     networkRequest.setResourceType(Common.ResourceType.resourceTypes.SignedExchange);
 
     this.updateNetworkRequestWithResponse(networkRequest, info.outerResponse);
     this.updateNetworkRequest(networkRequest);
+    this.getExtraInfoBuilder(requestId).addHasExtraInfo(info.hasExtraInfo);
+
     this.#manager.dispatchEventToListeners(
         Events.ResponseReceived, {request: networkRequest, response: info.outerResponse});
   }
@@ -744,6 +749,7 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     timestamp,
     wallTime,
     initiator,
+    redirectHasExtraInfo,
     redirectResponse,
     type,
     frameId,
@@ -766,7 +772,7 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
           timestamp,
           type: type || Protocol.Network.ResourceType.Other,
           response: redirectResponse,
-          hasExtraInfo: false,
+          hasExtraInfo: redirectHasExtraInfo,
           frameId,
         });
       }
@@ -806,8 +812,8 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     networkRequest.setFromMemoryCache();
   }
 
-  responseReceived({requestId, loaderId, timestamp, type, response, frameId}: Protocol.Network.ResponseReceivedEvent):
-      void {
+  responseReceived({requestId, loaderId, timestamp, type, response, hasExtraInfo, frameId}:
+                       Protocol.Network.ResponseReceivedEvent): void {
     const networkRequest = this.#requestsById.get(requestId);
     const lowercaseHeaders = NetworkManager.lowercaseHeaders(response.headers);
     if (!networkRequest) {
@@ -831,6 +837,7 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     this.updateNetworkRequestWithResponse(networkRequest, response);
 
     this.updateNetworkRequest(networkRequest);
+    this.getExtraInfoBuilder(requestId).addHasExtraInfo(hasExtraInfo);
     this.#manager.dispatchEventToListeners(Events.ResponseReceived, {request: networkRequest, response});
   }
 
@@ -1768,10 +1775,6 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
     }
   }
 
-  userAgentOverride(): string {
-    return this.#userAgentOverrideInternal;
-  }
-
   setCustomUserAgentOverride(
       userAgent: string, userAgentMetadataOverride: Protocol.Emulation.UserAgentMetadata|null = null): void {
     this.#customUserAgent = userAgent;
@@ -1927,9 +1930,7 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
     content: string,
     errorDescription: Host.ResourceLoader.LoadErrorDescription,
   }> {
-    const headers: {
-      [x: string]: string,
-    } = {};
+    const headers: Record<string, string> = {};
 
     const currentUserAgent = this.currentUserAgent();
     if (currentUserAgent) {
@@ -2093,12 +2094,6 @@ export class InterceptedRequest {
     void this.#fetchAgent.invoke_continueRequest({requestId: this.requestId});
   }
 
-  continueRequestWithError(errorReason: Protocol.Network.ErrorReason): void {
-    console.assert(!this.#hasRespondedInternal);
-    this.#hasRespondedInternal = true;
-    void this.#fetchAgent.invoke_failRequest({requestId: this.requestId, errorReason});
-  }
-
   async responseBody(): Promise<TextUtils.ContentData.ContentDataOrError> {
     const response = await this.#fetchAgent.invoke_getResponseBody({requestId: this.requestId});
     const error = response.getError();
@@ -2140,6 +2135,7 @@ export class InterceptedRequest {
  */
 class ExtraInfoBuilder {
   readonly #requests: NetworkRequest[];
+  #responseExtraInfoFlag: Array<boolean|null>;
   #requestExtraInfos: Array<ExtraRequestInfo|null>;
   #responseExtraInfos: Array<ExtraResponseInfo|null>;
   #responseEarlyHintsHeaders: NameValue[];
@@ -2149,6 +2145,7 @@ class ExtraInfoBuilder {
 
   constructor() {
     this.#requests = [];
+    this.#responseExtraInfoFlag = [];
     this.#requestExtraInfos = [];
     this.#responseEarlyHintsHeaders = [];
     this.#responseExtraInfos = [];
@@ -2159,6 +2156,21 @@ class ExtraInfoBuilder {
 
   addRequest(req: NetworkRequest): void {
     this.#requests.push(req);
+    this.sync(this.#requests.length - 1);
+  }
+
+  addHasExtraInfo(hasExtraInfo: boolean): void {
+    this.#responseExtraInfoFlag.push(hasExtraInfo);
+    // This comes in response, so it can't come before request or after next
+    // request in the redirect chain.
+    console.assert(this.#requests.length === this.#responseExtraInfoFlag.length, 'request/response count mismatch');
+    if (!hasExtraInfo) {
+      // We may potentially have gotten extra infos from the next redirect
+      // request already. Account for that by inserting null for missing
+      // extra infos at current position.
+      this.#requestExtraInfos.splice(this.#requests.length - 1, 0, null);
+      this.#responseExtraInfos.splice(this.#requests.length - 1, 0, null);
+    }
     this.sync(this.#requests.length - 1);
   }
 
@@ -2189,6 +2201,18 @@ class ExtraInfoBuilder {
 
   finished(): void {
     this.#finishedInternal = true;
+    // We may have missed responseReceived event in case of failure.
+    // That said, the ExtraInfo events still may be here, so mark them
+    // as present. Event if they are not, this is harmless.
+    // TODO(caseq): consider if we need to report hasExtraInfo in the
+    // loadingFailed event.
+    if (this.#responseExtraInfoFlag.length < this.#requests.length) {
+      this.#responseExtraInfoFlag.push(true);
+      this.sync(this.#responseExtraInfoFlag.length - 1);
+    }
+    console.assert(
+        this.#requests.length === this.#responseExtraInfoFlag.length,
+        'request/response count mismatch when request finished');
     this.updateFinalRequest();
   }
 
@@ -2199,6 +2223,15 @@ class ExtraInfoBuilder {
   private sync(index: number): void {
     const req = this.#requests[index];
     if (!req) {
+      return;
+    }
+
+    // No response yet, so we don't know if extra info would
+    // be there, bail out for now.
+    if (index >= this.#responseExtraInfoFlag.length) {
+      return;
+    }
+    if (!this.#responseExtraInfoFlag[index]) {
       return;
     }
 
@@ -2238,10 +2271,20 @@ SDKModel.register(NetworkManager, {capabilities: Capability.NETWORK, autostart: 
 export class ConditionsSerializer implements Serializer<Conditions, Conditions> {
   stringify(value: unknown): string {
     const conditions = value as Conditions;
-    return JSON.stringify({
-      ...conditions,
-      title: typeof conditions.title === 'function' ? conditions.title() : conditions.title,
-    });
+    try {
+      return JSON.stringify({
+        ...conditions,
+        title: typeof conditions.title === 'function' ? conditions.title() : conditions.title,
+      });
+
+    } catch {
+      // See: crbug.com/420384038
+      // A rename of the i18n strings means that if a user has an old version and we try to parse it, it errors.
+      // In this case, we catch that and just fall back to the default, no
+      // throttling condition. It's not ideal, but it means we don't break the
+      // user's DevTools. We have also landed a migration (see common/Settings.ts) to upgrade users.
+      return new ConditionsSerializer().stringify(NoThrottlingConditions);
+    }
   }
 
   parse(serialized: string): Conditions {

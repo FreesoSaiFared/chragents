@@ -45,7 +45,6 @@ import * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import type * as HAR from '../../models/har/har.js';
 import * as Logs from '../../models/logs/logs.js';
-import * as Workspace from '../../models/workspace/workspace.js';
 import * as NetworkForward from '../../panels/network/forward/forward.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
@@ -552,9 +551,7 @@ export class NetworkNode extends DataGrid.SortableDataGrid.SortableDataGridNode<
   }
 }
 
-export const _backgroundColors: {
-  [x: string]: string,
-} = {
+export const _backgroundColors: Record<string, string> = {
   Default: '--color-grid-default',
   Stripe: '--color-grid-stripe',
   Navigation: '--network-grid-navigation-color',
@@ -777,17 +774,29 @@ export class NetworkRequestNode extends NetworkNode {
     return aURL > bURL ? 1 : -1;
   }
 
-  static ResponseHeaderStringComparator(propertyName: string, a: NetworkNode, b: NetworkNode): number {
-    // TODO(allada) Handle this properly for group nodes.
+  static HeaderStringComparator(
+      getHeaderValue: (request: SDK.NetworkRequest.NetworkRequest, propertyName: string) => string | undefined,
+      propertyName: string, a: NetworkNode, b: NetworkNode): number {
     const aRequest = a.requestOrFirstKnownChildRequest();
     const bRequest = b.requestOrFirstKnownChildRequest();
     if (!aRequest || !bRequest) {
       return !aRequest ? -1 : 1;
     }
-    const aValue = String(aRequest.responseHeaderValue(propertyName) || '');
-    const bValue = String(bRequest.responseHeaderValue(propertyName) || '');
+    // Use the provided callback to get the header value
+    const aValue = String(getHeaderValue(aRequest, propertyName) || '');
+    const bValue = String(getHeaderValue(bRequest, propertyName) || '');
     return aValue.localeCompare(bValue) || aRequest.identityCompare(bRequest);
   }
+
+  static readonly ResponseHeaderStringComparator = NetworkRequestNode.HeaderStringComparator.bind(
+      null,
+      (req: SDK.NetworkRequest.NetworkRequest, name: string) => req.responseHeaderValue(name),
+  );
+
+  static readonly RequestHeaderStringComparator = NetworkRequestNode.HeaderStringComparator.bind(
+      null,
+      (req: SDK.NetworkRequest.NetworkRequest, name: string) => req.requestHeaderValue(name),
+  );
 
   static ResponseHeaderNumberComparator(propertyName: string, a: NetworkNode, b: NetworkNode): number {
     // TODO(allada) Handle this properly for group nodes.
@@ -1067,7 +1076,21 @@ export class NetworkRequestNode extends NetworkNode {
         break;
       }
       default: {
-        this.setTextAndTitle(cell, this.requestInternal.responseHeaderValue(columnId) || '');
+        const columnConfig = this.dataGrid?.columns[columnId];
+        if (columnConfig) {
+          let headerName = '';
+          let headerValue = '';
+          if (columnConfig.id.startsWith('request-header-')) {
+            headerName = columnId.substring('request-header-'.length);
+            headerValue = this.requestInternal.requestHeaderValue(headerName) || '';
+          } else {
+            headerName = columnId.substring('response-header-'.length);
+            headerValue = this.requestInternal.responseHeaderValue(headerName) || '';
+          }
+          this.setTextAndTitle(cell, headerValue);
+        } else {
+          this.setTextAndTitle(cell, '');
+        }
         break;
       }
     }
@@ -1322,13 +1345,7 @@ export class NetworkRequestNode extends NetworkNode {
     }
     switch (initiator.type) {
       case SDK.NetworkRequest.InitiatorType.PARSER: {
-        const uiSourceCode = Workspace.Workspace.WorkspaceImpl.instance().uiSourceCodeForURL(initiator.url);
-        const displayName = uiSourceCode?.displayName();
-        const text = displayName !== undefined && initiator.lineNumber !== undefined ?
-            `${displayName}:${initiator.lineNumber}` :
-            undefined;
         cell.appendChild(Components.Linkifier.Linkifier.linkifyURL(initiator.url, {
-          text,
           lineNumber: initiator.lineNumber,
           columnNumber: initiator.columnNumber,
           userMetric: this.#getLinkifierMetric(),
@@ -1356,7 +1373,7 @@ export class NetworkRequestNode extends NetworkNode {
       case SDK.NetworkRequest.InitiatorType.SCRIPT: {
         const target = SDK.NetworkManager.NetworkManager.forRequest(request)?.target() || null;
         const linkifier = this.parentView().linkifier();
-        if (initiator.stack) {
+        if (initiator.stack?.callFrames.length) {
           this.linkifiedInitiatorAnchor = linkifier.linkifyStackTraceTopFrame(target, initiator.stack);
         } else {
           this.linkifiedInitiatorAnchor = linkifier.linkifyScriptLocation(

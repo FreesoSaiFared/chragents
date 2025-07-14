@@ -21,18 +21,36 @@ import {
 } from './conductor/paths.js';
 
 const options = commandLineArgs(yargs(process.argv.slice(2)))
-                    .options('skip-ninja', {type: 'boolean', desc: 'Skip rebuilding'})
-                    .options('debug-driver', {type: 'boolean', hidden: true, desc: 'Debug the driver part of tests'})
-                    .options('verbose', {alias: 'v', type: 'count', desc: 'Increases the log level'})
-                    .options('bail', {type: 'boolean', alias: 'b', desc: ' bail after first test failure'})
+                    .options('skip-ninja', {
+                      type: 'boolean',
+                      default: false,
+                      desc: 'Skip rebuilding',
+                    })
+                    .options('debug-driver', {
+                      type: 'boolean',
+                      hidden: true,
+                      desc: 'Debug the driver part of tests',
+                    })
+                    .options('verbose', {
+                      alias: 'v',
+                      type: 'count',
+                      desc: 'Increases the log level',
+                    })
+                    .options('bail', {
+                      type: 'boolean',
+                      alias: 'b',
+                      desc: 'Bail after first test failure',
+                    })
                     .options('auto-watch', {
+                      type: 'boolean',
+                      default: false,
                       desc: 'watch changes to files and run tests automatically on file change (only for unit tests)'
                     })
                     .positional('tests', {
                       type: 'string',
                       desc: 'Path to the test suite, starting from out/Target/gen directory.',
                       normalize: true,
-                      default: ['front_end', 'test/e2e', 'test/interactions', 'test/e2e_non_hosted'].map(
+                      default: ['front_end', 'test/e2e', 'test/e2e_non_hosted'].map(
                           f => path.relative(process.cwd(), path.join(SOURCE_ROOT, f))),
                     })
                     .strict()
@@ -55,7 +73,7 @@ function forwardOptions(): string[] {
 
   // @ts-expect-error yargs and unparse have slightly different types
   const unparsed = unparse(forwardedOptions);
-  const args = [];
+  const args: string[] = [];
   for (let i = 0; i < unparsed.length - 1; i++) {
     if (unparsed[i].startsWith('--') && !Number.isNaN(Number(unparsed[i + 1]))) {
       // Mocha errors on --repeat 1 as it expects --repeat=1. We assume
@@ -171,8 +189,12 @@ class NonHostedMochaTests extends Tests {
       '-u',
       path.join(this.suite.buildPath, 'conductor', 'mocha-interface.js'),
     ];
+
     if (options['debug']) {
       args.unshift('--inspect-brk');
+      console.warn(
+          '\x1b[33mYou need to attach a debugger from chrome://inspect for tests to continue the run in debug mode.\x1b[0m');
+      console.warn('\x1b[33mWhen attached, resume execution in the Sources panel to begin debugging the test.\x1b[0m');
     }
     return super.run(
         tests,
@@ -227,7 +249,6 @@ function main() {
   const tests: string[] = typeof options['tests'] === 'string' ? [options['tests']] : options['tests'];
   const testKinds = [
     new KarmaTests(path.join(GEN_DIR, 'front_end'), path.join(GEN_DIR, 'inspector_overlay')),
-    new MochaTests(path.join(GEN_DIR, 'test/interactions')),
     new MochaTests(path.join(GEN_DIR, 'test/e2e')),
     new NonHostedMochaTests(path.join(GEN_DIR, 'test/e2e_non_hosted')),
     new MochaTests(path.join(GEN_DIR, 'test/perf')),

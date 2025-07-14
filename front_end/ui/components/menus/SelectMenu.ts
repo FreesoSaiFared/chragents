@@ -15,16 +15,8 @@ import {
   type MenuItemSelectedEvent,
   type MenuItemValue,
 } from './Menu.js';
-import selectMenuStylesRaw from './selectMenu.css.js';
-import selectMenuButtonStylesRaw from './selectMenuButton.css.js';
-
-/* eslint-disable rulesdir/no-adopted-style-sheets --
- * TODO(crbug.com/391381439): Fully migrate off of Constructable Stylesheets.
- **/
-const selectMenuStyles = new CSSStyleSheet();
-selectMenuStyles.replaceSync(selectMenuStylesRaw);
-const selectMenuButtonStyles = new CSSStyleSheet();
-selectMenuButtonStyles.replaceSync(selectMenuButtonStylesRaw);
+import selectMenuStyles from './selectMenu.css.js';
+import selectMenuButtonStyles from './selectMenuButton.css.js';
 
 const {html} = Lit;
 
@@ -86,6 +78,9 @@ type TitleCallback = () => Lit.TemplateResult;
 
 const deployMenuArrow = new URL('../../../Images/triangle-down.svg', import.meta.url).toString();
 
+/**
+ * @deprecated use `<select>` instead.
+ */
 export class SelectMenu extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
   #button: SelectMenuButton|null = null;
@@ -183,10 +178,6 @@ export class SelectMenu extends HTMLElement {
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [selectMenuStyles];
-  }
-
   #getButton(): SelectMenuButton {
     if (!this.#button) {
       this.#button = this.#shadow.querySelector('devtools-select-menu-button');
@@ -219,6 +210,7 @@ export class SelectMenu extends HTMLElement {
     const buttonLabel = this.#getButtonText();
     if (!this.sideButton) {
       // clang-format off
+      /* eslint-disable rulesdir/no-deprecated-component-usages */
       return html`
           <devtools-select-menu-button
             @selectmenubuttontrigger=${this.#showMenu}
@@ -229,10 +221,12 @@ export class SelectMenu extends HTMLElement {
               ${buttonLabel}
             </devtools-select-menu-button>
         `;
+      /* eslint-enable rulesdir/no-deprecated-component-usages */
       // clang-format on
     }
 
     // clang-format off
+    /* eslint-disable rulesdir/no-deprecated-component-usages */
     return html`
       <button id="side-button" @click=${this.#sideButtonClicked} ?disabled=${this.disabled}>
         ${buttonLabel}
@@ -247,6 +241,7 @@ export class SelectMenu extends HTMLElement {
         .disabled=${this.disabled}>
       </devtools-select-menu-button>
     `;
+    /* eslint-enable rulesdir/no-deprecated-component-usages */
     // clang-format on
   }
 
@@ -269,23 +264,21 @@ export class SelectMenu extends HTMLElement {
     if (!ComponentHelpers.ScheduledRender.isScheduledRender(this)) {
       throw new Error('SelectMenu render was not scheduled');
     }
-    Lit.render(
-        html`
-      <devtools-menu
-        @menucloserequest=${this.#onMenuClose}
-        @menuitemselected=${this.#onItemSelected}
-        .position=${this.position}
-        .origin=${this}
-        .showDivider=${this.showDivider}
-        .showSelectedItem=${this.showSelectedItem}
-        .open=${this.#open}
-        .getConnectorCustomXPosition=${null}
-      >
-      <slot>
-      </slot>
-      </devtools-menu>
-      ${this.#renderButton()}
-    `,
+    // clang-format off
+    Lit.render(html`
+        <style>${selectMenuStyles}</style>
+        <devtools-menu
+            @menucloserequest=${this.#onMenuClose}
+            @menuitemselected=${this.#onItemSelected}
+            .position=${this.position}
+            .origin=${this}
+            .showDivider=${this.showDivider}
+            .showSelectedItem=${this.showSelectedItem}
+            .open=${this.#open}
+            .getConnectorCustomXPosition=${null}>
+          <slot></slot>
+        </devtools-menu>
+        ${this.#renderButton()}`,
         this.#shadow, {host: this});
     // clang-format on
   }
@@ -303,7 +296,6 @@ export class SelectMenuButton extends HTMLElement {
   #showButton: HTMLButtonElement|null = null;
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [selectMenuButtonStyles];
     this.style.setProperty('--deploy-menu-arrow', `url(${deployMenuArrow})`);
     void RenderCoordinator.write(() => {
       switch (this.arrowDirection) {
@@ -412,17 +404,25 @@ export class SelectMenuButton extends HTMLElement {
     const arrow = this.#props.showArrow ? html`<span id="arrow"></span>` : Lit.nothing;
     const classMap = {'single-arrow': this.#props.singleArrow};
     // clang-format off
-      const buttonTitle = html`
+    const buttonTitle = html`
       <span id="button-label-wrapper">
-        <span id="label" ?witharrow=${this.showArrow} class=${Lit.Directives.classMap(classMap)}><slot></slot></span>
+        <span id="label" ?witharrow=${this.showArrow} class=${Lit.Directives.classMap(classMap)}>
+          <slot></slot>
+        </span>
         ${arrow}
-      </span>
-      `;
+      </span>`;
 
     // clang-format off
     Lit.render(html`
-      <button aria-haspopup="true" aria-expanded="false" class="show" @keydown=${this.#handleButtonKeyDown} @click=${this.#handleClick} ?disabled=${this.disabled} jslog=${VisualLogging.dropDown(this.jslogContext)}>${buttonTitle}</button>
-    `, this.#shadow, { host: this });
+        <style>${selectMenuButtonStyles}</style>
+        <button
+            aria-haspopup="true" aria-expanded="false" class="show"
+            @keydown=${this.#handleButtonKeyDown} @click=${this.#handleClick}
+            ?disabled=${this.disabled}
+            jslog=${VisualLogging.dropDown(this.jslogContext)}>
+          ${buttonTitle}
+        </button>`,
+        this.#shadow, { host: this });
     // clang-format on
   }
 }

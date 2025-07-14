@@ -363,9 +363,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
   private extensionStorageModels: ExtensionStorageModel[];
   private extensionStorageTreeElements: Map<string, ExtensionStorageTreeElement>;
   private sharedStorageTreeElements: Map<string, SharedStorageTreeElement>;
-  private domains: {
-    [x: string]: boolean,
-  };
+  private domains: Record<string, boolean>;
   // Holds main frame target.
   private target?: SDK.Target.Target;
   private previousHoveredElement?: FrameTreeElement;
@@ -1895,14 +1893,12 @@ export class CookieTreeElement extends ApplicationPanelTreeElement {
 
 export class StorageCategoryView extends UI.Widget.VBox {
   private emptyWidget: UI.EmptyWidget.EmptyWidget;
-  private linkElement: HTMLElement|null;
 
   constructor() {
     super();
 
     this.element.classList.add('storage-view');
     this.emptyWidget = new UI.EmptyWidget.EmptyWidget('', '');
-    this.linkElement = null;
     this.emptyWidget.show(this.element);
   }
 
@@ -1915,17 +1911,7 @@ export class StorageCategoryView extends UI.Widget.VBox {
   }
 
   setLink(link: Platform.DevToolsPath.UrlString|null): void {
-    if (link && !this.linkElement) {
-      this.linkElement = this.emptyWidget.appendLink(link);
-    }
-    if (!link && this.linkElement) {
-      this.linkElement.classList.add('hidden');
-    }
-    if (link && this.linkElement) {
-      this.linkElement.setAttribute('href', link);
-      this.linkElement.setAttribute('title', link);
-      this.linkElement.classList.remove('hidden');
-    }
+    this.emptyWidget.link = link;
   }
 }
 

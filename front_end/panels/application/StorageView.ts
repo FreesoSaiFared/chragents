@@ -20,13 +20,13 @@ import storageViewStyles from './storageView.css.js';
 
 const UIStrings = {
   /**
-   * @description Text in the Storage View that expresses the amout of used and available storage quota
+   * @description Text in the Storage View that expresses the amount of used and available storage quota
    * @example {1.5 MB} PH1
    * @example {123.1 MB} PH2
    */
   storageQuotaUsed: '{PH1} used out of {PH2} storage quota',
   /**
-   * @description Tooltip in the Storage View that expresses the precise amout of used and available storage quota
+   * @description Tooltip in the Storage View that expresses the precise amount of used and available storage quota
    * @example {200} PH1
    * @example {400} PH2
    */
@@ -57,7 +57,7 @@ const UIStrings = {
    */
   clearSiteData: 'Clear site data',
   /**
-   * @description Annouce message when the "clear site data" task is complete
+   * @description Announce message when the "clear site data" task is complete
    */
   SiteDataCleared: 'Site data cleared',
   /**
@@ -113,7 +113,7 @@ const UIStrings = {
   /**
    * @description Button text for the "Clear site data" button in the Storage View of the Application panel while the clearing action is pending
    */
-  clearing: 'Clearing...',
+  clearing: 'Clearing…',
   /**
    * @description Quota row title in Clear Storage View of the Application panel
    */
@@ -199,6 +199,17 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
     this.includeThirdPartyCookiesSetting =
         Common.Settings.Settings.instance().createSetting('clear-storage-include-third-party-cookies', false);
 
+    const clearButtonSection = this.reportView.appendSection('', 'clear-storage-button').appendRow();
+    this.clearButton = UI.UIUtils.createTextButton(
+        i18nString(UIStrings.clearSiteData), this.clear.bind(this), {jslogContext: 'storage.clear-site-data'});
+    this.clearButton.id = 'storage-view-clear-button';
+    clearButtonSection.appendChild(this.clearButton);
+
+    const includeThirdPartyCookiesCheckbox = UI.SettingsUI.createSettingCheckbox(
+        i18nString(UIStrings.includingThirdPartyCookies), this.includeThirdPartyCookiesSetting);
+    includeThirdPartyCookiesCheckbox.classList.add('include-third-party-cookies');
+    clearButtonSection.appendChild(includeThirdPartyCookiesCheckbox);
+
     const quota = this.reportView.appendSection(i18nString(UIStrings.usage));
     quota.element.setAttribute('jslog', `${VisualLogging.section('usage')}`);
     this.quotaRow = quota.appendSelectableRow();
@@ -242,17 +253,6 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
 
     const errorMessageRow = quota.appendRow();
     this.quotaOverrideErrorMessage = errorMessageRow.createChild('div', 'quota-override-error');
-
-    const clearButtonSection = this.reportView.appendSection('', 'clear-storage-button').appendRow();
-    this.clearButton = UI.UIUtils.createTextButton(
-        i18nString(UIStrings.clearSiteData), this.clear.bind(this), {jslogContext: 'storage.clear-site-data'});
-    this.clearButton.id = 'storage-view-clear-button';
-    clearButtonSection.appendChild(this.clearButton);
-
-    const includeThirdPartyCookiesCheckbox = UI.SettingsUI.createSettingCheckbox(
-        i18nString(UIStrings.includingThirdPartyCookies), this.includeThirdPartyCookiesSetting);
-    includeThirdPartyCookiesCheckbox.classList.add('include-third-party-cookies');
-    clearButtonSection.appendChild(includeThirdPartyCookiesCheckbox);
 
     const application = this.reportView.appendSection(i18nString(UIStrings.application));
     application.element.setAttribute('jslog', `${VisualLogging.section('application')}`);

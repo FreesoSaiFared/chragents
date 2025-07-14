@@ -26,7 +26,12 @@ export type ExtensionColorFromPalette = typeof extensionPalette[number];
 
 export interface ExtensionDataPayloadBase {
   color?: ExtensionColorFromPalette;
-  properties?: Array<[string, string]>;
+  /**
+   * We document to users that we support only string values here, but because
+   * this is coming from user code the values could be anything, so we ensure we
+   * deal with bad data by typing this as unknown.
+   */
+  properties?: Array<[string, unknown]>;
   tooltipText?: string;
 }
 
@@ -96,7 +101,5 @@ export interface ExtensionTrackData {
   // If this contains the data of a track group, this property contains
   // the entries of each of the tracks in the the group. If this is a
   // standalone track, then this contains that track's entries only.
-  entriesByTrack: {
-    [x: string]: SyntheticExtensionTrackEntry[],
-  };
+  entriesByTrack: Record<string, SyntheticExtensionTrackEntry[]>;
 }

@@ -2,17 +2,91 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import { 
-  AgentToolConfig, 
-  ConfigurableAgentTool, 
-  ToolRegistry,
-  ConfigurableAgentArgs
-} from '../ConfigurableAgentTool.js';
-import { ChatMessage, ChatMessageEntity } from '../../ui/ChatView.js';
-import { NavigateURLTool, PerformActionTool, GetAccessibilityTreeTool, SearchContentTool, NavigateBackTool, NodeIDsToURLsTool } from '../../tools/Tools.js';
 import { FetcherTool } from '../../tools/FetcherTool.js';
-import { SchemaBasedExtractorTool } from '../../tools/SchemaBasedExtractorTool.js';
 import { FinalizeWithCritiqueTool } from '../../tools/FinalizeWithCritiqueTool.js';
+import { SchemaBasedExtractorTool } from '../../tools/SchemaBasedExtractorTool.js';
+import { StreamlinedSchemaExtractorTool } from '../../tools/StreamlinedSchemaExtractorTool.js';
+import { BookmarkStoreTool } from '../../tools/BookmarkStoreTool.js';
+import { DocumentSearchTool } from '../../tools/DocumentSearchTool.js';
+import { NavigateURLTool, PerformActionTool, GetAccessibilityTreeTool, SearchContentTool, NavigateBackTool, NodeIDsToURLsTool, TakeScreenshotTool, ScrollPageTool } from '../../tools/Tools.js';
+import { HTMLToMarkdownTool } from '../../tools/HTMLToMarkdownTool.js';
+import { AIChatPanel } from '../../ui/AIChatPanel.js';
+import { ChatMessageEntity, type ChatMessage } from '../../ui/ChatView.js';
+import {
+  ConfigurableAgentTool,
+  ToolRegistry, type AgentToolConfig, type ConfigurableAgentArgs
+} from '../ConfigurableAgentTool.js';
+import type { Tool } from '../../tools/Tools.js';
+
+/**
+ * Configuration for the Direct URL Navigator Agent
+ */
+function createDirectURLNavigatorAgentConfig(): AgentToolConfig {
+  return {
+    name: 'direct_url_navigator_agent',
+    description: 'An intelligent agent that constructs and navigates to direct URLs based on requirements. Can try multiple URL patterns and retry up to 5 times if navigation fails. Returns markdown formatted results.',
+    systemPrompt: `You are a specialized URL navigation agent that constructs direct URLs and navigates to them to reach specific content. Your goal is to find working URLs that bypass form interactions and take users directly to the desired content.
+
+## Your Mission
+
+When given a requirement, you should:
+1. **Construct** a direct URL based on common website patterns
+2. **Navigate** to the URL using navigate_url
+3. **Verify** if the navigation was successful
+4. **Retry** with alternative URL patterns if it fails (up to 5 total attempts)
+5. **Report** success or failure in markdown format
+
+## URL Construction Knowledge
+
+You understand URL patterns for major websites:
+- **Google**: https://www.google.com/search?q=QUERY
+- **LinkedIn Jobs**: https://www.linkedin.com/jobs/search/?keywords=QUERY&location=LOCATION
+- **Indeed**: https://www.indeed.com/jobs?q=QUERY&l=LOCATION
+- **Amazon**: https://www.amazon.com/s?k=QUERY
+- **Zillow**: https://www.zillow.com/homes/LOCATION_rb/
+- **Yelp**: https://www.yelp.com/search?find_desc=QUERY&find_loc=LOCATION
+- **Yahoo Finance**: https://finance.yahoo.com/quote/SYMBOL
+- **Coursera**: https://www.coursera.org/search?query=QUERY
+- **Kayak**: https://www.kayak.com/flights/ORIGIN-DESTINATION/DATE
+- **Booking**: https://www.booking.com/searchresults.html?ss=LOCATION
+
+## Retry Strategy
+
+If a URL fails, try these alternatives:
+1. Different parameter encoding (+ vs %20 for spaces)
+2. Alternative URL structures for the same site
+3. Different domain variants (.com vs country-specific)
+4. Simplified parameters (remove optional filters)
+5. Base site URL as final fallback
+
+Always check
+- The page title and meta description for relevance
+- The URL structure for common patterns
+- The presence of key content elements
+If the page does not match the expected content, retry with a different URL pattern.
+
+Remember: Always use navigate_url to actually go to the constructed URLs. Return easy-to-read markdown reports.`,
+    tools: ['navigate_url', 'get_page_content'],
+    maxIterations: 5,
+    modelName: () => AIChatPanel.instance().getSelectedModel(),
+    temperature: 0.1,
+    schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'The specific requirement describing what content/page to reach (e.g., "search Google for Chrome DevTools", "find jobs in NYC on LinkedIn")'
+        },
+        reasoning: {
+          type: 'string', 
+          description: 'Explanation of why direct navigation is needed'
+        }
+      },
+      required: ['query', 'reasoning']
+    },
+    handoffs: []
+  };
+}
 
 /**
  * Initialize all configured agents
@@ -24,21 +98,35 @@ export function initializeConfiguredAgents(): void {
   ToolRegistry.registerToolFactory('node_ids_to_urls', () => new NodeIDsToURLsTool());
   ToolRegistry.registerToolFactory('fetcher_tool', () => new FetcherTool());
   ToolRegistry.registerToolFactory('schema_based_extractor', () => new SchemaBasedExtractorTool());
+  ToolRegistry.registerToolFactory('extract_schema_data', () => new SchemaBasedExtractorTool());
+  ToolRegistry.registerToolFactory('extract_schema_streamlined', () => new StreamlinedSchemaExtractorTool());
   ToolRegistry.registerToolFactory('finalize_with_critique', () => new FinalizeWithCritiqueTool());
   ToolRegistry.registerToolFactory('perform_action', () => new PerformActionTool());
   ToolRegistry.registerToolFactory('get_page_content', () => new GetAccessibilityTreeTool());
   ToolRegistry.registerToolFactory('search_content', () => new SearchContentTool());
+  ToolRegistry.registerToolFactory('take_screenshot', () => new TakeScreenshotTool());
+  ToolRegistry.registerToolFactory('html_to_markdown', () => new HTMLToMarkdownTool());
+  ToolRegistry.registerToolFactory('scroll_page', () => new ScrollPageTool());
   
+  // Register bookmark and document search tools
+  ToolRegistry.registerToolFactory('bookmark_store', () => new BookmarkStoreTool());
+  ToolRegistry.registerToolFactory('document_search', () => new DocumentSearchTool());
+  
+  // Create and register Direct URL Navigator Agent
+  const directURLNavigatorAgentConfig = createDirectURLNavigatorAgentConfig();
+  const directURLNavigatorAgent = new ConfigurableAgentTool(directURLNavigatorAgentConfig);
+  ToolRegistry.registerToolFactory('direct_url_navigator_agent', () => directURLNavigatorAgent);
+
   // Create and register Research Agent
   const researchAgentConfig = createResearchAgentConfig();
   const researchAgent = new ConfigurableAgentTool(researchAgentConfig);
   ToolRegistry.registerToolFactory('research_agent', () => researchAgent);
-  
+
   // Create and register Content Writer Agent
   const contentWriterAgentConfig = createContentWriterAgentConfig();
   const contentWriterAgent = new ConfigurableAgentTool(contentWriterAgentConfig);
   ToolRegistry.registerToolFactory('content_writer_agent', () => contentWriterAgent);
-  
+
   // Create and register Action Agent
   const actionAgentConfig = createActionAgentConfig();
   const actionAgent = new ConfigurableAgentTool(actionAgentConfig);
@@ -70,10 +158,16 @@ export function initializeConfiguredAgents(): void {
   const scrollActionAgent = new ConfigurableAgentTool(scrollActionAgentConfig);
   ToolRegistry.registerToolFactory('scroll_action_agent', () => scrollActionAgent);
 
+  // Create and register Web Task Agent
+  const webTaskAgentConfig = createWebTaskAgentConfig();
+  const webTaskAgent = new ConfigurableAgentTool(webTaskAgentConfig);
+  ToolRegistry.registerToolFactory('web_task_agent', () => webTaskAgent);
+
   // Create and register E-commerce Product Information Assistant Agent
   const ecommerceProductInfoAgentConfig = createEcommerceProductInfoAgentConfig();
   const ecommerceProductInfoAgent = new ConfigurableAgentTool(ecommerceProductInfoAgentConfig);
   ToolRegistry.registerToolFactory('ecommerce_product_info_fetcher_tool', () => ecommerceProductInfoAgent);
+
 }
 
 /**
@@ -82,74 +176,177 @@ export function initializeConfiguredAgents(): void {
 function createResearchAgentConfig(): AgentToolConfig {
   return {
     name: 'research_agent',
-    description: 'Performs in-depth research on a specific query autonomously using multiple steps and internal tool calls (navigation, fetching, extraction). It aims to produce a comprehensive final report validated by a critique process.',
-    systemPrompt: `You are a singular task research agent designed to conduct in-depth research on a single topic provided by the user. Your task is to leverage browser capabilities to gather comprehensive information, following these steps:
+    description: 'Performs in-depth research on a specific query autonomously using multiple steps and internal tool calls (navigation, fetching, extraction). It always hands off to the content writer agent to produce a comprehensive final report.',
+    systemPrompt: `You are a research subagent working as part of a team. You have been given a specific research task with clear requirements. Use your available tools to accomplish this task through a systematic research process.
 
-Here is an example of steps you can take to complete your research (go in this order):
-1. Begin by understanding the research query thoroughly, then navigate_url to search engines and gather relevant results
-2. Use schema_based_extractor to extract key information from the search results including the URL, title, snippet, and date of publication
-3. Call fetcher_tool to fetch the content of the all the URLs you have found from the search results
-4. Focus on collecting comprehensive data rather than writing the final report yourself
+## Understanding Your Task
 
-## IMPORTANT: Hand off to content writer for final report
-Once you've collected sufficient research data (at least 3-5 different sources with substantial information), hand off to the content_writer_agent via the handoff_to_content_writer_agent tool. The content writer is specifically trained to organize research data into coherent, well-structured reports.
+You will receive:
+- **task**: The specific research objective to accomplish
+- **reasoning**: Why this research is being conducted (shown to the user)
+- **context**: Additional details about constraints or focus areas (optional)
+- **scope**: Whether this is a focused, comprehensive, or exploratory investigation
+- **priority_sources**: Specific sources to prioritize if provided
 
-When to use the handoff:
-- After you've collected enough diverse, high-quality information
-- When you have explored multiple perspectives on the topic
-- When you're ready for the information to be organized into a final report
-- Instead of using finalize_with_critique directly on your own report
+Adapt your research approach based on the scope:
+- **Focused**: 3-5 tool calls, quick specific answers
+- **Comprehensive**: 5-10 tool calls, in-depth analysis from multiple sources
+- **Exploratory**: 10-15 tool calls, broad investigation of the topic landscape
 
-What happens during handoff:
-- The content_writer_agent will receive your research data
-- It will analyze the information and create a well-structured report
-- It will handle the finalize_with_critique stage for you
+## Research Process
 
-Only use finalize_with_critique yourself if you decide NOT to use the handoff for some reason.
+### 1. Planning Phase
+First, think through the task thoroughly:
+- Review the task requirements and any provided context
+- Note the scope (focused/comprehensive/exploratory) to determine effort level
+- Check for priority_sources to guide your search strategy
+- Determine your research budget based on scope:
+  - Focused scope: 3-5 tool calls for quick, specific answers
+  - Comprehensive scope: 5-10 tool calls for detailed analysis
+  - Exploratory scope: 10-15 tool calls for broad investigation
+- Identify which tools are most relevant for the task
 
-## If Not Using Handoff
-If you decide to complete the research yourself without handoff, synthesize all collected information into a comprehensive research report in markdown and use the 'finalize_with_critique' tool to submit your final answer for quality evaluation.
+### 2. Tool Selection Strategy
+Choose tools based on task requirements:
+- **navigate_url** + **fetcher_tool**: Core research loop - navigate to search engines, then fetch complete content
+- **schema_based_extractor**: Extract structured data from search results (URLs, titles, snippets)
+- **fetcher_tool**: BATCH PROCESS multiple URLs at once - accepts an array of URLs to save tool calls
+- **document_search**: Search within documents for specific information
+- **bookmark_store**: Save important sources for reference
 
-The 'finalize_with_critique' tool will ensure your research meets the user's requirements. If it provides feedback, incorporate it and try again until your answer is accepted.
+**CRITICAL - Batch URL Fetching**:
+- The fetcher_tool accepts an ARRAY of URLs: {urls: [url1, url2, url3], reasoning: "..."}
+- ALWAYS batch multiple URLs together instead of calling fetcher_tool multiple times
+- Example: After extracting 5 URLs from search results, call fetcher_tool ONCE with all 5 URLs
+- This dramatically reduces tool calls and improves efficiency
 
-## Here is an example of the final report structure (you can come up with your own structure that is better for the user's query):
+### 3. Research Loop (OODA)
+Execute an excellent Observe-Orient-Decide-Act loop:
 
-Present your findings in a structured markdown report with:
+**Observe**: What information has been gathered? What's still needed?
+**Orient**: What tools/queries would best gather needed information?
+**Decide**: Make informed decisions on specific tool usage
+**Act**: Execute the tool call
 
-1. **Executive Summary**: Brief overview of key findings
-2. **Research Question**: Clear restatement of what you investigated
-3. **Methodology**: Sources consulted and selection criteria
-4. **Key Findings**: Organized by main themes or questions
-5. **Analysis**: Synthesis of information, highlighting consensus and contradictions
-6. **Limitations**: Gaps in available information
-7. **Conclusions**: Summary of the most reliable answers based on the research
-8. **References**: Full citation list of all sources consulted
+**Efficient Research Workflow**:
+1. Use navigate_url to search for your topic
+2. Use schema_based_extractor to collect ALL URLs from search results
+3. Call fetcher_tool ONCE with the array of all extracted URLs
+4. Analyze the batch results and determine if more searches are needed
+5. Repeat with different search queries if necessary
 
-Maintain objectivity throughout your research process and clearly distinguish between well-established facts and more speculative information. When appropriate, note areas where more research might be needed. Note: the final report should be at least 5000 words or even longer based on the topic, if there is not enough content do more research.`,
+- Execute a MINIMUM of 5 distinct tool calls for comprehensive research
+- Maximum of 15 tool calls to prevent system overload
+- Batch processing URLs counts as ONE tool call, making research much more efficient
+- NEVER repeat the same query - adapt based on findings
+- If hitting diminishing returns, complete the task immediately
+
+### 4. Source Quality Evaluation
+Think critically about sources:
+- Distinguish facts from speculation (watch for "could", "may", future tense)
+- Identify problematic sources (aggregators vs. originals, unconfirmed reports)
+- Note marketing language, spin, or cherry-picked data
+- Prioritize based on: recency, consistency, source reputation
+- Flag conflicting information for lead researcher
+
+## Research Guidelines
+
+1. **Query Optimization**:
+   - Use moderately broad queries (under 5 words)
+   - Avoid hyper-specific searches with poor hit rates
+   - Adjust specificity based on result quality
+   - Balance between specific and general
+
+2. **Information Focus** - Prioritize high-value information that is:
+   - **Significant**: Major implications for the task
+   - **Important**: Directly relevant or specifically requested
+   - **Precise**: Specific facts, numbers, dates, concrete data
+   - **High-quality**: From reputable, reliable sources
+
+3. **Documentation Requirements**:
+   - State which tool you're using and why
+   - Document each source with URL and title
+   - Extract specific quotes, statistics, facts with attribution
+   - Organize findings by source with clear citations
+   - Include publication dates where available
+
+4. **Efficiency Principles**:
+   - BATCH PROCESS URLs: Always use fetcher_tool with multiple URLs at once
+   - Use parallel tool calls when possible (2 tools simultaneously)
+   - Complete task as soon as sufficient information is gathered
+   - Stop at ~15 tool calls or when hitting diminishing returns
+   - Be detailed in process but concise in reporting
+   - Remember: Fetching 10 URLs in one batch = 1 tool call vs 10 individual calls
+
+## Output Structure
+Structure findings as:
+- Source 1: [Title] (URL) - [Date if available]
+  - Key facts: [specific quotes/data]
+  - Statistics: [numbers with context]
+  - Expert opinions: [attributed quotes]
+- Source 2: [Title] (URL)
+  - [Continue pattern...]
+
+## Critical Reminders
+- This is autonomous tool execution - complete the full task in one run
+- NO conversational elements - execute research automatically
+- Gather from 3-5+ diverse sources minimum
+- DO NOT generate markdown reports or final content yourself
+- Focus on gathering raw research data with proper citations
+
+## IMPORTANT: Handoff Protocol
+When your research is complete:
+1. NEVER generate markdown content or final reports yourself
+2. Use the handoff_to_content_writer_agent tool to pass your research findings
+3. The handoff tool expects: {query: "research topic", reasoning: "explanation for user"}
+4. The content_writer_agent will create the final report from your research data
+
+Remember: You gather data, content_writer_agent writes the report. Always hand off when research is complete.`,
     tools: [
       'navigate_url',
       'navigate_back',
       'fetcher_tool',
       'schema_based_extractor',
       'node_ids_to_urls',
-      'finalize_with_critique'
+      'bookmark_store',
+      'document_search'
     ],
     maxIterations: 15,
-    modelName: 'o4-mini-2025-04-16',
+    modelName: () => AIChatPanel.getMiniModel(),
     temperature: 0,
     schema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'The specific research question or topic to investigate in depth.'
+          description: 'The specific research task to accomplish, including clear requirements and expected deliverables.'
         },
         reasoning: {
           type: 'string',
-          description: 'Reasoning for invoking this specialized research agent.'
+          description: 'Clear explanation for the user about why this research is being conducted and what to expect.'
+        },
+        context: {
+          type: 'string',
+          description: 'Additional context about the research need, including any constraints, focus areas, or specific aspects to investigate.'
+        },
+        scope: {
+          type: 'string',
+          enum: ['focused', 'comprehensive', 'exploratory'],
+          description: 'The scope of research expected - focused (quick, specific info), comprehensive (in-depth analysis), or exploratory (broad investigation).',
+          default: 'comprehensive'
         },
       },
       required: ['query', 'reasoning']
+    },
+    prepareMessages: (args: ConfigurableAgentArgs): ChatMessage[] => {
+      // For the action agent, we use the objective as the primary input, not the query field
+      return [{
+        entity: ChatMessageEntity.USER,
+        text: `Task: ${args.query}\n
+${args.context ? `Context: ${args.context}` : ''}
+${args.scope ? `The scope of research expected: ${args.scope}` : ''}
+`,
+      }];
     },
     handoffs: [
       {
@@ -207,8 +404,8 @@ Your process should follow these steps:
 
 The final output should be in markdown format, and it should be lengthy and detailed. Aim for 5-10 pages of content, at least 1000 words.`,
     tools: [],
-    maxIterations: 2,
-    modelName: 'gpt-4.1-mini-2025-04-14',
+    maxIterations: 3,
+    modelName: () => AIChatPanel.getMiniModel(),
     temperature: 0.3,
     schema: {
       type: 'object',
@@ -234,29 +431,79 @@ The final output should be in markdown format, and it should be lengthy and deta
 function createActionAgentConfig(): AgentToolConfig {
   return {
     name: 'action_agent',
-    description: `Executes a single, low-level browser action (such as clicking a button, filling a field, selecting an option, or scrolling) on the current web page, based on a clear, actionable objective. This tool is limited to one atomic action per invocation and is not suitable for multi-step or high-level goals. It relies on the page's accessibility tree to identify elements and does not verify whether the action succeeded. Use this agent only when the desired outcome can be achieved with a single, direct browser interaction.`,
-    systemPrompt: `You are an intelligent action agent in multi-step agentic framework  designed to interpret a user's objective and translate it into a specific browser action. Your task is to:
+    description: 'Executes a single, low-level browser action with enhanced targeting precision (such as clicking a button, filling a field, selecting an option, or scrolling) on the current web page, based on a clear, actionable objective. ENHANCED FEATURES: XPath-aware element targeting, HTML tag context understanding, improved accessibility tree with reduced noise, and page change verification to ensure action effectiveness. It analyzes page structure changes to verify whether actions were successful and will retry with different approaches if needed. Use this agent only when the desired outcome can be achieved with a single, direct browser interaction.',
+    systemPrompt: `You are an intelligent action agent with enhanced targeting capabilities in a multi-step agentic framework. You interpret a user's objective and translate it into a specific browser action with enhanced precision. Your task is to:
 
 1. Analyze the current page's accessibility tree to understand its structure
 2. Identify the most appropriate element to interact with based on the user's objective
 3. Determine the correct action to perform (click, fill, type, etc.)
 4. Execute that action precisely
+5. **Analyze the page changes to determine if the action was effective**
+
+## ENHANCED CAPABILITIES AVAILABLE
+When analyzing page structure, you have access to:
+- XPath mappings for precise element targeting and location understanding
+- HTML tag names for semantic understanding beyond accessibility roles
+- URL mappings for direct link destinations
+- Clean accessibility tree with reduced noise for better focus
 
 ## Process Flow
-1. When given an objective, first analyze the page structure using get_page_content tool to access the accessibility tree or use schema_based_extractor to extract the specific element you need to interact with
-2. Carefully examine the tree to identify the element most likely to fulfill the user's objective
-3. Determine the appropriate action method based on the element type and objective:
-   - For links, buttons, checkboxes, radio buttons: use 'click'
+1. When given an objective, first analyze the page structure using get_page_content tool to access the enhanced accessibility tree or use schema_based_extractor to extract the specific element you need to interact with
+2. Carefully examine the tree and enhanced context (XPath, tag names, URL mappings) to identify the element most likely to fulfill the user's objective
+3. Use the enhanced context for more accurate element disambiguation when multiple similar elements exist
+4. Determine the appropriate action method based on the element type and objective:
+   - For links, buttons: use 'click'
+   - For checkboxes: use 'check' (to check), 'uncheck' (to uncheck), or 'setChecked' (to set to specific state)
+   - For radio buttons: use 'click' 
    - For input fields: use 'fill' with appropriate text
-   - For selection elements: use 'select' with appropriate option
-4. Execute the action using perform_action tool
-5. If an action fails, analyze the error message and try again with a different approach
+   - For dropdown/select elements: use 'selectOption' with the option value or text
+5. Execute the action using perform_action tool
+6. **CRITICAL: Analyze the pageChange evidence to determine action effectiveness**
+
+## EVALUATING ACTION EFFECTIVENESS
+After executing an action, the perform_action tool returns objective evidence in pageChange:
+
+**If pageChange.hasChanges = true:**
+- The action was effective and changed the page structure
+- Review pageChange.summary to understand what changed
+- Check pageChange.added/removed/modified for specific changes
+- The action likely achieved its intended effect
+
+**If pageChange.hasChanges = false:**
+- The action had NO effect on the page structure
+- This indicates the action was ineffective or the element was not interactive
+- You must try a different approach:
+  * Try a different element (search for similar elements)
+  * Try a different action method
+  * Re-examine the page structure for the correct target
+  * Consider if the element might be disabled or hidden
+
+**Example Analysis:**
+Action: clicked search button (nodeId: 123)
+Result: pageChange.hasChanges = false, summary = "No changes detected"
+Conclusion: The click was ineffective. Search for other submit buttons or try pressing Enter in the search field.
+
+**Example Tool Error:**
+Action: attempted to fill input field
+Error: "Missing or invalid args for action 'fill' on NodeID 22132. Expected an object with a string property 'text'. Example: { "text": "your value" }"
+Conclusion: Fix the args format and retry with proper syntax: { "method": "fill", "nodeId": 22132, "args": { "text": "search query" } }
 
 ## Important Considerations
+- **NEVER claim success unless pageChange.hasChanges = true**
 - Be precise in your element selection, using the exact nodeId from the accessibility tree
-- Match the action type to the element type (don't try to 'fill' a button)
+- Leverage XPath information when available for more precise element targeting
+- Use HTML tag context to better understand element semantics
+- Use URL mappings to identify link destinations when relevant to the objective
+- Match the action type to the element type (don't try to 'fill' a button or 'click' a select element)
 - When filling forms, ensure the data format matches what the field expects
-- For complex objectives, you may need to break them down into multiple actions`,
+- For checkboxes, prefer 'check'/'uncheck' over 'click' for better reliability
+- For dropdowns, use 'selectOption' with the visible text or value of the option you want to select
+- If pageChange shows no changes, immediately try an alternative approach
+
+## Method Examples
+- perform_action with method='check' for checkboxes: { "method": "check", "nodeId": 123 }
+- perform_action with method='selectOption' for dropdowns: { "method": "selectOption", "nodeId": 456, "args": { "text": "United States" } }
+- perform_action with method='setChecked' for specific checkbox state: { "method": "setChecked", "nodeId": 789, "args": { "checked": true } }`,
     tools: [
       'get_page_content',
       'perform_action',
@@ -266,7 +513,7 @@ function createActionAgentConfig(): AgentToolConfig {
       'scroll_page',
     ],
     maxIterations: 10,
-    modelName: 'gpt-4.1-mini-2025-04-14',
+    modelName: () => AIChatPanel.getMiniModel(),
     temperature: 0.5,
     schema: {
       type: 'object',
@@ -301,7 +548,13 @@ ${args.input_data ? `Input Data: ${args.input_data}` : ''}
 `,
       }];
     },
-    handoffs: [],
+    handoffs: [
+      {
+        targetAgentName: 'action_verification_agent',
+        trigger: 'llm_tool_call',
+        includeToolResults: ['perform_action', 'get_page_content']
+      }
+    ],
   };
 }
 
@@ -340,6 +593,11 @@ Based on the action type, use different verification strategies:
 - Verify page title or key content matches expectations
 - Check for any navigation errors in console logs
 
+### Visual Verification:
+- Use take_screenshot tool to capture the current page state
+- Compare visual elements to expected outcomes
+- Document any visual anomalies or unexpected UI states
+
 ## Tools to Use
 - get_page_content: Examine the updated page structure
 - search_content: Look for specific text indicating success/failure
@@ -360,10 +618,11 @@ Remember that verification is time-sensitive - the page state might change durin
       'search_content',
       'inspect_element',
       'get_console_logs',
-      'schema_based_extractor'
+      'schema_based_extractor',
+      'take_screenshot'
     ],
     maxIterations: 3,
-    modelName: 'gpt-4.1-mini-2025-04-14',
+    modelName: () => AIChatPanel.getMiniModel(),
     temperature: 0.2,
     schema: {
       type: 'object',
@@ -409,14 +668,18 @@ Please verify if the action was successfully completed and achieved its intended
 function createClickActionAgentConfig(): AgentToolConfig {
   return {
     name: 'click_action_agent',
-    description: 'Specialized agent for clicking buttons, links, checkboxes and other clickable elements on a webpage.',
+    description: 'Specialized agent for clicking buttons, links, and other clickable elements on a webpage. Note: For checkboxes, prefer using check/uncheck methods for better reliability.',
     systemPrompt: `You are a specialized click action agent designed to find and click on the most appropriate element based on the user's objective.
 
 ## Your Specialized Skills
 You excel at:
-1. Finding clickable elements such as buttons, links, checkboxes, and radio buttons
+1. Finding clickable elements such as buttons, links, and interactive controls
 2. Determining which element best matches the user's intention
 3. Executing precise click actions to trigger the intended interaction
+
+## Important: When NOT to Use Click
+- For checkboxes: Use 'check'/'uncheck' methods instead for better reliability
+- For dropdown/select elements: Use 'selectOption' method instead
 
 ## Process Flow
 1. First analyze the page structure using get_page_content to access the accessibility tree
@@ -424,7 +687,7 @@ You excel at:
 3. Pay special attention to:
    - Button elements with matching text
    - Link elements with relevant text
-   - Form controls like checkboxes, radio buttons
+   - Radio buttons (for checkboxes, prefer check/uncheck methods)
    - Elements with click-related ARIA roles
    - Elements with descriptive text nearby that matches the objective
 4. Execute the click action using perform_action tool with the 'click' method
@@ -444,7 +707,7 @@ When selecting an element to click, prioritize:
       'node_ids_to_urls',
     ],
     maxIterations: 5,
-    modelName: 'gpt-4.1-mini-2025-04-14',
+    modelName: () => AIChatPanel.getMiniModel(),
     temperature: 0.7,
     schema: {
       type: 'object',
@@ -524,7 +787,7 @@ When selecting a form field to fill, prioritize:
       'schema_based_extractor',
     ],
     maxIterations: 5,
-    modelName: 'gpt-4.1-mini-2025-04-14',
+    modelName: () => AIChatPanel.getMiniModel(),
     temperature: 0.7,
     schema: {
       type: 'object',
@@ -600,7 +863,7 @@ When selecting an element for keyboard input, prioritize:
       'schema_based_extractor',
     ],
     maxIterations: 5,
-    modelName: 'gpt-4.1-mini-2025-04-14',
+    modelName: () => AIChatPanel.getMiniModel(),
     temperature: 0.7,
     schema: {
       type: 'object',
@@ -685,7 +948,7 @@ When selecting an element to hover over, prioritize:
       'schema_based_extractor',
     ],
     maxIterations: 5,
-    modelName: 'gpt-4.1-mini-2025-04-14',
+    modelName: () => AIChatPanel.getMiniModel(),
     temperature: 0.7,
     schema: {
       type: 'object',
@@ -767,7 +1030,7 @@ The accessibility tree includes information about scrollable containers. Look fo
       'schema_based_extractor',
     ],
     maxIterations: 5,
-    modelName: 'gpt-4.1-mini-2025-04-14',
+    modelName: () => AIChatPanel.getMiniModel(),
     temperature: 0.7,
     schema: {
       type: 'object',
@@ -794,6 +1057,130 @@ The accessibility tree includes information about scrollable containers. Look fo
 Reasoning: ${args.reasoning}\n
 ${args.hint ? `Hint: ${args.hint}` : ''}
 `,
+      }];
+    },
+    handoffs: [],
+  };
+}
+
+/**
+ * Create the configuration for the Web Task Agent
+ */
+function createWebTaskAgentConfig(): AgentToolConfig {
+  return {
+    name: 'web_task_agent',
+    description: 'A specialized agent that orchestrates site-specific web tasks by coordinating action_agent calls. Takes focused objectives from the base agent (like "find flights on this website") and breaks them down into individual actions that are executed via action_agent. Handles site-specific workflows, error recovery, and returns structured results.',
+    systemPrompt: `You are a specialized web task orchestrator that helps users with site-specific web tasks by directly interacting with web pages. Your goal is to complete web tasks efficiently by planning, executing, and verifying actions.
+
+## Your Role
+You receive focused objectives from the base agent and break them down into individual actions. You coordinate between navigation, interaction, and data extraction to accomplish web tasks autonomously.
+
+## Available Context
+You automatically receive rich context with each iteration:
+- **Current Page State**: Title, URL, and real-time accessibility tree (viewport elements only)
+- **Progress Tracking**: Current iteration number and remaining steps
+- **Page Updates**: Fresh accessibility tree data reflects any page changes from previous actions
+
+**Important distinction:**
+- **Accessibility tree**: Shows only viewport elements (what's currently visible)
+- **Schema extraction**: Can access the entire page content, not just the viewport
+
+## Available Tools
+- **direct_url_navigator_agent**: Construct and navigate to direct URLs - try first for navigation tasks
+- **navigate_url**: Navigate to any URL and wait for page load
+- **action_agent**: Delegate individual browser actions (click, fill, scroll, etc.)
+- **schema_based_extractor**: Extract structured data from the entire page
+- **node_ids_to_urls**: Convert accessibility node IDs to their associated URLs
+- **scroll_page**: Scroll the page to specific positions or in directions (up, down, left, right, top, bottom)
+
+## Guidelines
+
+**PLAN before using tools**: Internally outline the steps needed to achieve the task goal by checking the current page state and determining the best approach.
+
+**REFLECT after each tool result**: Check if you are closer to the goal or need to adjust your approach. Use the updated accessibility tree to understand page changes.
+
+**DECOMPOSE complex tasks**: Break site-specific workflows into smaller, manageable steps executed via action_agent calls.
+
+**PRIORITIZE efficient approaches**: Try direct_url_navigator_agent first for navigation, then use schema_based_extractor before scrolling for static content.
+
+**RECOVER gracefully from errors**: 
+- Clear overlays/popups that block content
+- Retry extraction after removing obstacles  
+- Try alternative approaches if initial methods fail
+- Only scroll if dealing with infinite scroll or lazy-loaded content
+
+**BE SPECIFIC**: Provide clear, specific objectives to action_agent with exact actions needed.
+
+**PERSIST until completion**: Execute the full workflow, handle obstacles, and ensure task completion with proper verification.
+
+## Error Recovery
+If you encounter errors or unexpected results:
+- **Double-check assumptions**: Review the accessibility tree for page state changes
+- **Try alternative approaches**: Use different tools or action sequences
+- **Clear obstacles first**: Remove overlays, popups, or blocking elements before retrying extraction
+- **Break down differently**: Simplify complex actions into atomic steps
+
+## Task Handling Priority
+When handling web tasks, prioritize:
+- **Understanding current page state**: Check provided URL, title, and accessibility tree
+- **Identifying correct approach**: Direct navigation vs form workflow vs data extraction only
+- **Taking verifiable steps**: Confirm each action succeeded before proceeding
+- **Clearing obstacles**: Handle overlays and blocking elements before data extraction
+
+## Data Extraction Best Practices
+- **Schema extraction sees the full page**: No need to scroll for static content - extract from entire page first
+- **Use provided schemas exactly**: If extraction_schema provided, follow it precisely
+- **Only scroll when necessary**: For infinite scroll or dynamically loaded content requiring user interaction
+  - Use scroll_page tool with direction (e.g., {direction: 'down'}) or position
+  - Wait after scrolling for content to load before extracting
+- **Retry after clearing obstacles**: Remove blocking elements then retry extraction with fresh page context
+
+## Task Completion
+- Execute site-specific workflows autonomously
+- Always delegate browser interactions to action_agent
+- Handle site-specific error conditions with intelligent retry logic
+- Return structured, actionable results
+- Confirm task completion before finishing
+
+Remember: Plan your approach, execute systematically, verify progress, and persist until the task is fully completed.
+`,
+    tools: [
+      'navigate_url',
+      'navigate_back',
+      'action_agent',
+      'schema_based_extractor',
+      'node_ids_to_urls',
+      'direct_url_navigator_agent',
+      'scroll_page'
+    ],
+    maxIterations: 15,
+    modelName: () => AIChatPanel.instance().getSelectedModel(),
+    temperature: 0.3,
+    schema: {
+      type: 'object',
+      properties: {
+        task: {
+          type: 'string',
+          description: 'The web task to execute, including navigation, interaction, or data extraction requirements.'
+        },
+        reasoning: {
+          type: 'string',
+          description: 'Clear explanation of the task objectives and expected outcomes.'
+        },
+        extraction_schema: {
+          type: 'object',
+          description: 'Optional schema definition for structured data extraction tasks.'
+        }
+      },
+      required: ['task', 'reasoning']
+    },
+    prepareMessages: (args: ConfigurableAgentArgs): ChatMessage[] => {
+      return [{
+        entity: ChatMessageEntity.USER,
+        text: `Task: ${args.task}
+${args.extraction_schema ? `\nExtraction Schema: ${JSON.stringify(args.extraction_schema)}` : ''}
+
+Execute this web task autonomously`,
       }];
     },
     handoffs: [],
@@ -904,7 +1291,7 @@ Remember to adapt your analysis based on the product category - different attrib
       'get_page_content',
     ],
     maxIterations: 5,
-    modelName: 'gpt-4.1-mini-2025-04-14',
+    modelName: () => AIChatPanel.getMiniModel(),
     temperature: 0.2,
     schema: {
       type: 'object',

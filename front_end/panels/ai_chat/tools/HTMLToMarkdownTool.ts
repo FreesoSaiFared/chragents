@@ -4,10 +4,15 @@
 
 import * as SDK from '../../../core/sdk/sdk.js';
 import * as Protocol from '../../../generated/protocol.js';
-import { Tool, waitForPageLoad } from './Tools.js';
-import { AgentService } from '../core/AgentService.js';
 import * as Utils from '../common/utils.js';
-import { OpenAIClient } from '../core/OpenAIClient.js';
+import { AgentService } from '../core/AgentService.js';
+import { createLogger } from '../core/Logger.js';
+import { LLMClient } from '../LLM/LLMClient.js';
+import { AIChatPanel } from '../ui/AIChatPanel.js';
+
+import { waitForPageLoad, type Tool } from './Tools.js';
+
+const logger = createLogger('Tool:HTMLToMarkdown');
 
 /**
  * Result interface for HTML to Markdown extraction
@@ -33,6 +38,34 @@ export class HTMLToMarkdownTool implements Tool<HTMLToMarkdownArgs, HTMLToMarkdo
   name = 'html_to_markdown';
   description = 'Extracts the main article content from a webpage and converts it to well-formatted Markdown, removing ads, navigation, and other distracting elements.';
 
+  private async createToolTracingObservation(toolName: string, args: any): Promise<void> {
+    try {
+      const { getCurrentTracingContext, createTracingProvider } = await import('../tracing/TracingConfig.js');
+      const context = getCurrentTracingContext();
+      if (context) {
+        const tracingProvider = createTracingProvider();
+        await tracingProvider.createObservation({
+          id: `event-tool-execute-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          name: `Tool Execute: ${toolName}`,
+          type: 'event',
+          startTime: new Date(),
+          input: { 
+            toolName, 
+            toolArgs: args,
+            contextInfo: `Direct tool execution in ${toolName}`
+          },
+          metadata: {
+            executionPath: 'direct-tool',
+            toolName
+          }
+        }, context.traceId);
+      }
+    } catch (tracingError) {
+      // Don't fail tool execution due to tracing errors
+      console.error(`[TRACING ERROR in ${toolName}]`, tracingError);
+    }
+  }
+
   schema = {
     type: 'object',
     properties: {
@@ -48,11 +81,13 @@ export class HTMLToMarkdownTool implements Tool<HTMLToMarkdownArgs, HTMLToMarkdo
     required: ['reasoning']
   };
 
+
   /**
    * Execute the HTML to Markdown extraction
    */
   async execute(args: HTMLToMarkdownArgs): Promise<HTMLToMarkdownResult> {
-    console.log('[HTMLToMarkdownTool] Executing with args:', args);
+    await this.createToolTracingObservation(this.name, args);
+    logger.info('Executing with args', { args });
     const { instruction } = args;
     const agentService = AgentService.getInstance();
     const apiKey = agentService.getApiKey();
@@ -73,15 +108,15 @@ export class HTMLToMarkdownTool implements Tool<HTMLToMarkdownArgs, HTMLToMarkdo
         throw new Error('No page target available');
       }
       try {
-        console.log(`[HTMLToMarkdownTool] Checking page readiness (Timeout: ${READINESS_TIMEOUT_MS}ms)...`);
+        logger.info('Checking page readiness', { timeoutMs: READINESS_TIMEOUT_MS });
         await waitForPageLoad(target, READINESS_TIMEOUT_MS);
-        console.log('[HTMLToMarkdownTool] Page is ready or timeout reached.');
+        logger.info('Page is ready or timeout reached');
       } catch (readinessError: any) {
-         console.error(`[HTMLToMarkdownTool] Page readiness check failed: ${readinessError.message}`);
+         logger.error('Page readiness check failed', { error: readinessError.message, stack: readinessError.stack });
       }
 
       // Get the page content from the accessibility tree
-      console.log('[HTMLToMarkdownTool] Getting page content from accessibility tree');
+      logger.info('Getting page content from accessibility tree');
       const content = await this.getPageContent(target);
 
       if (!content) {
@@ -92,21 +127,21 @@ export class HTMLToMarkdownTool implements Tool<HTMLToMarkdownArgs, HTMLToMarkdo
         };
       }
 
-      console.log(`[HTMLToMarkdownTool] Retrieved page content (${content.length} characters)`);
+      logger.info('Retrieved page content', { contentLength: content.length });
 
       // Create prompts for the LLM
       const systemPrompt = this.createSystemPrompt();
       const userPrompt = this.createUserPrompt(content, instruction);
 
       // Call the LLM for extraction
-      console.log('[HTMLToMarkdownTool] Calling LLM for extraction');
+      logger.info('Calling LLM for extraction');
       const extractionResult = await this.callExtractionLLM({
         systemPrompt,
         userPrompt,
         apiKey,
       });
 
-      console.log('[HTMLToMarkdownTool] Extraction completed successfully');
+      logger.info('Extraction completed successfully');
 
       // Return the result
       return {
@@ -115,7 +150,7 @@ export class HTMLToMarkdownTool implements Tool<HTMLToMarkdownArgs, HTMLToMarkdo
       };
 
     } catch (error: any) {
-      console.error('[HTMLToMarkdownTool] Error during extraction:', error);
+      logger.error('Error during extraction', { error: error.message, stack: error.stack });
       return {
         success: false,
         markdownContent: null,
@@ -133,7 +168,7 @@ export class HTMLToMarkdownTool implements Tool<HTMLToMarkdownArgs, HTMLToMarkdo
     }
 
     // Get accessibility tree using existing utility
-    const processedTreeResult = await Utils.getAccessibilityTree(target, console.log);
+    const processedTreeResult = await Utils.getAccessibilityTree(target);
     return processedTreeResult.simplified;
   }
 
@@ -308,23 +343,27 @@ ${instruction}
   private async callExtractionLLM(params: {
     systemPrompt: string,
     userPrompt: string,
-    apiKey: string
+    apiKey: string,
   }): Promise<{
-    markdownContent: string
+    markdownContent: string,
   }> {
-    // Call OpenAI using the existing client
-    const response = await OpenAIClient.callOpenAI(
-      params.apiKey,
-      'gpt-4.1-nano-2025-04-14',
-      params.userPrompt,
-      {
-        systemPrompt: params.systemPrompt,
-        temperature: 0.2, // Lower temperature for more deterministic results
-      }
-    );
+    // Call LLM using the unified client
+    const { model, provider } = AIChatPanel.getNanoModelWithProvider();
+    const llm = LLMClient.getInstance();
+    const llmResponse = await llm.call({
+      provider,
+      model,
+      messages: [
+        { role: 'system', content: params.systemPrompt },
+        { role: 'user', content: params.userPrompt }
+      ],
+      systemPrompt: params.systemPrompt,
+      temperature: 0.2 // Lower temperature for more deterministic results
+    });
+    const response = llmResponse.text;
 
-    // Process the response - OpenAIResponse provides text property
-    const markdownContent = response.text || '';
+    // Process the response - UnifiedLLMClient returns string directly
+    const markdownContent = response || '';
 
     return {
       markdownContent

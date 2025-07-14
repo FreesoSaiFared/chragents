@@ -105,10 +105,6 @@ const UIStrings = {
    */
   copyAllDeclarations: 'Copy all declarations',
   /**
-   *@description  A context menu item in Styles panel to copy all the CSS changes
-   */
-  copyAllCSSChanges: 'Copy all CSS changes',
-  /**
    *@description Text that is announced by the screen reader when the user focuses on an input field for editing the name of a CSS selector in the Styles panel
    */
   cssSelector: '`CSS` selector',
@@ -152,6 +148,7 @@ export class StylePropertiesSection {
   protected readonly selectorRefElement: HTMLElement;
   private hoverableSelectorsMode: boolean;
   private isHiddenInternal: boolean;
+  protected customPopulateCallback: () => void;
 
   nestingLevel = 0;
   #ancestorRuleListElement: HTMLElement;
@@ -180,6 +177,7 @@ export class StylePropertiesSection {
     this.parentsComputedStyles = parentsComputedStyles;
     this.editable = Boolean(style.styleSheetId && style.range);
     this.originalPropertiesCount = style.leadingProperties().length;
+    this.customPopulateCallback = () => this.populateStyle(this.styleInternal, this.propertiesTreeOutline);
 
     const rule = style.parentRule;
     const headerText = this.headerText();
@@ -524,7 +522,8 @@ export class StylePropertiesSection {
 
     let focusNext: HTMLElement|null = null;
     const focusable =
-        Array.from((this.propertiesTreeOutline.shadowRoot.querySelectorAll('[tabindex]') as NodeListOf<HTMLElement>));
+        Array.from((this.propertiesTreeOutline.shadowRoot.querySelectorAll('[tabindex]') as NodeListOf<HTMLElement>))
+            .filter(e => e.checkVisibility());
 
     if (focusable.length === 0) {
       return;
@@ -1076,7 +1075,7 @@ export class StylePropertiesSection {
     this.parentPane.setActiveProperty(null);
     this.nextEditorTriggerButtonIdx = 1;
     this.propertiesTreeOutline.removeChildren();
-    this.populateStyle(this.styleInternal, this.propertiesTreeOutline);
+    this.customPopulateCallback();
   }
 
   populateStyle(style: SDK.CSSStyleDeclaration.CSSStyleDeclaration, parent: TreeElementParent): void {
@@ -1413,11 +1412,6 @@ export class StylePropertiesSection {
       Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(allDeclarationText);
     }, {jslogContext: 'copy-all-declarations'});
 
-    // TODO(changhaohan): conditionally add this item only when there are changes to copy
-    contextMenu.clipboardSection().appendItem(i18nString(UIStrings.copyAllCSSChanges), async () => {
-      const allChanges = await this.parentPane.getFormattedChanges();
-      Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(allChanges);
-    }, {jslogContext: 'copy-all-css-changes'});
     void contextMenu.show();
   }
 
@@ -1761,13 +1755,14 @@ export class FunctionRuleSection extends StylePropertiesSection {
   constructor(
       stylesPane: StylesSidebarPane, matchedStyles: SDK.CSSMatchedStyles.CSSMatchedStyles,
       style: SDK.CSSStyleDeclaration.CSSStyleDeclaration, children: SDK.CSSRule.CSSNestedStyle[], sectionIdx: number,
-      functionName: string, parameters: string[], expandedByDefault: boolean) {
-    super(stylesPane, matchedStyles, style, sectionIdx, null, null, `${functionName}(${parameters.join(', ')})`);
+      functionName: string, expandedByDefault: boolean) {
+    super(stylesPane, matchedStyles, style, sectionIdx, null, null, functionName);
     if (!expandedByDefault) {
       this.element.classList.add('hidden');
     }
     this.selectorElement.className = 'function-key';
-    this.addChildren(children, this.propertiesTreeOutline);
+    this.customPopulateCallback = () => this.addChildren(children, this.propertiesTreeOutline);
+    this.onpopulate();
   }
 
   createConditionElement(condition: SDK.CSSRule.CSSNestedStyleCondition): HTMLElement|undefined {

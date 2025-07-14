@@ -163,17 +163,17 @@ export class InsightContext extends ConversationContext<TimelineUtils.InsightAIC
         return [
           {title: 'What should I do to improve and optimize the time taken to fetch and display images on the page?'}
         ];
-      case 'InteractionToNextPaint':
+      case 'INPBreakdown':
         return [
-          {title: 'Help me optimize my INP score'}, {title: 'Help me understand why a large INP score is problematic'},
-          {title: 'What was the biggest contributor to my INP score?'}
+          {title: 'Suggest fixes for my longest interaction'}, {title: 'Why is a large INP score problematic?'},
+          {title: 'What\'s the biggest contributor to my longest interaction?'}
         ];
       case 'LCPDiscovery':
         return [
-          {title: 'Help me optimize my LCP score'}, {title: 'What can I do to reduce my LCP discovery time?'},
+          {title: 'Suggest fixes to reduce my LCP'}, {title: 'What can I do to reduce my LCP discovery time?'},
           {title: 'Why is LCP discovery time important?'}
         ];
-      case 'LCPPhases':
+      case 'LCPBreakdown':
         return [
           {title: 'Help me optimize my LCP score'}, {title: 'Which LCP phase was most problematic?'},
           {title: 'What can I do to reduce the LCP time for this page load?'}
@@ -202,6 +202,9 @@ export class InsightContext extends ConversationContext<TimelineUtils.InsightAIC
     }
   }
 }
+
+// 16k Tokens * ~4 char per token.
+const MAX_FUNCTION_RESULT_BYTE_LENGTH = 16384 * 4;
 
 export class PerformanceInsightsAgent extends AiAgent<TimelineUtils.InsightAIContext.ActiveInsight> {
   #insight: ConversationContext<TimelineUtils.InsightAIContext.ActiveInsight>|undefined;
@@ -299,6 +302,15 @@ export class PerformanceInsightsAgent extends AiAgent<TimelineUtils.InsightAICon
         );
         const formatted =
             requests.map(r => TraceEventFormatter.networkRequest(r, activeInsight.parsedTrace, {verbose: false}));
+
+        const byteCount = Platform.StringUtilities.countWtf8Bytes(formatted.join('\n'));
+        Host.userMetrics.performanceAINetworkSummaryResponseSize(byteCount);
+
+        if (this.#isFunctionResponseTooLarge(formatted.join('\n'))) {
+          return {
+            error: 'getNetworkActivitySummary response is too large. Try investigating using other functions',
+          };
+        }
         const summaryFact: Host.AidaClient.RequestFact = {
           text:
               `This is the network summary for this insight. You can use this and not call getNetworkActivitySummary again:\n${
@@ -308,6 +320,7 @@ export class PerformanceInsightsAgent extends AiAgent<TimelineUtils.InsightAICon
         const cacheForInsight = this.#functionCallCache.get(activeInsight) ?? {};
         cacheForInsight.getNetworkActivitySummary = summaryFact;
         this.#functionCallCache.set(activeInsight, cacheForInsight);
+
         return {result: {requests: formatted}};
       },
     });
@@ -346,6 +359,15 @@ export class PerformanceInsightsAgent extends AiAgent<TimelineUtils.InsightAICon
           return {error: 'Request not found'};
         }
         const formatted = TraceEventFormatter.networkRequest(request, activeInsight.parsedTrace, {verbose: true});
+
+        const byteCount = Platform.StringUtilities.countWtf8Bytes(formatted);
+        Host.userMetrics.performanceAINetworkRequestDetailResponseSize(byteCount);
+
+        if (this.#isFunctionResponseTooLarge(formatted)) {
+          return {
+            error: 'getNetworkRequestDetail response is too large. Try investigating using other functions',
+          };
+        }
         return {result: {request: formatted}};
       },
     });
@@ -396,6 +418,15 @@ The fields are:
           return {error: 'No main thread activity found'};
         }
         const activity = tree.serialize();
+
+        const byteCount = Platform.StringUtilities.countWtf8Bytes(activity);
+        Host.userMetrics.performanceAIMainThreadActivityResponseSize(byteCount);
+
+        if (this.#isFunctionResponseTooLarge(activity)) {
+          return {
+            error: 'getMainThreadActivity response is too large. Try investigating using other functions',
+          };
+        }
         const activityFact: Host.AidaClient.RequestFact = {
           text:
               `This is the main thread activity for this insight. You can use this and not call getMainThreadActivity again:\n${
@@ -410,6 +441,10 @@ The fields are:
       },
 
     });
+  }
+
+  #isFunctionResponseTooLarge(response: string): boolean {
+    return response.length > MAX_FUNCTION_RESULT_BYTE_LENGTH;
   }
 
   override parseTextResponse(response: string): ParsedResponse {

@@ -116,7 +116,7 @@ const UIStrings = {
   /**
    *@description Text describing how to navigate the dock side menu
    */
-  dockSideNaviation: 'Use left and right arrow keys to navigate the options',
+  dockSideNavigation: 'Use left and right arrow keys to navigate the options',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('entrypoints/main/MainImpl.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -150,7 +150,7 @@ export class MainImpl {
       new Promise<Root.Runtime.HostConfig>(resolve => {
         Host.InspectorFrontendHost.InspectorFrontendHostInstance.getHostConfig(resolve);
       }),
-      new Promise<{[key: string]: string}>(
+      new Promise<Record<string, string>>(
           resolve => Host.InspectorFrontendHost.InspectorFrontendHostInstance.getPreferences(resolve)),
     ]);
 
@@ -227,7 +227,7 @@ export class MainImpl {
     }
   }
 
-  createSettings(prefs: {[x: string]: string}): void {
+  createSettings(prefs: Record<string, string>): void {
     this.#initializeExperiments();
     let storagePrefix = '';
     if (Host.Platform.isCustomDevtoolsFrontend()) {
@@ -288,6 +288,7 @@ export class MainImpl {
     Root.Runtime.experiments.register('sampling-heap-profiler-timeline', 'Sampling heap profiler timeline', true);
     Root.Runtime.experiments.register(
         'show-option-tp-expose-internals-in-heap-snapshot', 'Show option to expose internals in heap snapshots');
+    Root.Runtime.experiments.register('vertical-drawer', 'Enable vertical drawer configuration');
 
     // Timeline
     Root.Runtime.experiments.register(
@@ -347,14 +348,6 @@ export class MainImpl {
         Root.Runtime.ExperimentName.JUST_MY_CODE, 'Hide ignore-listed code in Sources tree view');
 
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN,
-        'Redesign of the filter bar in the Network panel',
-        false,
-        'https://goo.gle/devtools-network-filter-redesign',
-        'https://crbug.com/1500573',
-    );
-
-    Root.Runtime.experiments.register(
         Root.Runtime.ExperimentName.TIMELINE_SHOW_POST_MESSAGE_EVENTS,
         'Performance panel: show postMessage dispatch and handling flows',
     );
@@ -365,7 +358,6 @@ export class MainImpl {
     );
 
     Root.Runtime.experiments.enableExperimentsByDefault([
-      Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN,
       Root.Runtime.ExperimentName.FULL_ACCESSIBILITY_TREE,
       Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL,
       ...(Root.Runtime.Runtime.queryParam('isChromeForTesting') ? ['protocol-monitor'] : []),
@@ -556,7 +548,7 @@ export class MainImpl {
 
     const value = Root.Runtime.Runtime.queryParam('loadTimelineFromURL');
     if (value !== null) {
-      // Only import Timeline if neeeded. If this was a static import, every load of devtools
+      // Only import Timeline if needed. If this was a static import, every load of devtools
       // would request and evaluate the Timeline panel dep tree, slowing down the UI's load.
       const Timeline = await import('../../panels/timeline/timeline.js');
       Timeline.TimelinePanel.LoadTimelineHandler.instance().handleQueryParam(value);
@@ -814,14 +806,14 @@ export class MainMenuItem implements UI.Toolbar.Provider {
       dockItemElement.setAttribute(
           'jslog', `${VisualLogging.item('dock-side').track({keydown: 'ArrowDown|ArrowLeft|ArrowRight'})}`);
       dockItemElement.tabIndex = -1;
-      UI.ARIAUtils.setLabel(dockItemElement, UIStrings.dockSide + UIStrings.dockSideNaviation);
-      const [toggleDockSideShorcut] =
+      UI.ARIAUtils.setLabel(dockItemElement, UIStrings.dockSide + UIStrings.dockSideNavigation);
+      const [toggleDockSideShortcut] =
           UI.ShortcutRegistry.ShortcutRegistry.instance().shortcutsForAction('main.toggle-dock');
 
       // clang-format off
       render(html`
         <span class="dockside-title"
-              title=${i18nString(UIStrings.placementOfDevtoolsRelativeToThe, {PH1: toggleDockSideShorcut.title()})}>
+              title=${i18nString(UIStrings.placementOfDevtoolsRelativeToThe, {PH1: toggleDockSideShortcut.title()})}>
           ${i18nString(UIStrings.dockSide)}
         </span>
         <devtools-toolbar @mousedown=${(event: Event) => event.consume()}>
@@ -1028,3 +1020,34 @@ export class ReloadActionDelegate implements UI.ActionRegistration.ActionDelegat
     return false;
   }
 }
+
+type ExternalRequestInput = {
+  kind: 'LIVE_STYLE_DEBUGGER',
+  args: {prompt: string, selector: string},
+}|{
+  kind: 'PERFORMANCE_RELOAD_GATHER_INSIGHTS',
+};
+
+interface ExternalRequestResponse {
+  response: string;
+  devToolsLogs: object[];
+}
+
+export async function handleExternalRequest(input: ExternalRequestInput): Promise<ExternalRequestResponse> {
+  switch (input.kind) {
+    case 'PERFORMANCE_RELOAD_GATHER_INSIGHTS': {
+      const TimelinePanel = await import('../../panels/timeline/timeline.js');
+      return await TimelinePanel.TimelinePanel.TimelinePanel.handleExternalRecordRequest();
+    }
+    case 'LIVE_STYLE_DEBUGGER': {
+      const AiAssistance = await import('../../panels/ai_assistance/ai_assistance.js');
+      const AiAssistanceModel = await import('../../models/ai_assistance/ai_assistance.js');
+      const panelInstance = await AiAssistance.AiAssistancePanel.instance();
+      return await panelInstance.handleExternalRequest(
+          input.args.prompt, AiAssistanceModel.ConversationType.STYLING, input.args.selector);
+    }
+  }
+}
+
+// @ts-expect-error
+globalThis.handleExternalRequest = handleExternalRequest;

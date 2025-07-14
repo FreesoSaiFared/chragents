@@ -148,7 +148,7 @@ let viewManagerInstance: ViewManager|undefined;
 export class ViewManager {
   readonly views: Map<string, View>;
   private readonly locationNameByViewId: Map<string, string>;
-  private readonly locationOverrideSetting: Common.Settings.Setting<{[key: string]: string}>;
+  private readonly locationOverrideSetting: Common.Settings.Setting<Record<string, string>>;
 
   private constructor() {
     this.views = new Map();
@@ -303,6 +303,10 @@ export class ViewManager {
       return null;
     }
     return widgetForView.get(view) || null;
+  }
+
+  hasView(viewId: string): boolean {
+    return this.views.has(viewId);
   }
 
   async showView(viewId: string, userGesture?: boolean, omitFocus?: boolean): Promise<void> {
@@ -577,13 +581,9 @@ class Location {
 
 const locationForView = new WeakMap<View, Location>();
 
-interface CloseableTabSetting {
-  [tabName: string]: boolean;
-}
+type CloseableTabSetting = Record<string, boolean>;
 
-interface TabOrderSetting {
-  [tabName: string]: number;
-}
+type TabOrderSetting = Record<string, number>;
 
 class TabbedLocation extends Location implements TabbedViewLocation {
   private tabbedPaneInternal: TabbedPane;
@@ -648,7 +648,6 @@ class TabbedLocation extends Location implements TabbedViewLocation {
     const moreTabsButton = new ToolbarMenuButton(
         this.appendTabsToMenu.bind(this), /* isIconDropdown */ true, undefined, 'more-tabs', 'dots-vertical');
     this.tabbedPaneInternal.leftToolbar().appendToolbarItem(moreTabsButton);
-    this.tabbedPaneInternal.disableOverflowMenu();
     return moreTabsButton;
   }
 
@@ -819,9 +818,7 @@ class TabbedLocation extends Location implements TabbedViewLocation {
 
   private persistTabOrder(): void {
     const tabIds = this.tabbedPaneInternal.tabIds();
-    const tabOrders: {
-      [x: string]: number,
-    } = {};
+    const tabOrders: Record<string, number> = {};
     for (let i = 0; i < tabIds.length; i++) {
       tabOrders[tabIds[i]] = (i + 1) * TabbedLocation.orderStep;
     }

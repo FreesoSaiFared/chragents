@@ -17,6 +17,9 @@
   "core/common/ResourceType.ts | eventsource": {
     "message": "EventSource"
   },
+  "core/common/ResourceType.ts | fedcm": {
+    "message": "FedCM"
+  },
   "core/common/ResourceType.ts | fetch": {
     "message": "Eskuratu"
   },
@@ -614,6 +617,9 @@
   "core/sdk/sdk-meta.ts | doNotEmulateCssMediaType": {
     "message": "Ez emulatu CSSren multimedia-eduki motak"
   },
+  "core/sdk/sdk-meta.ts | doNotEmulateOsTextScale": {
+    "message": "Ez emulatu sistema eragilearen testuaren eskala"
+  },
   "core/sdk/sdk-meta.ts | doNotExtendGridLines": {
     "message": "Ez hedatu saretaren lerroak"
   },
@@ -664,6 +670,9 @@
   },
   "core/sdk/sdk-meta.ts | emulateDeuteranopia": {
     "message": "Emulatu deuteranopia (berderik ez)"
+  },
+  "core/sdk/sdk-meta.ts | emulateOsTextScale": {
+    "message": "Emulatu sistema eragilearen testuaren eskala"
   },
   "core/sdk/sdk-meta.ts | emulateProtanopia": {
     "message": "Emulatu protanopia (gorririk ez)"
@@ -729,6 +738,30 @@
     "message": "Sareko eskaerak blokeatzeko aukera"
   },
   "core/sdk/sdk-meta.ts | noEmulation": {
+    "message": "Emulaziorik ez"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation100": {
+    "message": "% 100 (lehenetsia)"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation115": {
+    "message": "% 115"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation130": {
+    "message": "% 130"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation150": {
+    "message": "% 150"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation180": {
+    "message": "% 180"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation200": {
+    "message": "% 200"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation85": {
+    "message": "% 85"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulationNone": {
     "message": "Emulaziorik ez"
   },
   "core/sdk/sdk-meta.ts | pauseOnExceptions": {
@@ -860,6 +893,9 @@
   "entrypoints/inspector_main/RenderingOptions.ts | forcesMediaTypeForTestingPrint": {
     "message": "Multimedia-eduki mota behartzen du, inprimatzea eta pantaila-estiloak probatzeko"
   },
+  "entrypoints/inspector_main/RenderingOptions.ts | forcesOsTextScaleEmulation": {
+    "message": "Sistema eragilearen testuaren eskala emulatzera behartzen du"
+  },
   "entrypoints/inspector_main/RenderingOptions.ts | forcesVisionDeficiencyEmulation": {
     "message": "Ikusmen-urritasuna emulatzera behartzen du"
   },
@@ -971,7 +1007,7 @@
   "entrypoints/main/MainImpl.ts | dockSide": {
     "message": "Ainguratzeko aldea"
   },
-  "entrypoints/main/MainImpl.ts | dockSideNaviation": {
+  "entrypoints/main/MainImpl.ts | dockSideNavigation": {
     "message": "Aukeretan nabigatzeko, erabili ezkerrera eta eskuinera egiteko gezi-teklak"
   },
   "entrypoints/main/MainImpl.ts | dockToBottom": {
@@ -1130,6 +1166,9 @@
   "entrypoints/main/main-meta.ts | toggleDrawer": {
     "message": "Erakutsi edo ezkutatu panel lerrakorra"
   },
+  "entrypoints/main/main-meta.ts | toggleDrawerOrientation": {
+    "message": "Aldatu panel lerrakorraren orientazioa"
+  },
   "entrypoints/main/main-meta.ts | undockIntoSeparateWindow": {
     "message": "Kendu ainguratzea eta jarri beste leiho batean"
   },
@@ -1208,9 +1247,6 @@
   "generated/Deprecation.ts | CanRequestURLHTTPContainingNewline": {
     "message": "Baliabideen eskaerei dagozkien URLek kendutako zuriuneen \\(n|r|t) karaktereak eta \"baino gutxiago\" karaktereak (<) badituzte, eskaera horiek blokeatuta egongo dira. Baliabide horiek kargatzeko, kendu lerro-jauziak eta kodetu \"baino gutxiago\" karaktereak elementuen atributuen balioetan eta antzeko tokietan."
   },
-  "generated/Deprecation.ts | CharsetAutoDetectionISO2022JP": {
-    "message": "ISO-2022-JP karaktere multzoaren hautemate automatikoa zaharkituta dago eta laster desgaituko da. Zehaztu karaktere multzoa Eduki mota goiburuan edo metaetiketa bat erabilita (https://developer.mozilla.org/en-US/docs/Glossary/Character_encoding)."
-  },
   "generated/Deprecation.ts | ChromeLoadTimesConnectionInfo": {
     "message": "chrome.loadTimes() zaharkituta dago; haren ordez, erabili API estandar hau: Navigation Timing-en 2. maila."
   },
@@ -1231,9 +1267,6 @@
   },
   "generated/Deprecation.ts | CrossOriginWindowConfirm": {
     "message": "Jatorri anitzeko iframe-etatik window.confirm abiarazteko aukera zaharkituta dago eta kendu egingo da etorkizunean."
-  },
-  "generated/Deprecation.ts | DOMMutationEvents": {
-    "message": "DOMaren mutazio-gertaerak, DOMSubtreeModified, DOMNodeInserted, DOMNodeRemoved, DOMNodeRemovedFromDocument, DOMNodeInsertedIntoDocument eta DOMCharacterDataModified barne, zaharkituta daude (https://w3c.github.io/uievents/#legacy-event-types) eta kendu egingo dira. Haien ordez, erabili MutationObserver."
   },
   "generated/Deprecation.ts | DataUrlInSvgUse": {
     "message": "Onartzen diren datuak: SVGUseElement-eko URLak zaharkituta daude, eta kendu egingo dira etorkizunean."
@@ -1364,11 +1397,26 @@
   "generated/Deprecation.ts | V8SharedArrayBufferConstructedInExtensionWithoutIsolation": {
     "message": "SharedArrayBuffer erabiltzen jarraitzeko, jatorri anitzeko isolamenduaren aukera gaitu behar dute luzapenek. Joan https://developer.chrome.com/docs/extensions/mv3/cross-origin-isolation/ helbidera."
   },
+  "generated/Deprecation.ts | WebGPUAdapterIsFallbackAdapter": {
+    "message": "GPUAdapter-eko isFallbackAdapter atributua zaharkituta geratu da. Haren ordez, erabili GPUAdapterInfo-ko isFallbackAdapter atributua."
+  },
   "generated/Deprecation.ts | XHRJSONEncodingDetection": {
     "message": "XMLHttpRequest eskaerarako erantzun gisa balio duen JSON formatuko fitxategiak ez ditu onartzen UTF-16 formatuko karaktereak"
   },
   "generated/Deprecation.ts | XMLHttpRequestSynchronousInNonWorkerOutsideBeforeUnload": {
     "message": "Hari nagusiko XMLHttpRequest sinkronikoa zaharkituta dago, azken erabiltzaileak haren ondorio kaltegarriak ikus ditzakeelako. Laguntza gehiago jasotzeko, joan https://xhr.spec.whatwg.org/ helbidera."
+  },
+  "models/ai_assistance/AiUtils.ts | ageRestricted": {
+    "message": "Eginbide hau bakarrik 18 urte edo gehiago dituzten erabiltzaileentzat dago erabilgarri."
+  },
+  "models/ai_assistance/AiUtils.ts | notAvailableInIncognitoMode": {
+    "message": "AA bidezko laguntza ez dago erabilgarri ezkutuko moduan edo gonbidatu moduan."
+  },
+  "models/ai_assistance/AiUtils.ts | notLoggedIn": {
+    "message": "Chrome-n zure Google-ko kontuarekin saioa hastean bakarrik dago erabilgarri eginbide hau."
+  },
+  "models/ai_assistance/AiUtils.ts | offline": {
+    "message": "Eginbide hau Interneteko konexio aktiboarekin bakarrik erabili daiteke."
   },
   "models/bindings/ContentProviderBasedProject.ts | unknownErrorLoadingFile": {
     "message": "Errore ezezagun bat gertatu da fitxategia kargatzean"
@@ -1422,7 +1470,7 @@
     "message": "Huts egin du LiveEdit eginbideak: {PH1}"
   },
   "models/crux-manager/CrUXManager.ts | fieldOverrideWarning": {
-    "message": "Eremuaren datuak oraingo orria ez den beste URL baterako daude konfiguratuta."
+    "message": "Eremuaren neurketak oraingo orria ez den beste URL baterako daude konfiguratuta."
   },
   "models/emulation/DeviceModeModel.ts | devicePixelRatioMustBeANumberOr": {
     "message": "Zenbaki bat edo hutsune bat izan behar du gailuaren pixel-erlazioak."
@@ -1634,9 +1682,6 @@
   "models/logs/logs-meta.ts | reset": {
     "message": "berrezarri"
   },
-  "models/persistence/EditFileSystemView.ts | add": {
-    "message": "Gehitu karpeta"
-  },
   "models/persistence/EditFileSystemView.ts | enterAPath": {
     "message": "Idatzi bide-izen bat"
   },
@@ -1645,15 +1690,6 @@
   },
   "models/persistence/EditFileSystemView.ts | excludedFolders": {
     "message": "Kanpoan utzitako azpikarpetak"
-  },
-  "models/persistence/EditFileSystemView.ts | folderPath": {
-    "message": "Karpetaren bide-izena"
-  },
-  "models/persistence/EditFileSystemView.ts | none": {
-    "message": "Bat ere ez"
-  },
-  "models/persistence/EditFileSystemView.ts | sViaDevtools": {
-    "message": "{PH1} (.devtools bidez)"
   },
   "models/persistence/EditFileSystemView.ts | url": {
     "message": "URLa"
@@ -1687,6 +1723,9 @@
   },
   "models/persistence/PersistenceActions.ts | saveAs": {
     "message": "Gorde honela…"
+  },
+  "models/persistence/PersistenceActions.ts | saveFailed": {
+    "message": "Ezin izan da gorde fitxategia diskoan."
   },
   "models/persistence/PersistenceActions.ts | saveImage": {
     "message": "Gorde irudia"
@@ -1778,8 +1817,8 @@
   "models/trace/insights/CLSCulprits.ts | topCulprits": {
     "message": "Diseinu-aldaketaren errudun nagusiak"
   },
-  "models/trace/insights/CLSCulprits.ts | unsizedImages": {
-    "message": "Tamainarik gabeko irudiak"
+  "models/trace/insights/CLSCulprits.ts | unsizedImage": {
+    "message": "Unsized image element"
   },
   "models/trace/insights/CLSCulprits.ts | worstCluster": {
     "message": "Txarrenen lukua"
@@ -1833,10 +1872,10 @@
     "message": "Sareko zure lehen eskaera da garrantzitsuena.  Murriztu latentzia birbideratzeak saihestuz, zerbitzariak azkarrago erantzutea bermatuz eta testuaren konprimatzea gaituz."
   },
   "models/trace/insights/DocumentLatency.ts | failedRedirects": {
-    "message": "Birbideratzeak zituen"
+    "message": "Birbideratzeak zituen ({PH1} birbideratze, {PH2} +)"
   },
   "models/trace/insights/DocumentLatency.ts | failedServerResponseTime": {
-    "message": "Zerbitzariak motel erantzun du"
+    "message": "Zerbitzariak mantso erantzun du ({PH1} behatu da)"
   },
   "models/trace/insights/DocumentLatency.ts | failedTextCompression": {
     "message": "Ez da aplikatu konprimatzerik"
@@ -1845,7 +1884,7 @@
     "message": "Birbideratzeak ekiditen ditu"
   },
   "models/trace/insights/DocumentLatency.ts | passingServerResponseTime": {
-    "message": "Zerbitzariak bizkor erantzuten du"
+    "message": "Zerbitzariak bizkor erantzuten du ({PH1} behatu da)"
   },
   "models/trace/insights/DocumentLatency.ts | passingTextCompression": {
     "message": "Testuaren konprimatzea aplikatzen du"
@@ -1998,7 +2037,7 @@
     "message": "Elementua errendatzeko prozesuaren atzerapena"
   },
   "models/trace/insights/LCPPhases.ts | fieldDuration": {
-    "message": "Eremuko 75. pertzentila"
+    "message": "75. p. eremua"
   },
   "models/trace/insights/LCPPhases.ts | noLcp": {
     "message": "Ez da LCPrik hauteman"
@@ -2025,7 +2064,7 @@
     "message": "Alferrik galdutako byteak"
   },
   "models/trace/insights/LegacyJavaScript.ts | description": {
-    "message": "Polyfill eta transform-ei esker, arakatzaile zaharrek JavaScript-en eginbide berriak erabil ditzakete. Hala ere, haietako asko ez dira beharrezkoak arakatzaile modernoetarako. Aldatu JavaScript-en garatzeko prozesua [Baseline](https://web.dev/articles/baseline-and-polyfills) eginbideak ez transpilatzeko, aurreko bertsioko arakatzaileekiko bateragarritasuna gorde behar duzula jakin ezean. [Jakin zergatik webgune gehienek ES6+ kodea transpilatu gabe inplementatu ahal duten](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
+    "message": "Polyfill eta transform-ei esker, arakatzaile zaharragoek JavaScript-en eginbide berriak erabil ditzakete. Hala ere, haietako asko ez dira beharrezkoak arakatzaile modernoetarako. Aldatu JavaScript-en garatzeko prozesua [Baseline](https://web.dev/articles/baseline-and-polyfills) eginbideak ez transpilatzeko, arakatzaile zaharragoekiko bateragarritasuna gorde behar duzula jakin ezean. [Jakin zergatik webgune gehienek ES6+ kodea transpilatu gabe inplementatu ahal duten](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
   },
   "models/trace/insights/LegacyJavaScript.ts | title": {
     "message": "Aurreko bertsioko JavaScript"
@@ -2045,8 +2084,32 @@
   "models/trace/insights/ModernHTTP.ts | title": {
     "message": "HTTP modernoa"
   },
+  "models/trace/insights/NetworkDependencyTree.ts | columnOrigin": {
+    "message": "Jatorria"
+  },
+  "models/trace/insights/NetworkDependencyTree.ts | columnRequest": {
+    "message": "Eskatu"
+  },
+  "models/trace/insights/NetworkDependencyTree.ts | columnSource": {
+    "message": "Iturburua"
+  },
+  "models/trace/insights/NetworkDependencyTree.ts | columnTime": {
+    "message": "Ordua"
+  },
+  "models/trace/insights/NetworkDependencyTree.ts | columnWastedMs": {
+    "message": "LCP aurrezki estimatuak"
+  },
+  "models/trace/insights/NetworkDependencyTree.ts | crossoriginWarning": {
+    "message": "Ez da erabili aurrez konektatzea. Egiaztatu crossorigin atributua behar bezala erabiltzen dela."
+  },
   "models/trace/insights/NetworkDependencyTree.ts | description": {
     "message": "Orrien kargatzea hobetzeko, [saihestu funtsezko eskaerak kateatzea](https://developer.chrome.com/docs/lighthouse/performance/critical-request-chains) kateen luzera edo baliabideen deskarga-tamaina murriztuz, edo beharrezkoak ez diren baliabideen deskarga atzeratuz."
+  },
+  "models/trace/insights/NetworkDependencyTree.ts | estSavingTableDescription": {
+    "message": "Gehitu [aurrez konektatzeko](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) aholkuak zure jatorri garrantzitsuenetan, baina saiatu 4 edo gutxiago erabiltzen."
+  },
+  "models/trace/insights/NetworkDependencyTree.ts | estSavingTableTitle": {
+    "message": "Aurrez konektatzeko hautagaiak"
   },
   "models/trace/insights/NetworkDependencyTree.ts | maxCriticalPathLatency": {
     "message": "Bide-izenaren funtsezko gehieneko latentzia:"
@@ -2054,14 +2117,32 @@
   "models/trace/insights/NetworkDependencyTree.ts | noNetworkDependencyTree": {
     "message": "Ez dago sarearen menpekotasunek eragindako errendatze-zereginik"
   },
+  "models/trace/insights/NetworkDependencyTree.ts | noPreconnectCandidates": {
+    "message": "Ez dago aurrez konektatzeko hautagai ona den beste jatorririk"
+  },
+  "models/trace/insights/NetworkDependencyTree.ts | noPreconnectOrigins": {
+    "message": "ez da jatorririk aurrez konektatu"
+  },
+  "models/trace/insights/NetworkDependencyTree.ts | preconnectOriginsTableDescription": {
+    "message": "[Aurrez konektatzeko](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) aholkuak lagungarriak dira orri bat kargatzeko prozesuan konexioa lehenago ezar dezan arakatzaileak; beraz, denbora aurrezten da jatorri horretarako lehen eskaera egiten denean. Jatorri hauetara konektatu da aurrez orria:"
+  },
+  "models/trace/insights/NetworkDependencyTree.ts | preconnectOriginsTableTitle": {
+    "message": "Aurrez konektatutako jatorriak"
+  },
   "models/trace/insights/NetworkDependencyTree.ts | title": {
     "message": "Sarearen menpekotasun-zuhaitza"
+  },
+  "models/trace/insights/NetworkDependencyTree.ts | tooManyPreconnectLinksWarning": {
+    "message": "4 preconnect konexio baino gehiago aurkitu dira. Haiek ahalik eta gutxien erabili behar dira, eta jatorri garrantzitsuenetarako soilik."
+  },
+  "models/trace/insights/NetworkDependencyTree.ts | unusedWarning": {
+    "message": "Ez da erabili aurrez konektatzea. Erabili preconnect orriak ziurrenik eskatuko dituen jatorrietarako."
   },
   "models/trace/insights/NetworkDependencyTree.ts | warningDescription": {
     "message": "Orrien kargatzea hobetzeko, saihestu funtsezko eskaerak kateatzea kateen luzera edo baliabideen deskarga-tamaina murriztuz, edo beharrezkoak ez diren baliabideen deskarga atzeratuz."
   },
   "models/trace/insights/RenderBlocking.ts | description": {
-    "message": "Eskaerek orriaren hasierako errendatzea blokeatzen dute; beraz, baliteke LCPa atzeratzea. [Gerorako utziz edo txertatuz](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources/) gero, baliteke sareko eskaera horiek funtsezko bidetik ateratzea."
+    "message": "Eskaerek orriaren hasierako errendatzea blokeatzen dute; beraz, baliteke LCPa atzeratzea. [Gerorako utziz edo txertatuz](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources) gero, baliteke sareko eskaera horiek funtsezko bidetik ateratzea."
   },
   "models/trace/insights/RenderBlocking.ts | duration": {
     "message": "Iraupena"
@@ -2109,7 +2190,7 @@
     "message": "Transferentziaren tamaina"
   },
   "models/trace/insights/ThirdParties.ts | description": {
-    "message": "Baliteke hirugarrenen kodeak eragin handia izatea kargatzeko errendimenduan. [Murriztu eta atzeratu hirugarrenen kodea kargatzea](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/loading-third-party-javascript/) zure webguneko edukia lehenesteko."
+    "message": "Baliteke hirugarrenen kodeak eragin handia izatea kargatzeko errendimenduan. [Murriztu eta atzeratu hirugarrenen kodea kargatzea](https://web.dev/articles/optimizing-content-efficiency-loading-third-party-javascript/) zure webguneko edukia lehenesteko."
   },
   "models/trace/insights/ThirdParties.ts | noThirdParties": {
     "message": "Ez da hirugarrenik aurkitu"
@@ -2119,6 +2200,9 @@
   },
   "models/trace/insights/Viewport.ts | description": {
     "message": "Baliteke sakatze bidezko interakzioak [gehienez 300 ms atzeratzea](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/) bistaratze-eremua mugikorretarako optimizatuta ez badago."
+  },
+  "models/trace/insights/Viewport.ts | mobileTapDelayLabel": {
+    "message": "Mugikorreko sakatzeen atzerapena"
   },
   "models/trace/insights/Viewport.ts | title": {
     "message": "Optimizatu bistaratze-eremua mugikorretarako"
@@ -2555,6 +2639,9 @@
   "panels/ai_assistance/AiAssistancePanel.ts | deleteChat": {
     "message": "Ezabatu gailuko txata"
   },
+  "panels/ai_assistance/AiAssistancePanel.ts | externalRequestReceived": {
+    "message": "DevTools tresnak kanpoko eskaera bat jaso du"
+  },
   "panels/ai_assistance/AiAssistancePanel.ts | followTheSteps": {
     "message": "Galdera bat egiteko, egin goian azaldutako urratsak"
   },
@@ -2603,7 +2690,7 @@
   "panels/ai_assistance/ai_assistance-meta.ts | wrongLocale": {
     "message": "Eginbide hau erabiltzeko, aldatu hizkuntza hobetsia ingelesera garatzaileentzako tresnen ezarpenetan."
   },
-  "panels/ai_assistance/components/ChatView.ts | inputTextAriraDescription": {
+  "panels/ai_assistance/components/ChatView.ts | inputTextAriaDescription": {
     "message": "Halaber, goian iradokitako eskaera-mezuetako bat erabil dezakezu elkarrizketa hasteko"
   },
   "panels/ai_assistance/components/ChatView.ts | learnAbout": {
@@ -2814,7 +2901,7 @@
     "message": "Ohar berriaren URLa"
   },
   "panels/application/AppManifestView.ts | noPlayStoreIdProvided": {
-    "message": "Ez da eman Play Store-ko IDrik"
+    "message": "Ez da eman Google Play Store-ko identifikatzailerik"
   },
   "panels/application/AppManifestView.ts | noScreenshotsForRicherPWAInstallOnDesktop": {
     "message": "PWA instalatzeko erabiltzaile-interfaze aberastua ez da egongo erabilgarri ordenagailuetan. Gehitu gutxienez pantaila-argazki bat form_factor wide balioarekin ezarrita daukana."
@@ -2925,7 +3012,7 @@
     "message": "Aplikazioa instalatuta dago jada"
   },
   "panels/application/AppManifestView.ts | thePlayStoreAppUrlAndPlayStoreId": {
-    "message": "Play Store aplikazioko URLa eta Play Store-ko identifikatzailea ez datoz bat"
+    "message": "Google Play Store aplikazioko URLa eta Google Play Store-ko identifikatzailea ez datoz bat"
   },
   "panels/application/AppManifestView.ts | theSpecifiedApplicationPlatform": {
     "message": "Zehaztutako aplikazio-plataforma ez da bateragarria Android-ekin"
@@ -3191,9 +3278,6 @@
   "panels/application/CookieItemsView.ts | clearFilteredCookies": {
     "message": "Garbitu iragazitako cookieak"
   },
-  "panels/application/CookieItemsView.ts | cookies": {
-    "message": "Cookieak"
-  },
   "panels/application/CookieItemsView.ts | noCookieSelected": {
     "message": "Ez da hautatu cookierik"
   },
@@ -3233,6 +3317,9 @@
   "panels/application/IndexedDBViews.ts | collapse": {
     "message": "Tolestu"
   },
+  "panels/application/IndexedDBViews.ts | confirmClearObjectStore": {
+    "message": "\"{PH1}\" objektu-biltegia garbitu nahi duzu?"
+  },
   "panels/application/IndexedDBViews.ts | confirmDeleteDatabase": {
     "message": "\"{PH1}\" datu-basea ezabatu nahi duzu?"
   },
@@ -3268,6 +3355,9 @@
   },
   "panels/application/IndexedDBViews.ts | keyString": {
     "message": "Gakoa"
+  },
+  "panels/application/IndexedDBViews.ts | objectStoreWillBeCleared": {
+    "message": "Hautatutako objektu-biltegian dagoen edukia kenduko da."
   },
   "panels/application/IndexedDBViews.ts | objectStores": {
     "message": "Objektu-biltegiak"
@@ -3620,16 +3710,16 @@
   "panels/application/StorageBucketsTreeElement.ts | storageBucketsDescription": {
     "message": "Orri honetan biltegiratze-edukiontziak eta haiekin lotutako Storage APIs ikusi eta ezaba ditzakezu."
   },
-  "panels/application/StorageItemsView.ts | clearAll": {
+  "panels/application/StorageItemsToolbar.ts | clearAll": {
     "message": "Garbitu guztia"
   },
-  "panels/application/StorageItemsView.ts | deleteSelected": {
+  "panels/application/StorageItemsToolbar.ts | deleteSelected": {
     "message": "Ezabatu hautatutakoak"
   },
-  "panels/application/StorageItemsView.ts | refresh": {
+  "panels/application/StorageItemsToolbar.ts | refresh": {
     "message": "Freskatu"
   },
-  "panels/application/StorageItemsView.ts | refreshedStatus": {
+  "panels/application/StorageItemsToolbar.ts | refreshedStatus": {
     "message": "Freskatu egin da taula"
   },
   "panels/application/StorageView.ts | SiteDataCleared": {
@@ -3715,9 +3805,6 @@
   },
   "panels/application/StorageView.ts | usage": {
     "message": "Erabilera"
-  },
-  "panels/application/StorageView.ts | webSql": {
-    "message": "Sareko SQLa"
   },
   "panels/application/TrustTokensTreeElement.ts | trustTokens": {
     "message": "Egoeraren token pribatuak"
@@ -4182,10 +4269,7 @@
     "message": "Erreboteen jarraipena egiten duen webgunerik dagoen egiaztatzen."
   },
   "panels/application/components/BounceTrackingMitigationsView.ts | featureDisabled": {
-    "message": "Erreboteen jarraipena egitea gutxitzeko neurriak desgaituta daude. Haiek gaitzeko, ezarri \"Ezabatzearekin gaituta\" aukera {PH1} URLko eginbide esperimentalari."
-  },
-  "panels/application/components/BounceTrackingMitigationsView.ts | featureFlag": {
-    "message": "Erreboteen jarraipena egitea gutxitzeko eginbide esperimentala"
+    "message": "Erreboteen jarraipena egitea gutxitzeko neurriak desgaituta daude."
   },
   "panels/application/components/BounceTrackingMitigationsView.ts | forceRun": {
     "message": "Behartu exekutatzera"
@@ -4262,6 +4346,9 @@
   "panels/application/components/FrameDetailsView.ts | creationStackTraceExplanation": {
     "message": "Programatikoki sortu da markoa. Non sortu den erakusten du stack tracek."
   },
+  "panels/application/components/FrameDetailsView.ts | creatorAdScriptAncestry": {
+    "message": "Sortzailearen iragarkiaren scriptaren jatorria"
+  },
   "panels/application/components/FrameDetailsView.ts | crossoriginIsolated": {
     "message": "Jatorri anitz bidez isolatutakoak"
   },
@@ -4312,6 +4399,9 @@
   },
   "panels/application/components/FrameDetailsView.ts | rootDescription": {
     "message": "Iragarkiaren erroko marko gisa identifikatu da markoa"
+  },
+  "panels/application/components/FrameDetailsView.ts | rootScriptFilterlistRule": {
+    "message": "Erroko scriptaren iragazketa-zerrendaren araua"
   },
   "panels/application/components/FrameDetailsView.ts | secureContext": {
     "message": "Testuinguru segurua"
@@ -4997,9 +5087,6 @@
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusLowEndDevice": {
     "message": "Ez da aurrez errendatu, horretarako sistema-memoria gutxiegi daukalako gailuak."
   },
-  "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusMainFrameNavigation": {
-    "message": "Aurrez errendatutako orriak beste URL batera nabigatu du, baina orain ez da halakorik onartzen."
-  },
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusMaxNumOfRunningEagerPrerendersExceeded": {
     "message": "Ez da gauzatu \"eagerness\" katean \"eager\" balioa daukan aurrez errendatzeko prozesua, hura abiarazi duen orriak halako errendatze gehiegi baititu abian. Beste eduki batzuk aurrez errendatzen jarraitzeko, kendu \"eager\" daukaten beste espekulazio-arau batzuk."
   },
@@ -5471,26 +5558,11 @@
   "panels/changes/ChangesSidebar.ts | sFromSourceMap": {
     "message": "{PH1} (iturburu-mapakoa)"
   },
-  "panels/changes/ChangesView.ts | binaryDataDescription": {
-    "message": "Aldaketen fitxan ez dira erakusten datu bitarretan egindako aldaketak"
-  },
   "panels/changes/ChangesView.ts | changesViewDescription": {
     "message": "Orri honetan, garatzaileentzako tresnen barneko kodean egindako aldaketen jarraipena egin dezakezu."
   },
-  "panels/changes/ChangesView.ts | copy": {
-    "message": "Kopiatu"
-  },
   "panels/changes/ChangesView.ts | noChanges": {
     "message": "Oraindik ez da aldaketarik egin"
-  },
-  "panels/changes/ChangesView.ts | noTextualDiff": {
-    "message": "Ez dago desberdintasun testualik"
-  },
-  "panels/changes/ChangesView.ts | sDeletions": {
-    "message": "{n,plural, =1{# ezabatze (-)}other{# ezabatze (-)}}"
-  },
-  "panels/changes/ChangesView.ts | sInsertions": {
-    "message": "{n,plural, =1{# txertatze (+)}other{# txertatze (+)}}"
   },
   "panels/changes/CombinedDiffView.ts | copied": {
     "message": "Kopiatu da arbelean"
@@ -5500,12 +5572,6 @@
   },
   "panels/changes/changes-meta.ts | changes": {
     "message": "Aldaketak"
-  },
-  "panels/changes/changes-meta.ts | copyAllChangesFromCurrentFile": {
-    "message": "Kopiatu oraingo fitxategian egindako aldaketa guztiak"
-  },
-  "panels/changes/changes-meta.ts | revertAllChangesToCurrentFile": {
-    "message": "Leheneratu aldaketa guztiak fitxategi honetan"
   },
   "panels/changes/changes-meta.ts | showChanges": {
     "message": "Erakutsi aldaketak"
@@ -5679,7 +5745,7 @@
     "message": "Erakutsi oraingo testuinguruko mezuak soilik (top, iframe, worker, luzapena)"
   },
   "panels/console/ConsoleView.ts | overriddenByFilterSidebar": {
-    "message": "Iragazkien alboko barrak ordeztu du"
+    "message": "Erregistro-mailak kontsolaren alboko barrak kontrolatzen ditu."
   },
   "panels/console/ConsoleView.ts | preserveLog": {
     "message": "Mantendu erregistroa"
@@ -6164,6 +6230,12 @@
   "panels/css_overview/CSSOverviewCompletedView.ts | typeSelectors": {
     "message": "Mota-hautatzaileak"
   },
+  "panels/css_overview/CSSOverviewCompletedView.ts | unableToLink": {
+    "message": "(ezin da lotu)"
+  },
+  "panels/css_overview/CSSOverviewCompletedView.ts | unableToLinkToInlineStyle": {
+    "message": "(ezin da lotu txertatutako estilora)"
+  },
   "panels/css_overview/CSSOverviewCompletedView.ts | universalSelectors": {
     "message": "Hautatzaile unibertsalak"
   },
@@ -6178,6 +6250,24 @@
   },
   "panels/css_overview/CSSOverviewSidebarPanel.ts | cssOverviewPanelSidebar": {
     "message": "CSS erabilita idatzitako kodearen informazio orokorraren panelaren alboko barra"
+  },
+  "panels/css_overview/CSSOverviewStartView.ts | captureOverview": {
+    "message": "Kapturatu ikuspegi orokorra"
+  },
+  "panels/css_overview/CSSOverviewStartView.ts | capturePageCSSOverview": {
+    "message": "Kapturatu orrian CSS erabilita idatzitako kodeari buruzko informazio orokorra"
+  },
+  "panels/css_overview/CSSOverviewStartView.ts | identifyCSSImprovements": {
+    "message": "Identifikatu CSS erabilita idatzitako kodearen hobekuntza posibleak"
+  },
+  "panels/css_overview/CSSOverviewStartView.ts | identifyCSSImprovementsWithExampleIssues": {
+    "message": "Identifikatu CSS erabilita idatzitako kodearen hobekuntza posibleak (adibidez, kontraste txikiko arazoak, erabili gabeko adierazpenak edo bat ez datozen koloreak eta letrak)"
+  },
+  "panels/css_overview/CSSOverviewStartView.ts | locateAffectedElements": {
+    "message": "Aurkitu eragina jasan duten elementuak Elementuak panelean"
+  },
+  "panels/css_overview/CSSOverviewStartView.ts | quickStartWithCSSOverview": {
+    "message": "Hasiera bizkorra: hasi CSS erabilita idatzitako kodeari buruzko informazio orokorraren panel berria erabiltzen"
   },
   "panels/css_overview/CSSOverviewUnusedDeclarations.ts | bottomAppliedToAStatically": {
     "message": "Estatistikoki kokatutako elementuari Bottom aplikatu zaio"
@@ -6199,24 +6289,6 @@
   },
   "panels/css_overview/CSSOverviewUnusedDeclarations.ts | widthAppliedToAnInlineElement": {
     "message": "Width aplikatu zaio txertatutako elementu bati"
-  },
-  "panels/css_overview/components/CSSOverviewStartView.ts | captureOverview": {
-    "message": "Kapturatu ikuspegi orokorra"
-  },
-  "panels/css_overview/components/CSSOverviewStartView.ts | capturePageCSSOverview": {
-    "message": "Kapturatu orrian CSS erabilita idatzitako kodeari buruzko informazio orokorra"
-  },
-  "panels/css_overview/components/CSSOverviewStartView.ts | identifyCSSImprovements": {
-    "message": "Identifikatu CSS erabilita idatzitako kodearen hobekuntza posibleak"
-  },
-  "panels/css_overview/components/CSSOverviewStartView.ts | identifyCSSImprovementsWithExampleIssues": {
-    "message": "Identifikatu CSS erabilita idatzitako kodearen hobekuntza posibleak (adibidez, kontraste txikiko arazoak, erabili gabeko adierazpenak edo bat ez datozen koloreak eta letrak)"
-  },
-  "panels/css_overview/components/CSSOverviewStartView.ts | locateAffectedElements": {
-    "message": "Aurkitu eragina jasan duten elementuak Elementuak panelean"
-  },
-  "panels/css_overview/components/CSSOverviewStartView.ts | quickStartWithCSSOverview": {
-    "message": "Hasiera bizkorra: hasi CSS erabilita idatzitako kodeari buruzko informazio orokorraren panel berria erabiltzen"
   },
   "panels/css_overview/css_overview-meta.ts | cssOverview": {
     "message": "CSS erabilita idatzitako kodearen informazio orokorra"
@@ -6569,14 +6641,17 @@
   "panels/elements/ElementsTreeElement.ts | scrollIntoView": {
     "message": "Egin gora edo behera ikusgai egon arte"
   },
+  "panels/elements/ElementsTreeElement.ts | showCommandForTarget": {
+    "message": "Erakutsi commandfor atributuarekin erlazionatutako elementua"
+  },
   "panels/elements/ElementsTreeElement.ts | showFrameDetails": {
     "message": "Erakutsi iframe-aren xehetasunak"
   },
   "panels/elements/ElementsTreeElement.ts | showInterestTarget": {
-    "message": "Erakutsi interes-helburua"
+    "message": "Erakutsi interesttarget atributuarekin erlazionatutako elementua"
   },
   "panels/elements/ElementsTreeElement.ts | showPopoverTarget": {
-    "message": "Erakutsi leiho gainerakorraren helburua"
+    "message": "Erakutsi popovertarget atributuarekin erlazionatutako elementua"
   },
   "panels/elements/ElementsTreeElement.ts | thisFrameWasIdentifiedAsAnAd": {
     "message": "Iragarki-marko gisa identifikatu da marko hau"
@@ -6680,9 +6755,6 @@
   "panels/elements/StylePropertiesSection.ts | constructedStylesheet": {
     "message": "eraikitako estilo-orria"
   },
-  "panels/elements/StylePropertiesSection.ts | copyAllCSSChanges": {
-    "message": "Kopiatu CSSan egindako aldaketa guztiak"
-  },
   "panels/elements/StylePropertiesSection.ts | copyAllDeclarations": {
     "message": "Kopiatu adierazpen guztiak"
   },
@@ -6719,9 +6791,6 @@
   "panels/elements/StylePropertiesSection.ts | viaInspector": {
     "message": "ikuskatzailearen bidez"
   },
-  "panels/elements/StylePropertyTreeElement.ts | copyAllCSSChanges": {
-    "message": "Kopiatu CSSan egindako aldaketa guztiak"
-  },
   "panels/elements/StylePropertyTreeElement.ts | copyAllCssDeclarationsAsJs": {
     "message": "Kopiatu adierazpen guztiak JS gisa"
   },
@@ -6754,6 +6823,9 @@
   },
   "panels/elements/StylePropertyTreeElement.ts | invalidString": {
     "message": "{PH1}, propietatearen izena: {PH2}, propietatearen balioa: {PH3}"
+  },
+  "panels/elements/StylePropertyTreeElement.ts | jumpToAnchorNode": {
+    "message": "Joan aingura-nodora"
   },
   "panels/elements/StylePropertyTreeElement.ts | jumpToAnimationsPanel": {
     "message": "Saltatu animazioen panelera"
@@ -6817,12 +6889,6 @@
   },
   "panels/elements/components/AccessibilityTreeNode.ts | ignored": {
     "message": "Ez ikusi egin zaio"
-  },
-  "panels/elements/components/AnchorFunctionLinkSwatch.ts | jumpToAnchorNode": {
-    "message": "Joan aingura-nodora"
-  },
-  "panels/elements/components/AnchorFunctionLinkSwatch.ts | sIsNotDefined": {
-    "message": "{PH1} ez dago zehaztuta"
   },
   "panels/elements/components/CSSHintDetailsView.ts | learnMore": {
     "message": "Lortu informazio gehiago"
@@ -6979,6 +7045,9 @@
   },
   "panels/elements/elements-meta.ts | toggleEyeDropper": {
     "message": "Aldatu kolore-hautatzailea"
+  },
+  "panels/elements/elements-meta.ts | toggleWordWrap": {
+    "message": "Aldatu hitzen doikuntza"
   },
   "panels/elements/elements-meta.ts | undo": {
     "message": "Desegin"
@@ -7874,6 +7943,9 @@
   "panels/lighthouse/LighthouseController.ts | accessibility": {
     "message": "Erabilerraztasuna"
   },
+  "panels/lighthouse/LighthouseController.ts | applyDesktopEmulationDuring": {
+    "message": "Aplikatu mahaigaineko simulazioa auditatu bitartean"
+  },
   "panels/lighthouse/LighthouseController.ts | applyMobileEmulation": {
     "message": "Aplikatu mugikorretarako emulazioa"
   },
@@ -8609,9 +8681,6 @@
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | packetReordering": {
     "message": "Paketeak berrantolatzea"
   },
-  "panels/mobile_throttling/ThrottlingSettingsTab.ts | percent": {
-    "message": "ehuneko"
-  },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | profileName": {
     "message": "Profilaren izena"
   },
@@ -8757,7 +8826,7 @@
     "message": "Idatzi erabiltzaile-agente pertsonalizatua"
   },
   "panels/network/NetworkConfigView.ts | networkConditionsPanelShown": {
-    "message": "Sarearen baldintzak ikusgai daude"
+    "message": "Sarearen baldintzak ikusgai daude."
   },
   "panels/network/NetworkConfigView.ts | networkThrottling": {
     "message": "Sarea moteltzeko aukera"
@@ -8944,6 +9013,9 @@
   },
   "panels/network/NetworkItemView.ts | cookies": {
     "message": "Cookieak"
+  },
+  "panels/network/NetworkItemView.ts | directsocketMessages": {
+    "message": "DirectSocket-en mezuak"
   },
   "panels/network/NetworkItemView.ts | eventstream": {
     "message": "EventStream"
@@ -9280,6 +9352,9 @@
   },
   "panels/network/NetworkLogViewColumns.ts | remoteAddressSpace": {
     "message": "Urruneko helbidearen eremua"
+  },
+  "panels/network/NetworkLogViewColumns.ts | requestHeaders": {
+    "message": "Eskaeren goiburuak"
   },
   "panels/network/NetworkLogViewColumns.ts | responseHeaders": {
     "message": "Erantzun-goiburuak"
@@ -9658,6 +9733,66 @@
   },
   "panels/network/RequestTimingView.ts | waterfall": {
     "message": "Ur-jauzia"
+  },
+  "panels/network/ResourceChunkView.ts | all": {
+    "message": "Guztiak"
+  },
+  "panels/network/ResourceChunkView.ts | clearAll": {
+    "message": "Garbitu guztia"
+  },
+  "panels/network/ResourceChunkView.ts | clearAllL": {
+    "message": "Garbitu guztiak"
+  },
+  "panels/network/ResourceChunkView.ts | copyMessage": {
+    "message": "Kopiatu mezua"
+  },
+  "panels/network/ResourceChunkView.ts | copyMessageD": {
+    "message": "Kopiatu mezua…"
+  },
+  "panels/network/ResourceChunkView.ts | data": {
+    "message": "Datuak"
+  },
+  "panels/network/ResourceChunkView.ts | filter": {
+    "message": "Iragazi"
+  },
+  "panels/network/ResourceChunkView.ts | length": {
+    "message": "Luzera"
+  },
+  "panels/network/ResourceChunkView.ts | noMessageSelected": {
+    "message": "Ez da hautatu mezurik"
+  },
+  "panels/network/ResourceChunkView.ts | receive": {
+    "message": "Jaso"
+  },
+  "panels/network/ResourceChunkView.ts | selectMessageToBrowseItsContent": {
+    "message": "Hautatu mezu bat bertako edukia arakatzeko."
+  },
+  "panels/network/ResourceChunkView.ts | send": {
+    "message": "Bidali"
+  },
+  "panels/network/ResourceChunkView.ts | time": {
+    "message": "Ordua"
+  },
+  "panels/network/ResourceDirectSocketChunkView.ts | address": {
+    "message": "Helbidea"
+  },
+  "panels/network/ResourceDirectSocketChunkView.ts | data": {
+    "message": "Datuak"
+  },
+  "panels/network/ResourceDirectSocketChunkView.ts | directSocketChunk": {
+    "message": "Direct Socket Chunk"
+  },
+  "panels/network/ResourceDirectSocketChunkView.ts | filterUsingRegex": {
+    "message": "Iragazi adierazpen erregularrak erabilita (adibidez: (direct)?socket))"
+  },
+  "panels/network/ResourceDirectSocketChunkView.ts | length": {
+    "message": "Luzera"
+  },
+  "panels/network/ResourceDirectSocketChunkView.ts | port": {
+    "message": "Ataka"
+  },
+  "panels/network/ResourceDirectSocketChunkView.ts | time": {
+    "message": "Ordua"
   },
   "panels/network/ResourceWebSocketFrameView.ts | binaryMessage": {
     "message": "Mezu bitarra"
@@ -11828,6 +11963,15 @@
   "panels/security/security-meta.ts | showSecurity": {
     "message": "Erakutsi segurtasuna"
   },
+  "panels/sensors/LocationsSettingsTab.ts | accuracy": {
+    "message": "Zehaztasuna"
+  },
+  "panels/sensors/LocationsSettingsTab.ts | accuracyMustBeANumber": {
+    "message": "Zehaztasuna zenbaki bat izan behar da"
+  },
+  "panels/sensors/LocationsSettingsTab.ts | accuracyMustBeGreaterThanOrEqual": {
+    "message": "Zehaztasunak {PH1} edo gehiago izan behar du."
+  },
   "panels/sensors/LocationsSettingsTab.ts | addLocation": {
     "message": "Gehitu kokapen bat"
   },
@@ -11884,6 +12028,9 @@
   },
   "panels/sensors/LocationsSettingsTab.ts | timezoneIdMustContainAlphabetic": {
     "message": "Ordu-zonaren IDak karaktere alfabetikoak izan behar ditu"
+  },
+  "panels/sensors/SensorsView.ts | accuracy": {
+    "message": "Zehaztasuna"
   },
   "panels/sensors/SensorsView.ts | adjustWithMousewheelOrUpdownKeys": {
     "message": "Doitu saguaren gurpilarekin, edo gora eta behera egiteko teklekin. {PH1}: ±10, Maius: ±1, Alt: ±0,01"
@@ -12062,9 +12209,6 @@
   "panels/sensors/sensors-meta.ts | userIdleScreenUnlocked": {
     "message": "Erabiltzailea inaktibo, pantaila desblokeatuta"
   },
-  "panels/settings/AISettingsTab.ts | ageRestricted": {
-    "message": "Eginbide hau bakarrik 18 urte edo gehiago dituzten erabiltzaileentzat dago erabilgarri."
-  },
   "panels/settings/AISettingsTab.ts | boostYourProductivity": {
     "message": "Indartu produktibitatea AA erabiliz"
   },
@@ -12139,15 +12283,6 @@
   },
   "panels/settings/AISettingsTab.ts | learnMore": {
     "message": "Lortu informazio gehiago"
-  },
-  "panels/settings/AISettingsTab.ts | notAvailableInIncognitoMode": {
-    "message": "AA bidezko laguntza ez dago erabilgarri ezkutuko moduan edo gonbidatu moduan"
-  },
-  "panels/settings/AISettingsTab.ts | notLoggedIn": {
-    "message": "Chrome-n zure Google-ko kontuarekin saioa hastean bakarrik dago erabilgarri eginbide hau."
-  },
-  "panels/settings/AISettingsTab.ts | offline": {
-    "message": "Eginbide hau Interneteko konexio aktiboarekin bakarrik erabili daiteke."
   },
   "panels/settings/AISettingsTab.ts | privacyNotice": {
     "message": "Google-ren Pribatutasun-gidalerroak"
@@ -13022,6 +13157,9 @@
   "panels/sources/SourcesNavigator.ts | saveAs": {
     "message": "Gorde honela…"
   },
+  "panels/sources/SourcesNavigator.ts | saveAsFailed": {
+    "message": "Ezin izan da gorde fitxategia diskoan."
+  },
   "panels/sources/SourcesNavigator.ts | selectFolderForOverrides": {
     "message": "Hautatu ordezkapenetarako karpeta"
   },
@@ -13153,6 +13291,9 @@
   },
   "panels/sources/WatchExpressionsSidebarPane.ts | refreshWatchExpressions": {
     "message": "Freskatu ikuskapen-adierazpenak"
+  },
+  "panels/sources/WatchExpressionsSidebarPane.ts | watchExpressionDeleted": {
+    "message": "Ezabatu da ikuskapen-adierazpena"
   },
   "panels/sources/components/BreakpointsView.ts | breakpointHit": {
     "message": "{PH1} aldatze-puntura iritsi da"
@@ -13538,6 +13679,9 @@
   "panels/sources/sources-meta.ts | toggleNavigatorSidebar": {
     "message": "Erakutsi edo ezkutatu nabigatzailearen alboko barra"
   },
+  "panels/sources/sources-meta.ts | toggleWordWrap": {
+    "message": "Aldatu hitzen doikuntza"
+  },
   "panels/sources/sources-meta.ts | trailing": {
     "message": "Amaieran"
   },
@@ -13546,6 +13690,9 @@
   },
   "panels/sources/sources-meta.ts | watch": {
     "message": "Ikuskapena"
+  },
+  "panels/sources/sources-meta.ts | wordWrap": {
+    "message": "Hitzak doitzea"
   },
   "panels/sources/sources-meta.ts | workspace": {
     "message": "Lan-eremua"
@@ -13642,6 +13789,21 @@
   },
   "panels/timeline/NetworkTrackAppender.ts | network": {
     "message": "Sarea"
+  },
+  "panels/timeline/StatusDialog.ts | description": {
+    "message": "Azalpena"
+  },
+  "panels/timeline/StatusDialog.ts | downloadAfterError": {
+    "message": "Deskargatu arrastoa"
+  },
+  "panels/timeline/StatusDialog.ts | status": {
+    "message": "Egoera"
+  },
+  "panels/timeline/StatusDialog.ts | stop": {
+    "message": "Gelditu"
+  },
+  "panels/timeline/StatusDialog.ts | time": {
+    "message": "Ordua"
   },
   "panels/timeline/ThirdPartyTreeView.ts | firstOrThirdPartyName": {
     "message": "Propioa/Hirugarrenena"
@@ -13790,6 +13952,9 @@
   "panels/timeline/TimelineFlameChartView.ts | sAtS": {
     "message": "{PH1} ({PH2})"
   },
+  "panels/timeline/TimelineHistoryManager.ts | backButtonTooltip": {
+    "message": "Ikusi zuzeneko neurketen orria"
+  },
   "panels/timeline/TimelineHistoryManager.ts | currentSessionSS": {
     "message": "Oraingo saioa: {PH1}. {PH2}"
   },
@@ -13813,9 +13978,6 @@
   },
   "panels/timeline/TimelinePanel.ts | CpuThrottlingIsEnabled": {
     "message": "- PUZa moteltzeko aukera gaituta dago"
-  },
-  "panels/timeline/TimelinePanel.ts | JavascriptSamplingIsDisabled": {
-    "message": "- JavaScript-en laginak desgaituta daude"
   },
   "panels/timeline/TimelinePanel.ts | NetworkThrottlingIsEnabled": {
     "message": "- Sarea moteltzeko aukera gaituta dago"
@@ -13853,20 +14015,8 @@
   "panels/timeline/TimelinePanel.ts | cpu": {
     "message": "PUZa:"
   },
-  "panels/timeline/TimelinePanel.ts | description": {
-    "message": "Azalpena"
-  },
   "panels/timeline/TimelinePanel.ts | dimThirdParties": {
     "message": "Murriztu hirugarrenen ikusgaitasuna"
-  },
-  "panels/timeline/TimelinePanel.ts | disableJavascriptSamples": {
-    "message": "Desgaitu JavaScript-eko laginak"
-  },
-  "panels/timeline/TimelinePanel.ts | disablesJavascriptSampling": {
-    "message": "JavaScript-eko laginak desgaitzen ditu, eta murriztu egiten du gainkarga gailu mugikorren kontra exekutatzean"
-  },
-  "panels/timeline/TimelinePanel.ts | downloadAfterError": {
-    "message": "Deskargatu arrastoa"
   },
   "panels/timeline/TimelinePanel.ts | dropTimelineFileOrUrlHere": {
     "message": "Jaregin hemen kronologia-fitxategia edo URLa"
@@ -13886,8 +14036,8 @@
   "panels/timeline/TimelinePanel.ts | exportNormalTraces": {
     "message": "Oinarrizko errendimendu-arrastoak"
   },
-  "panels/timeline/TimelinePanel.ts | failedToSaveTimelineSS": {
-    "message": "Ezin izan da gorde kronologia: {PH1} ({PH2})"
+  "panels/timeline/TimelinePanel.ts | exportingFailed": {
+    "message": "Ezin izan da esportatu arrastoa"
   },
   "panels/timeline/TimelinePanel.ts | fixMe": {
     "message": "Konpondu"
@@ -13970,20 +14120,11 @@
   "panels/timeline/TimelinePanel.ts | sidebarShown": {
     "message": "Errendimenduaren alboko barra erakusten da"
   },
-  "panels/timeline/TimelinePanel.ts | status": {
-    "message": "Egoera"
-  },
-  "panels/timeline/TimelinePanel.ts | stop": {
-    "message": "Gelditu"
-  },
   "panels/timeline/TimelinePanel.ts | stoppingTimeline": {
     "message": "Kronologia geldiarazten…"
   },
   "panels/timeline/TimelinePanel.ts | thirdPartiesByThirdPartyWeb": {
     "message": "Hirugarrenen webgune batek sailkatutako hirugarrenak"
-  },
-  "panels/timeline/TimelinePanel.ts | time": {
-    "message": "Ordua"
   },
   "panels/timeline/TimelinePanel.ts | timelineScrollPan": {
     "message": "Egin gora/behera eta mugitu"
@@ -14234,9 +14375,6 @@
   "panels/timeline/TimelineUIUtils.ts | details": {
     "message": "Xehetasunak"
   },
-  "panels/timeline/TimelineUIUtils.ts | dimensions": {
-    "message": "Neurriak"
-  },
   "panels/timeline/TimelineUIUtils.ts | duration": {
     "message": "Iraupena"
   },
@@ -14309,9 +14447,6 @@
   "panels/timeline/TimelineUIUtils.ts | learnMore": {
     "message": "Lortu informazio gehiago"
   },
-  "panels/timeline/TimelineUIUtils.ts | location": {
-    "message": "Kokapena"
-  },
   "panels/timeline/TimelineUIUtils.ts | message": {
     "message": "Mezua"
   },
@@ -14375,32 +14510,17 @@
   "panels/timeline/TimelineUIUtils.ts | sChildren": {
     "message": "{PH1} (bigarren mailakoak)"
   },
-  "panels/timeline/TimelineUIUtils.ts | sCollected": {
-    "message": "{PH1} bildu dira"
-  },
   "panels/timeline/TimelineUIUtils.ts | sOfS": {
     "message": "{PH1}/{PH2}"
   },
   "panels/timeline/TimelineUIUtils.ts | sS": {
     "message": "{PH1}: {PH2}"
   },
-  "panels/timeline/TimelineUIUtils.ts | sSCurlyBrackets": {
-    "message": "({PH1}, {PH2})"
-  },
-  "panels/timeline/TimelineUIUtils.ts | sSDimensions": {
-    "message": "{PH1} × {PH2}"
-  },
-  "panels/timeline/TimelineUIUtils.ts | sSSquareBrackets": {
-    "message": "{PH1} [{PH2}…]"
-  },
   "panels/timeline/TimelineUIUtils.ts | sSelectorStatsInfo": {
     "message": "Hautatu \"{PH1}\" CSS hautatzailearekin bat datozen estatistika xehatuak biltzeko."
   },
   "panels/timeline/TimelineUIUtils.ts | sSelf": {
     "message": "{PH1} (banakoa)"
-  },
-  "panels/timeline/TimelineUIUtils.ts | sSs": {
-    "message": "{PH1} [{PH2}…{PH3}]"
   },
   "panels/timeline/TimelineUIUtils.ts | script": {
     "message": "Scripta"
@@ -14574,19 +14694,19 @@
     "message": "Konfiguratu"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | configureFieldData": {
-    "message": "Konfiguratu eremuen datuak eskuratzeko modua"
+    "message": "Konfiguratu eremuen neurketak eskuratzeko modua"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | doesNotHaveSufficientData": {
     "message": "Chrome UX Report-ek ez dauka orri honen inguruko benetako abiadura-datu nahikorik."
   },
   "panels/timeline/components/FieldSettingsDialog.ts | fetchAggregated": {
-    "message": "Eskuratu {PH1} zerbitzuko eremuko datu bateratuak, tokiko neurketak benetako erabiltzaileek webgunean ikusten dutenarekin konparatzeko."
+    "message": "Eskuratu {PH1} zerbitzuko eremuko neurketa bateratuak, tokiko neurketak benetako erabiltzaileek webgunean ikusten dutenarekin konparatzeko."
   },
   "panels/timeline/components/FieldSettingsDialog.ts | invalidOrigin": {
     "message": "\"{PH1}\" ez da balio duen jatorri edo URL bat."
   },
   "panels/timeline/components/FieldSettingsDialog.ts | mapDevelopmentOrigins": {
-    "message": "Ezarri garapen-jatorri bat, haren ekoizpen-jatorrirako egokiak diren eremuko datuak automatikoki lortzeko."
+    "message": "Ezarri garapen-jatorri bat, haren ekoizpen-jatorrirako egokiak diren eremuko neurketak automatikoki lortzeko."
   },
   "panels/timeline/components/FieldSettingsDialog.ts | new": {
     "message": "Berria"
@@ -14595,7 +14715,7 @@
     "message": "Ados"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | onlyFetchFieldData": {
-    "message": "Erakutsi beti beheko URLari dagozkion eremuko datuak"
+    "message": "Erakutsi beti beheko URLari dagozkion eremuko neurketak"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | optOut": {
     "message": "Aukeratu ez erabiltzea"
@@ -14610,7 +14730,7 @@
     "message": "URLa"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | whenPerformanceIsShown": {
-    "message": "Garatzaileentzako tresnak irekita daudenean, bisitatzen dituzun URLak Google-ra bidaliko dira, eremuen datuei buruzko kontsultak egiteko. Eskaera horiek ez daude lotuta Google-ko kontuarekin."
+    "message": "Garatzaileentzako tresnak irekita daudenean, bisitatzen dituzun URLak Google-ra bidaliko dira, eremuen neurketei buruzko kontsultak egiteko. Eskaera horiek ez daude lotuta Google-ko kontuarekin."
   },
   "panels/timeline/components/IgnoreListSetting.ts | addNewRegex": {
     "message": "Gehitu adierazpen erregularren arau bat scriptaren URLan"
@@ -14717,8 +14837,8 @@
   "panels/timeline/components/LiveMetricsView.ts | eventLogs": {
     "message": "Interakzioen eta diseinu-aldaketen erregistroen atala"
   },
-  "panels/timeline/components/LiveMetricsView.ts | fieldData": {
-    "message": "Eremuko datuak"
+  "panels/timeline/components/LiveMetricsView.ts | fieldMetricsTitle": {
+    "message": "Eremuko neurketak"
   },
   "panels/timeline/components/LiveMetricsView.ts | inpInteraction": {
     "message": "Interakzioen atzerapenaren 98. pertzentilean dago INPko interakzioa"
@@ -14748,10 +14868,10 @@
     "message": "Tokiko eta eremuko neurketak"
   },
   "panels/timeline/components/LiveMetricsView.ts | localFieldLearnMoreLink": {
-    "message": "Lortu tokiko eta eremuko datuei buruzko informazio gehiago"
+    "message": "Lortu tokiko eta eremuko neurketei buruzko informazio gehiago"
   },
   "panels/timeline/components/LiveMetricsView.ts | localFieldLearnMoreTooltip": {
-    "message": "Tokiko neurketak oraingo orritik kapturatzen dira, zure sareko konexioa eta gailua erabilita. Askotariko sareko konexioak eta gailuak darabiltzaten erabiltzaileen bidez neurtzen dira eremuko datuak."
+    "message": "Tokiko neurketak oraingo orritik kapturatzen dira, zure sareko konexioa eta gailua erabilita. Askotariko sareko konexioak eta gailuak darabiltzaten erabiltzaileen bidez neurtzen dira eremuko neurketak."
   },
   "panels/timeline/components/LiveMetricsView.ts | localMetrics": {
     "message": "Tokiko neurketak"
@@ -14814,10 +14934,10 @@
     "message": "Joan diseinu-aldaketa txarrenen lukura."
   },
   "panels/timeline/components/LiveMetricsView.ts | showFieldDataForDevice": {
-    "message": "Erakutsi eremuko datuak gailu mota honetarako: {PH1}"
+    "message": "Erakutsi eremuko neurketak gailu mota honetarako: {PH1}"
   },
   "panels/timeline/components/LiveMetricsView.ts | showFieldDataForPage": {
-    "message": "Erakutsi eremuko datuak honetarako: {PH1}"
+    "message": "Erakutsi eremuko neurketak honetarako: {PH1}"
   },
   "panels/timeline/components/LiveMetricsView.ts | showInpInteraction": {
     "message": "Joan INP interakziora."
@@ -14925,13 +15045,13 @@
     "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) ona da, eta zure erabiltzaileena baino nabarmen hobeagoa da."
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodGoodDetailedCompare": {
-    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) ona da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Gainera, eremuko datuen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) ona da."
+    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) ona da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Gainera, eremuko neurketen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) ona da."
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodNeedsImprovementDetailedCompare": {
-    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) ona da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Hala ere, eremuko datuen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) hobetu behar da."
+    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) ona da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Hala ere, eremuko neurketen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) hobetu behar da."
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodPoorDetailedCompare": {
-    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) ona da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Hala ere, eremuko datuen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) txarra da."
+    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) ona da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Hala ere, eremuko neurketen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) txarra da."
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodSimilarCompare": {
     "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) ona da, eta zure erabiltzaileek dutenaren antzekoa da."
@@ -14946,13 +15066,13 @@
     "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) hobetu behar da, baina zure erabiltzaileena baino nabarmen hobeagoa da."
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementGoodDetailedCompare": {
-    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) hobetu behar da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Hala ere, eremuko datuen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) ona da."
+    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) hobetu behar da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Hala ere, eremuko neurketen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) ona da."
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementNeedsImprovementDetailedCompare": {
-    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) hobetu behar da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Gainera, eremuko datuen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) hobetu behar da."
+    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) hobetu behar da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Gainera, eremuko neurketen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) hobetu behar da."
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementPoorDetailedCompare": {
-    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) hobetu behar da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Hala ere, eremuko datuen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) txarra da."
+    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) hobetu behar da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Hala ere, eremuko neurketen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) txarra da."
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementSimilarCompare": {
     "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) hobetu behar da, eta zure erabiltzaileek dutenaren antzekoa da."
@@ -14967,13 +15087,13 @@
     "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) txarra da, baina zure erabiltzaileena baino nabarmen hobeagoa da."
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorGoodDetailedCompare": {
-    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) txarra da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Hala ere, eremuko datuen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) ona da."
+    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) txarra da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Hala ere, eremuko neurketen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) ona da."
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorNeedsImprovementDetailedCompare": {
-    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) txarra da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Hala ere, eremuko datuen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) hobetu behar da."
+    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) txarra da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Hala ere, eremuko neurketen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) hobetu behar da."
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorPoorDetailedCompare": {
-    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) txarra da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Gainera, eremuko datuen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) txarra da."
+    "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) txarra da, eta benetako erabiltzaile batzuek ({PH4}) jasotzen duten {PH1} zerbitzuaren pareko balorazioa du. Gainera, eremuko neurketen 75. pertzentilaren {PH1} zerbitzuaren balioa ({PH3}) txarra da."
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorSimilarCompare": {
     "message": "Zure tokiko {PH1} zerbitzuaren balioa ({PH2}) txarra da, eta zure erabiltzaileek dutenaren antzekoa da."
@@ -15061,6 +15181,9 @@
   },
   "panels/timeline/components/NetworkRequestTooltip.ts | queuingAndConnecting": {
     "message": "Ilaran eta konektatzen"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | redirects": {
+    "message": "Birbideratzeak"
   },
   "panels/timeline/components/NetworkRequestTooltip.ts | renderBlocking": {
     "message": "Blokeatu errendatzea"
@@ -15887,6 +16010,9 @@
   "ui/components/diff_view/DiffView.ts | deletions": {
     "message": "Ezabatu da:"
   },
+  "ui/components/diff_view/DiffView.ts | noDiff": {
+    "message": "Fitxategia haren aldatu gabeko egoeraren berdina da"
+  },
   "ui/components/issue_counter/IssueCounter.ts | breakingChanges": {
     "message": "{issueCount,plural, =1{Hutsegiteak sor ditzakeen # aldaketa}other{Hutsegiteak sor ditzaketen # aldaketa}}"
   },
@@ -15952,6 +16078,9 @@
   },
   "ui/components/settings/SettingCheckbox.ts | learnMore": {
     "message": "Lortu informazio gehiago"
+  },
+  "ui/components/snackbars/Snackbar.ts | dismiss": {
+    "message": "Baztertu"
   },
   "ui/components/survey_link/SurveyLink.ts | anErrorOccurredWithTheSurvey": {
     "message": "Errore bat gertatu da inkestan"
@@ -16108,6 +16237,9 @@
   },
   "ui/legacy/InspectorView.ts | setToSpecificLanguage": {
     "message": "Aukeratu {PH1} garatzaileentzako tresnak erabiltzeko"
+  },
+  "ui/legacy/InspectorView.ts | toggleDrawerOrientation": {
+    "message": "Aldatu panel lerrakorraren orientazioa"
   },
   "ui/legacy/ListWidget.ts | addString": {
     "message": "Gehitu"
@@ -16675,9 +16807,6 @@
   },
   "ui/legacy/components/perf_ui/FilmStripView.ts | screenshotForSSelectToView": {
     "message": "Pantaila-argazkien iraupena: {PH1}. Hautatu hau aurretik egindako eskaerak ikusteko."
-  },
-  "ui/legacy/components/perf_ui/FlameChart.ts | deleteAnnotations": {
-    "message": "Ezabatu oharpenak"
   },
   "ui/legacy/components/perf_ui/FlameChart.ts | enterTrackConfigurationMode": {
     "message": "Konfiguratu pistak"

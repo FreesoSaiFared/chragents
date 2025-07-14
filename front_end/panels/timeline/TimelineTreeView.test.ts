@@ -3,8 +3,11 @@
 // found in the LICENSE file.
 
 import * as Trace from '../../models/trace/trace.js';
+import {assertScreenshot} from '../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
+import {renderWidgetInVbox} from '../../testing/TraceHelpers.js';
 import {TraceLoader} from '../../testing/TraceLoader.js';
+import * as RenderCoordinator from '../../ui/components/render_coordinator/render_coordinator.js';
 
 import * as Timeline from './timeline.js';
 import * as Utils from './utils/utils.js';
@@ -103,12 +106,22 @@ describeWithEnvironment('TimelineTreeView', function() {
   describe('BottomUpTimelineTreeView', function() {
     it('Creates a bottom up tree from nestable events', async function() {
       const {parsedTrace} = await TraceLoader.traceEngine(this, 'sync-like-timings.json.gz');
+      const mapper = new Utils.EntityMapper.EntityMapper(parsedTrace);
       const bottomUpTreeView = new Timeline.TimelineTreeView.BottomUpTimelineTreeView();
       const consoleTimings = [...parsedTrace.UserTimings.consoleTimings];
       const startTime = Trace.Helpers.Timing.microToMilli(parsedTrace.Meta.traceBounds.min);
       const endTime = Trace.Helpers.Timing.microToMilli(parsedTrace.Meta.traceBounds.max);
+
+      // Note: order is important here. The BottomUp view skips updating if it
+      // has no parent element (because in the UI it is one of many components
+      // in tabs, so we only update it if its visible), so it must be put into
+      // the DOM before we set the model.
+      renderWidgetInVbox(bottomUpTreeView, {flexAuto: true});
       bottomUpTreeView.setRange(startTime, endTime);
-      bottomUpTreeView.setModelWithEvents(consoleTimings, parsedTrace);
+      bottomUpTreeView.setModelWithEvents(consoleTimings, parsedTrace, mapper);
+
+      await RenderCoordinator.done();
+      await assertScreenshot('timeline/bottom_up_tree_view.png');
 
       const tree = bottomUpTreeView.buildTree();
       const topNodesIterator = tree.children().values();
@@ -133,8 +146,13 @@ describeWithEnvironment('TimelineTreeView', function() {
       const consoleTimings = [...parsedTrace.UserTimings.consoleTimings];
       const startTime = Trace.Helpers.Timing.microToMilli(parsedTrace.Meta.traceBounds.min);
       const endTime = Trace.Helpers.Timing.microToMilli(parsedTrace.Meta.traceBounds.max);
+
+      renderWidgetInVbox(callTreeView, {flexAuto: true});
       callTreeView.setRange(startTime, endTime);
       callTreeView.setModelWithEvents(consoleTimings, parsedTrace);
+
+      await RenderCoordinator.done();
+      await assertScreenshot('timeline/call_tree_view.png');
 
       const tree = callTreeView.buildTree();
       const topNodesIterator = tree.children().values();
@@ -293,14 +311,12 @@ describeWithEnvironment('TimelineTreeView', function() {
         'https://web-dev.imgix.net/image/kheDArv5csY6rvQUJDbWRscckLr1/4i7JstVZvgTFk9dxCe4a.svg',
         'https://web-dev.imgix.net/image/jxu1OdD7LKOGIDU7jURMpSH2lyK2/zrBPJq27O4Hs8haszVnK.svg',
         'https://web-dev.imgix.net/image/jL3OLOhcWUQDnR4XjewLBx4e3PC3/3164So5aDk7vKTkhx9Vm.png?auto=format&w=1140',
-        'data:image/svg+xml,%3Csvg viewBox=\'0 0 18 18\' fill=\'%23191919\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath fill-rule=\'evenodd\' clip-rule=\'evenodd\' d=\'M16 2V16H2V2H16ZM16 0H2C0.9 0 0 0.9 0 2V16C0 17.1 0.9 18 2 18H16C17.1 18 18 17.1 18 16V2C18 0.9 17.1 0 16 0Z\' /%3E%3C/svg%3E',
         'https://web.dev/js/app.js?v=fedf5fbe',
         'https://web.dev/js/home.js?v=73b0d143',
         'https://web.dev/js/index-7e29abb6.js',
         'https://web.dev/js/index-578d2db7.js',
         'https://web.dev/js/actions-f0eb5c8e.js',
         'https://web.dev/js/index-f45448ab.js',
-        'data:image/svg+xml,%3Csvg width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M7 10L12 15L17 10H7Z\' fill=\'%235F6368\'/%3E%3C/svg%3E%0A',
         'https://www.googletagmanager.com/gtm.js?id=GTM-MZWCJPP',
         'https://www.google-analytics.com/analytics.js',
         'https://www.googletagmanager.com/gtag/js?id=G-18JR3Q8PJ8&l=dataLayer&cx=c',

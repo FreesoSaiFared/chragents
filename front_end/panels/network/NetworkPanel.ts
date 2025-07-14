@@ -45,6 +45,7 @@ import * as Logs from '../../models/logs/logs.js';
 import * as Trace from '../../models/trace/trace.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import * as NetworkForward from '../../panels/network/forward/forward.js';
+import * as Tracing from '../../services/tracing/tracing.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
@@ -124,7 +125,7 @@ const UIStrings = {
    * @description Tooltip text that appears when hovering over the largeicon load button in the
    * Network Panel. This action prompts the user to select a HAR file to upload to DevTools.
    */
-  importHarFile: 'Import `HAR` file...',
+  importHarFile: 'Import `HAR` file…',
   /**
    * @description Tooltip text that appears when hovering over the download button in the Network
    * panel, when the setting to allow generating HAR files with sensitive data is enabled. HAR is
@@ -143,14 +144,14 @@ const UIStrings = {
    * the Network panel, when the setting to allow generating HAR files with sensitive data is
    * enabled.
    */
-  exportHarSanitized: 'Export `HAR` (sanitized)...',
+  exportHarSanitized: 'Export `HAR` (sanitized)…',
   /**
    * @description Context menu item in the context menu for the download button of the Network panel,
    * which is only available when the Network setting to allow generating HAR with sensitive data
    * is active. HAR is a file format (HTTP Archive) and should not be translated. This action
    * triggers the download of a HAR file with sensitive data included.
    */
-  exportHarWithSensitiveData: 'Export `HAR` (with sensitive data)...',
+  exportHarWithSensitiveData: 'Export `HAR` (with sensitive data)…',
   /**
    *@description Text for throttling the network
    */
@@ -176,11 +177,11 @@ const UIStrings = {
   /**
    *@description Text in Network Panel that is displayed whilst the recording is in progress.
    */
-  recordingFrames: 'Recording frames...',
+  recordingFrames: 'Recording frames…',
   /**
    *@description Text in Network Panel that is displayed when frames are being fetched.
    */
-  fetchingFrames: 'Fetching frames...',
+  fetchingFrames: 'Fetching frames…',
   /**
    * @description Text of a button in the Network panel's toolbar that open Network Conditions panel in the drawer.
    */
@@ -821,7 +822,7 @@ export class NetworkPanel extends UI.Panel.Panel implements
 
   private onFilmFrameSelected(event: Common.EventTarget.EventTargetEvent<number>): void {
     const timestamp = event.data;
-    this.overviewPane.setWindowTimes(0, timestamp);
+    this.overviewPane.setWindowTimes(Trace.Types.Timing.Milli(0), Trace.Types.Timing.Milli(timestamp));
   }
 
   private onFilmFrameEnter(event: Common.EventTarget.EventTargetEvent<number>): void {
@@ -873,8 +874,8 @@ export class RequestIdRevealer implements Common.Revealer.Revealer<NetworkForwar
 export class NetworkLogWithFilterRevealer implements
     Common.Revealer
         .Revealer<Extensions.ExtensionServer.RevealableNetworkRequestFilter|NetworkForward.UIFilter.UIRequestFilter> {
-  reveal(request: Extensions.ExtensionServer.RevealableNetworkRequestFilter|
-         NetworkForward.UIFilter.UIRequestFilter): Promise<void> {
+  reveal(request: Extensions.ExtensionServer.RevealableNetworkRequestFilter|NetworkForward.UIFilter.UIRequestFilter):
+      Promise<void> {
     if ('filters' in request) {
       return NetworkPanel.revealAndFilter(request.filters);
     }
@@ -882,8 +883,8 @@ export class NetworkLogWithFilterRevealer implements
   }
 }
 
-export class FilmStripRecorder implements Trace.TracingManager.TracingManagerClient {
-  private tracingManager: Trace.TracingManager.TracingManager|null;
+export class FilmStripRecorder implements Tracing.TracingManager.TracingManagerClient {
+  private tracingManager: Tracing.TracingManager.TracingManager|null;
   private resourceTreeModel: SDK.ResourceTreeModel.ResourceTreeModel|null;
   private readonly timeCalculator: NetworkTimeCalculator;
   private readonly filmStripView: PerfUI.FilmStripView.FilmStripView;
@@ -950,7 +951,7 @@ export class FilmStripRecorder implements Trace.TracingManager.TracingManagerCli
     this.filmStripView.reset();
     this.filmStripView.setStatusText(i18nString(UIStrings.recordingFrames));
     const tracingManager =
-        SDK.TargetManager.TargetManager.instance().scopeTarget()?.model(Trace.TracingManager.TracingManager);
+        SDK.TargetManager.TargetManager.instance().scopeTarget()?.model(Tracing.TracingManager.TracingManager);
     if (this.tracingManager || !tracingManager) {
       return;
     }

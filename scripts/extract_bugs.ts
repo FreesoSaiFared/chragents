@@ -5,6 +5,24 @@
 import {readFileSync} from 'fs';
 import glob from 'glob';
 import * as ts from 'typescript';
+import yargs from 'yargs';
+import {hideBin} from 'yargs/helpers';
+
+const argv = yargs(hideBin(process.argv))
+                 .option('format', {
+                   alias: 'f',
+                   describe: 'Output format',
+                   choices: ['list', 'b'],
+                   default: 'list',
+                 })
+                 .option('sources', {
+                   type: 'array',
+                   alias: 's',
+                   describe: 'Sources',
+                   choices: ['devtools', 'chromium'],
+                   default: ['devtools', 'chromium'],
+                 })
+                 .parseSync();
 
 /**
  * Usage: node --no-warnings --experimental-strip-types
@@ -15,6 +33,7 @@ import * as ts from 'typescript';
  */
 
 const bugs = new Set<string>();
+const bugToFile = new Map<string, string>();
 
 function extract(sourceFile: ts.SourceFile) {
   extractBugs(sourceFile);
@@ -54,11 +73,12 @@ function extract(sourceFile: ts.SourceFile) {
         if (!description) {
           break;
         }
-        const match = description.match(/crbug.com\/\d+/);
+        const match = description.match(/crbug.com\/(\d+)/);
         if (!match) {
           break;
         }
-        bugs.add(match[0] + '\t' + sourceFile.fileName);
+        bugs.add(match[1]);
+        bugToFile.set(match[1], sourceFile.fileName);
         break;
       }
     }
@@ -67,17 +87,41 @@ function extract(sourceFile: ts.SourceFile) {
   }
 }
 
-const files = [
-  ...glob.sync('front_end/**/*.test.ts'),
-  ...glob.sync('test/**/*test.ts'),
-];
+if (argv.sources.includes('devtools')) {
+  const files = [
+    ...glob.sync('front_end/**/*.test.ts'),
+    ...glob.sync('test/**/*test.ts'),
+  ];
 
-for (const file of files) {
-  extract(ts.createSourceFile(
-      file, readFileSync(file).toString(), ts.ScriptTarget.ESNext,
-      /* setParentNodes */ true));
+  for (const file of files) {
+    extract(ts.createSourceFile(
+        file, readFileSync(file).toString(), ts.ScriptTarget.ESNext,
+        /* setParentNodes */ true));
+  }
 }
 
-for (const bug of bugs) {
-  console.log(bug);
+if (argv.sources.includes('chromium')) {
+  const expectations = readFileSync('../../chromium/src/third_party/blink/web_tests/TestExpectations', 'utf-8');
+  const lines = expectations.split('\n');
+
+  for (const line of lines) {
+    if (line.includes('/tests/devtools/')) {
+      const parts = line.split(' ');
+      const crbug = parts.shift() ?? '';
+      const match = crbug.match(/crbug.com\/(\d+)/);
+      if (!match) {
+        continue;
+      }
+      bugs.add(match[1]);
+      bugToFile.set(match[1], parts.find(part => part.includes('/tests/devtools/')) ?? '');
+    }
+  }
+}
+
+if (argv.format === 'b') {
+  console.log(`id: (${Array.from(bugs).join('|')})`);
+} else {
+  for (const bug of bugs) {
+    console.log(`crbug.com/${bug}\t${bugToFile.get(bug)}`);
+  }
 }

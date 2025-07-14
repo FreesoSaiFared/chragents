@@ -3,15 +3,14 @@
 // found in the LICENSE file.
 
 import stylisticPlugin from '@stylistic/eslint-plugin';
-import typescriptPlugin from '@typescript-eslint/eslint-plugin';
-import tsParser from '@typescript-eslint/parser';
-import { defineConfig, globalIgnores } from 'eslint/config';
 import eslintPlugin from 'eslint-plugin-eslint-plugin';
 import importPlugin from 'eslint-plugin-import';
 import jsdocPlugin from 'eslint-plugin-jsdoc';
 import mochaPlugin from 'eslint-plugin-mocha';
+import {defineConfig, globalIgnores} from 'eslint/config';
 import globals from 'globals';
-import { join } from 'path';
+import {join} from 'path';
+import typescriptEslint from 'typescript-eslint';
 
 import rulesdirPlugin from './scripts/eslint_rules/rules-dir.mjs';
 
@@ -66,7 +65,7 @@ export default defineConfig([
   {
     name: 'JavaScript files',
     plugins: {
-      '@typescript-eslint': typescriptPlugin,
+      '@typescript-eslint': typescriptEslint.plugin,
       '@stylistic': stylisticPlugin,
       '@eslint-plugin': eslintPlugin,
       mocha: mochaPlugin,
@@ -252,6 +251,7 @@ export default defineConfig([
       // no-implicit-globals will prevent accidental globals
       'no-implicit-globals': 'off',
       'no-unused-private-class-members': 'error',
+      'no-useless-constructor': 'error',
 
       // Sort imports first
       'import/first': 'error',
@@ -301,7 +301,7 @@ export default defineConfig([
       ecmaVersion: 'latest',
       sourceType: 'module',
 
-      parser: tsParser,
+      parser: typescriptEslint.parser,
       parserOptions: {
         allowAutomaticSingleRunInference: true,
         project: join(
@@ -541,6 +541,11 @@ export default defineConfig([
       'no-array-constructor': 'off',
       '@typescript-eslint/no-array-constructor': 'error',
 
+      '@typescript-eslint/consistent-indexed-object-style': 'error',
+
+      'no-useless-constructor': 'off',
+      '@typescript-eslint/no-useless-constructor': 'error',
+
       'rulesdir/no-underscored-properties': 'error',
       'rulesdir/inline-type-imports': 'error',
 
@@ -558,6 +563,8 @@ export default defineConfig([
           importName: 'Trace',
         },
       ],
+
+      'rulesdir/validate-timing-types': 'error',
     },
   },
   {
@@ -607,6 +614,7 @@ export default defineConfig([
       'rulesdir/no-bound-component-methods': 'error',
       'rulesdir/no-adopted-style-sheets': 'error',
       'rulesdir/no-customized-builtin-elements': 'error',
+      'rulesdir/no-deprecated-component-usages': 'error',
       'rulesdir/no-self-closing-custom-element-tagnames': 'error',
       'rulesdir/no-a-tags-in-lit': 'error',
       'rulesdir/check-css-import': 'error',
@@ -690,7 +698,6 @@ export default defineConfig([
       'rulesdir/no-assert-equal-boolean-null-undefined': 'error',
       'rulesdir/no-imperative-dom-api': 'off',
       'rulesdir/no-lit-render-outside-of-view': 'off',
-      'rulesdir/no-screenshot-test-outside-perf-panel': 'error',
       'rulesdir/prefer-assert-instance-of': 'error',
       'rulesdir/prefer-assert-is-ok': 'error',
       'rulesdir/prefer-assert-length-of': 'error',
@@ -698,6 +705,7 @@ export default defineConfig([
       'rulesdir/prefer-sinon-assert': 'error',
       'rulesdir/prefer-url-string': 'error',
       'rulesdir/trace-engine-test-timeouts': 'error',
+      'rulesdir/no-document-body-mutation': 'error',
       'rulesdir/enforce-custom-element-definitions-location': 'off',
     },
 
@@ -720,11 +728,6 @@ export default defineConfig([
         },
         {
           name: 'describeWithMockConnection',
-          type: 'suite',
-          interfaces: ['BDD', 'TDD'],
-        },
-        {
-          name: 'describeWithRealConnection',
           type: 'suite',
           interfaces: ['BDD', 'TDD'],
         },
@@ -796,15 +799,17 @@ export default defineConfig([
     },
   },
   {
-    name: 'Traces import rule',
-    files: ['front_end/models/trace/handlers/**/*.ts'],
+    name: 'No SDK in models/trace',
+    files: ['front_end/models/trace/**/*.ts'],
+    ignores: ['front_end/models/trace/**/*.test.ts'],
     rules: {
       'rulesdir/no-imports-in-directory': [
         'error',
         {
-          bannedImportPaths: [
-            join(import.meta.dirname, 'front_end', 'core', 'sdk', 'sdk.js'),
-          ],
+          bannedImportPaths: [{
+            bannedPath: join(import.meta.dirname, 'front_end', 'core', 'sdk', 'sdk.js'),
+            allowTypeImports: true,
+          }],
         },
       ],
     },

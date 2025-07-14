@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import { type AgentState } from './State.js';
-import { type ChatOpenAI } from './ChatOpenAI.js';
-import { StateGraph } from './StateGraph.js';
 import { createAgentNode, createFinalNode, createToolExecutorNode, routeNextNode } from './Graph.js';
-import { NodeType } from './Types.js';
-import type { CompiledGraph, Runnable } from './Types.js';
-import { ChatPromptFormatter } from './GraphHelpers.js';
+import { createLogger } from './Logger.js';
+import type { AgentState } from './State.js';
+import { StateGraph } from './StateGraph.js';
+import { NodeType, type CompiledGraph, type Runnable } from './Types.js';
+
+const logger = createLogger('ConfigurableGraph');
 
 /**
  * Defines the structure for the JSON configuration of a StateGraph.
@@ -33,30 +33,30 @@ export interface GraphConfig {
   entryPoint: string;
   nodes: GraphNodeConfig[];
   edges: GraphEdgeConfig[];
+  modelName?: string;
+  temperature?: number;
 }
 
 /**
  * Creates a compiled agent graph from a configuration object.
  *
- * @param config The graph configuration.
- * @param openAiModel The ChatOpenAI model instance, already initialized.
+ * @param config The graph configuration with model information.
  * @returns A compiled StateGraph.
  */
 export function createAgentGraphFromConfig(
   config: GraphConfig,
-  openAiModel: ChatOpenAI,
 ): CompiledGraph {
-  console.log(`[ConfigurableGraph] Creating graph from config: ${config.name}`);
+  logger.info(`Creating graph from config: ${config.name} with model: ${config.modelName}`);
 
   const graph = new StateGraph<AgentState>({ name: config.name });
 
-  const nodeFactories: Record<string, (model: ChatOpenAI, nodeConfig: GraphNodeConfig, graphInstance?: StateGraph<AgentState>) => Runnable<AgentState, AgentState>> = {
-    'agent': (model) => createAgentNode(model, new ChatPromptFormatter()),
-    'final': () => createFinalNode(),
-    'toolExecutor': (_model, nodeCfg) => {
+  const nodeFactories: Record<string, (nodeConfig: GraphNodeConfig, graphInstance?: StateGraph<AgentState>) => Runnable<AgentState, AgentState>> = {
+    agent: () => createAgentNode(config.modelName!, config.temperature || 0),
+    final: () => createFinalNode(),
+    toolExecutor: (nodeCfg) => {
       return {
         invoke: async (state: AgentState) => {
-          console.warn(`[ConfigurableGraph] ToolExecutorNode "${nodeCfg.name}" invoked without being dynamically replaced. This indicates an issue.`);
+          logger.warn(`ToolExecutorNode "${nodeCfg.name}" invoked without being dynamically replaced. This indicates an issue.`);
           return { ...state, error: `ToolExecutor ${nodeCfg.name} not properly initialized.` };
         }
       };
@@ -66,35 +66,35 @@ export function createAgentGraphFromConfig(
   for (const nodeConfig of config.nodes) {
     const factory = nodeFactories[nodeConfig.type];
     if (factory) {
-      const nodeInstance = factory(openAiModel, nodeConfig, graph);
+      const nodeInstance = factory(nodeConfig, graph);
       graph.addNode(nodeConfig.name, nodeInstance);
-      console.log(`[ConfigurableGraph] Added node: ${nodeConfig.name} (type: ${nodeConfig.type})`);
+      logger.debug(`Added node: ${nodeConfig.name} (type: ${nodeConfig.type})`);
     } else {
-      console.warn(`[ConfigurableGraph] Unknown node type: ${nodeConfig.type} for node ${nodeConfig.name}. Adding a dummy error node.`);
+      logger.warn(`Unknown node type: ${nodeConfig.type} for node ${nodeConfig.name}. Adding a dummy error node.`);
       graph.addNode(nodeConfig.name, {
         invoke: async (state: AgentState) => {
-          console.error(`[ConfigurableGraph] Dummy node ${nodeConfig.name} invoked due to unknown type ${nodeConfig.type}`);
+          logger.error(`Dummy node ${nodeConfig.name} invoked due to unknown type ${nodeConfig.type}`);
           return { ...state, error: `Unknown node type ${nodeConfig.type} for ${nodeConfig.name}` };
         }
       });
     }
   }
 
-  type ConditionFunctionGenerator = (state: AgentState, graphInstance: StateGraph<AgentState>, edgeConfig: GraphEdgeConfig, model: ChatOpenAI) => string;
+  type ConditionFunctionGenerator = (state: AgentState, graphInstance: StateGraph<AgentState>, edgeConfig: GraphEdgeConfig) => string;
 
   const conditionFactories: Record<string, ConditionFunctionGenerator> = {
-    'routeBasedOnLastMessage': (state) => routeNextNode(state),
-    'alwaysAgent': () => NodeType.AGENT.toString(),
-    'routeOrPrepareToolExecutor': (state, graphInstance, edgeConfig) => {
+    routeBasedOnLastMessage: state => routeNextNode(state),
+    alwaysAgent: () => NodeType.AGENT.toString(),
+    routeOrPrepareToolExecutor: (state, graphInstance, edgeConfig) => {
       const routingKey = routeNextNode(state);
       if (routingKey === NodeType.TOOL_EXECUTOR.toString()) {
         const toolExecutorNodeName = edgeConfig.targetMap[NodeType.TOOL_EXECUTOR.toString()];
         if (toolExecutorNodeName && toolExecutorNodeName !== '__end__') {
-          console.log(`[ConfigurableGraph Cond] Dynamically creating/updating tool executor: ${toolExecutorNodeName}`);
+          logger.debug(`Dynamically creating/updating tool executor: ${toolExecutorNodeName}`);
           const toolExecutorInstance = createToolExecutorNode(state);
           graphInstance.addNode(toolExecutorNodeName, toolExecutorInstance);
         } else {
-          console.error('[ConfigurableGraph Cond] Tool executor node name not found in targetMap or is __end__. Routing to __end__.');
+          logger.error('Tool executor node name not found in targetMap or is __end__. Routing to __end__.');
           return '__end__';
         }
       }
@@ -106,28 +106,28 @@ export function createAgentGraphFromConfig(
     const conditionFactory = conditionFactories[edgeConfig.conditionType];
     if (conditionFactory) {
       const conditionFn = (state: AgentState) => {
-        return conditionFactory(state, graph, edgeConfig, openAiModel);
+        return conditionFactory(state, graph, edgeConfig);
       };
       graph.addConditionalEdges(edgeConfig.source, conditionFn, edgeConfig.targetMap);
-      console.log(`[ConfigurableGraph] Added edge from ${edgeConfig.source} via ${edgeConfig.conditionType}`);
+      logger.debug(`Added edge from ${edgeConfig.source} via ${edgeConfig.conditionType}`);
     } else {
-      console.warn(`[ConfigurableGraph] Unknown condition type: ${edgeConfig.conditionType} for edge from ${edgeConfig.source}`);
+      logger.warn(`Unknown condition type: ${edgeConfig.conditionType} for edge from ${edgeConfig.source}`);
     }
   }
 
   if (config.nodes.find(n => n.name === config.entryPoint)) {
     graph.setEntryPoint(config.entryPoint);
-    console.log(`[ConfigurableGraph] Set entry point to: ${config.entryPoint}`);
+    logger.debug(`Set entry point to: ${config.entryPoint}`);
   } else {
-    console.error(`[ConfigurableGraph] Entry point "${config.entryPoint}" not found in defined nodes.`);
+    logger.error(`Entry point "${config.entryPoint}" not found in defined nodes.`);
     if (config.nodes.length > 0) {
         const fallbackEntryPoint = config.nodes[0].name;
         graph.setEntryPoint(fallbackEntryPoint);
-        console.warn(`[ConfigurableGraph] Setting entry point to fallback: ${fallbackEntryPoint}`);
+        logger.warn(`Setting entry point to fallback: ${fallbackEntryPoint}`);
     } else {
-        throw new Error("[ConfigurableGraph] No nodes defined in graph config, cannot set entry point.");
+        throw new Error('[ConfigurableGraph] No nodes defined in graph config, cannot set entry point.');
     }
   }
 
   return graph.compile();
-} 
+}

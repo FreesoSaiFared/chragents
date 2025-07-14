@@ -30,7 +30,6 @@
 
 // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../common/common.js';
 import * as i18n from '../i18n/i18n.js';
@@ -50,6 +49,7 @@ import {
   Events,
   type EventTypes,
   type ExtensionDescriptor,
+  type FunctionCallEvent,
   type HoverEvent,
   type ImpressionEvent,
   type InspectorFrontendHostAPI,
@@ -237,6 +237,7 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
       }
     }
 
+    /* eslint-disable-next-line rulesdir/no-imperative-dom-api */
     const link = document.createElement('a');
     link.download = fileName;
     const blob = new Blob([buffer.join('')], {type: 'text/plain'});
@@ -379,12 +380,8 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
   registerPreference(_name: string, _options: {synced?: boolean}): void {
   }
 
-  getPreferences(callback: (arg0: {
-                   [x: string]: string,
-                 }) => void): void {
-    const prefs: {
-      [x: string]: string,
-    } = {};
+  getPreferences(callback: (arg0: Record<string, string>) => void): void {
+    const prefs: Record<string, string> = {};
     for (const name in window.localStorage) {
       prefs[name] = window.localStorage[name];
     }
@@ -554,6 +551,8 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
   }
   recordSettingAccess(_event: SettingAccessEvent): void {
   }
+  recordFunctionCall(_event: FunctionCallEvent): void {
+  }
 }
 
 // @ts-expect-error Global injected by devtools_compatibility.js
@@ -633,9 +632,7 @@ initializeInspectorFrontendHost();
 globalThis.InspectorFrontendAPI = new InspectorFrontendAPIImpl();
 })();
 
-export function isUnderTest(prefs?: {
-  [x: string]: string,
-}): boolean {
+export function isUnderTest(prefs?: Record<string, string>): boolean {
   // Integration tests rely on test queryParam.
   if (Root.Runtime.Runtime.queryParam('test')) {
     return true;

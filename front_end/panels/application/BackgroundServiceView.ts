@@ -59,7 +59,7 @@ const UIStrings = {
    */
   showEventsFromOtherDomains: 'Show events from other domains',
   /**
-   *@description Text of a checkbox to show events for other dtorage keys
+   *@description Text of a checkbox to show events for other storage keys
    */
   showEventsForOtherStorageKeys: 'Show events from other storage partitions',
   /**
@@ -111,7 +111,7 @@ const UIStrings = {
    *@description Text in Background Service View of the Application panel
    *@example {Background Fetch} PH1
    */
-  recordingSActivity: 'Recording {PH1} activity...',
+  recordingSActivity: 'Recording {PH1} activity…',
   /**
    *@description Text in Background Service View of the Application panel
    */
@@ -499,7 +499,7 @@ export class BackgroundServiceView extends UI.Widget.VBox {
       emptyWidget.text = i18nString(
           UIStrings.startRecordingToDebug,
           {PH1: i18nString(UIStrings.startRecordingEvents), PH2: recordShortcuts.title()});
-      emptyWidget.appendLink(this.createLearnMoreLink());
+      emptyWidget.link = this.createLearnMoreLink();
 
       const button = UI.UIUtils.createTextButton(
           i18nString(UIStrings.startRecordingEvents), () => this.toggleRecording(),

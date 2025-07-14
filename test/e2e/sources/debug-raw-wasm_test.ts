@@ -41,11 +41,6 @@ import {
 } from '../helpers/sources-helpers.js';
 
 describe('Sources Tab', function() {
-  // The tests in this suite are particularly slow, as they perform a lot of actions
-  if (this.timeout() > 0) {
-    this.timeout(10000);
-  }
-
   beforeEach(async () => {
     const {frontend} = getBrowserAndPages();
     await installEventListener(frontend, DEBUGGER_PAUSED_EVENT);
@@ -86,7 +81,7 @@ describe('Sources Tab', function() {
   });
 
   it('hits two breakpoints that are set and activated separately', async function() {
-    const {target, frontend} = getBrowserAndPages();
+    const {frontend} = getBrowserAndPages();
     const fileName = 'add.wasm';
 
     await step('navigate to a page and open the Sources tab', async () => {
@@ -98,7 +93,7 @@ describe('Sources Tab', function() {
     });
 
     await step('reload the page', async () => {
-      await reloadPageAndWaitForSourceFile(target, fileName);
+      await reloadPageAndWaitForSourceFile(fileName);
     });
 
     await waitForFunction(async () => await isBreakpointSet('0x027'));
@@ -118,7 +113,7 @@ describe('Sources Tab', function() {
     });
 
     await step('reload the page', async () => {
-      await reloadPageAndWaitForSourceFile(target, fileName);
+      await reloadPageAndWaitForSourceFile(fileName);
     });
 
     await waitForFunction(async () => !(await isBreakpointSet('0x027')));
@@ -129,7 +124,7 @@ describe('Sources Tab', function() {
     });
 
     await step('reload the page', async () => {
-      await reloadPageAndWaitForSourceFile(target, fileName);
+      await reloadPageAndWaitForSourceFile(fileName);
     });
 
     await waitForFunction(async () => await isBreakpointSet('0x028'));
@@ -141,7 +136,6 @@ describe('Sources Tab', function() {
   });
 
   it('shows variable value in popover', async function() {
-    const {target} = getBrowserAndPages();
     const fileName = 'add.wasm';
 
     await step('navigate to a page and open the Sources tab', async () => {
@@ -153,7 +147,7 @@ describe('Sources Tab', function() {
     });
 
     await step('reload the page', async () => {
-      await reloadPageAndWaitForSourceFile(target, fileName);
+      await reloadPageAndWaitForSourceFile(fileName);
     });
 
     await step('hover over the $var0 in line No.0x023', async () => {
@@ -188,7 +182,7 @@ describe('Sources Tab', function() {
   });
 
   it('is able to step with state', async () => {
-    const {target, frontend} = getBrowserAndPages();
+    const {frontend} = getBrowserAndPages();
     const fileName = 'stepping-with-state.wasm';
 
     await step('navigate to a page and open the Sources tab', async () => {
@@ -200,7 +194,7 @@ describe('Sources Tab', function() {
     });
 
     await step('reload the page', async () => {
-      await reloadPageAndWaitForSourceFile(target, fileName);
+      await reloadPageAndWaitForSourceFile(fileName);
     });
 
     await waitForFunction(async () => await isBreakpointSet('0x060'));
@@ -238,7 +232,7 @@ describe('Sources Tab', function() {
     });
 
     await step('reload the page', async () => {
-      await reloadPageAndWaitForSourceFile(target, fileName);
+      await reloadPageAndWaitForSourceFile(fileName);
     });
 
     await waitForFunction(async () => await isBreakpointSet('0x048'));
@@ -271,7 +265,7 @@ describe('Sources Tab', function() {
 
   it('is able to step with state in multi-threaded code in main thread', async () => {
     await enableExperiment('instrumentation-breakpoints');
-    const {target, frontend} = getBrowserAndPages();
+    const {frontend} = getBrowserAndPages();
     // enableExperiment() reloads the devtools page, so we need to reinstall the listener on the new window.
     await installEventListener(frontend, DEBUGGER_PAUSED_EVENT);
     const fileName = 'stepping-with-state.wasm';
@@ -309,7 +303,7 @@ describe('Sources Tab', function() {
     });
 
     await step('reload the page', async () => {
-      await reloadPageAndWaitForSourceFile(target, fileName);
+      await reloadPageAndWaitForSourceFile(fileName);
     });
 
     await waitForFunction(async () => await isBreakpointSet('0x060'));
@@ -347,7 +341,7 @@ describe('Sources Tab', function() {
     });
 
     await step('reload the page', async () => {
-      await reloadPageAndWaitForSourceFile(target, fileName);
+      await reloadPageAndWaitForSourceFile(fileName);
     });
 
     await waitForFunction(async () => await isBreakpointSet('0x048'));
@@ -392,7 +386,7 @@ describe('Sources Tab', function() {
 
   it('is able to step with state in multi-threaded code in worker thread', async () => {
     await enableExperiment('instrumentation-breakpoints');
-    const {target, frontend} = getBrowserAndPages();
+    const {frontend} = getBrowserAndPages();
     // enableExperiment() reloads the devtools page, so we need to reinstall the listener on the new window.
     await installEventListener(frontend, DEBUGGER_PAUSED_EVENT);
     const fileName = 'stepping-with-state.wasm';
@@ -421,7 +415,7 @@ describe('Sources Tab', function() {
     });
 
     await step('reload the page', async () => {
-      await reloadPageAndWaitForSourceFile(target, fileName);
+      await reloadPageAndWaitForSourceFile(fileName);
     });
 
     await waitForFunction(async () => await isBreakpointSet('0x06d'));
@@ -463,7 +457,7 @@ describe('Sources Tab', function() {
     });
 
     await step('reload the page', async () => {
-      await reloadPageAndWaitForSourceFile(target, fileName);
+      await reloadPageAndWaitForSourceFile(fileName);
     });
 
     await waitForFunction(async () => await isBreakpointSet('0x050'));

@@ -2928,7 +2928,7 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
   /**
    * @internal
    */
-  const packageVersion = '24.7.2';
+  const packageVersion = '24.10.2';
 
   /**
    * @license
@@ -10185,6 +10185,9 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
   function createIncrementalIdGenerator() {
     let id = 0;
     return () => {
+      if (id === Number.MAX_SAFE_INTEGER) {
+        id = 0;
+      }
       return ++id;
     };
   }
@@ -11363,7 +11366,6 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
         }
         const recorder = new ScreenRecorder(this, width, height, {
           ...options,
-          path: options.ffmpegPath,
           crop
         });
         try {
@@ -13218,6 +13220,7 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
    * Copyright 2023 Google Inc.
    * SPDX-License-Identifier: Apache-2.0
    */
+  const idGenerator = createIncrementalIdGenerator();
   /**
    * Manages callbacks and their IDs for the protocol request/response communication.
    *
@@ -13228,7 +13231,7 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
   class CallbackRegistry {
     constructor() {
       _classPrivateFieldInitSpec(this, _callbacks, new Map());
-      _classPrivateFieldInitSpec(this, _idGenerator, createIncrementalIdGenerator());
+      _classPrivateFieldInitSpec(this, _idGenerator, idGenerator);
     }
     create(label, timeout, request) {
       const callback = new Callback(_classPrivateFieldGet(_idGenerator, this).call(this), label, timeout);
@@ -16505,7 +16508,7 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
         } = options;
         let ensureNewDocumentNavigation = false;
         const watcher = new LifecycleWatcher(this._frameManager.networkManager, this, waitUntil, timeout);
-        let error = await Deferred.race([navigate(_classPrivateFieldGet(_client9, this), url, referer, referrerPolicy, this._id), watcher.terminationPromise()]);
+        let error = await Deferred.race([navigate(_classPrivateFieldGet(_client9, this), url, referer, referrerPolicy ? referrerPolicyToProtocol(referrerPolicy) : undefined, this._id), watcher.terminationPromise()]);
         if (!error) {
           error = await Deferred.race([watcher.terminationPromise(), ensureNewDocumentNavigation ? watcher.newDocumentNavigationPromise() : watcher.sameDocumentNavigationPromise()]);
         }
@@ -16777,6 +16780,17 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
       return this._frameManager._deviceRequestPromptManager(_classPrivateFieldGet(_client9, this));
     }
   })();
+  /**
+   * @internal
+   */
+  function referrerPolicyToProtocol(referrerPolicy) {
+    // See
+    // https://chromedevtools.github.io/devtools-protocol/tot/Page/#type-ReferrerPolicy
+    // We need to conver from Web-facing phase to CDP's camelCase.
+    return referrerPolicy.replaceAll(/-./g, match => {
+      return match[1].toUpperCase();
+    });
+  }
 
   /**
    * @license
@@ -17461,7 +17475,14 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
           return handler.bind(this)(client, arg);
         });
       }
-      await Promise.all([client.send('Network.enable'), _assertClassBrand(_NetworkManager_brand, this, _applyExtraHTTPHeaders).call(this, client), _assertClassBrand(_NetworkManager_brand, this, _applyNetworkConditions).call(this, client), _assertClassBrand(_NetworkManager_brand, this, _applyProtocolCacheDisabled).call(this, client), _assertClassBrand(_NetworkManager_brand, this, _applyProtocolRequestInterception).call(this, client), _assertClassBrand(_NetworkManager_brand, this, _applyUserAgent).call(this, client)]);
+      try {
+        await Promise.all([client.send('Network.enable'), _assertClassBrand(_NetworkManager_brand, this, _applyExtraHTTPHeaders).call(this, client), _assertClassBrand(_NetworkManager_brand, this, _applyNetworkConditions).call(this, client), _assertClassBrand(_NetworkManager_brand, this, _applyProtocolCacheDisabled).call(this, client), _assertClassBrand(_NetworkManager_brand, this, _applyProtocolRequestInterception).call(this, client), _assertClassBrand(_NetworkManager_brand, this, _applyUserAgent).call(this, client)]);
+      } catch (error) {
+        if (isErrorLike(error) && isTargetClosedError(error)) {
+          return;
+        }
+        throw error;
+      }
     }
     async authenticate(credentials) {
       _classPrivateFieldSet(_credentials, this, credentials);
@@ -17546,9 +17567,16 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
     if (_classPrivateFieldGet(_extraHTTPHeaders, this) === undefined) {
       return;
     }
-    await client.send('Network.setExtraHTTPHeaders', {
-      headers: _classPrivateFieldGet(_extraHTTPHeaders, this)
-    });
+    try {
+      await client.send('Network.setExtraHTTPHeaders', {
+        headers: _classPrivateFieldGet(_extraHTTPHeaders, this)
+      });
+    } catch (error) {
+      if (isErrorLike(error) && isTargetClosedError(error)) {
+        return;
+      }
+      throw error;
+    }
   }
   async function _applyToAllClients(fn) {
     await Promise.all(Array.from(_classPrivateFieldGet(_clients, this).keys()).map(client => {
@@ -17559,44 +17587,72 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
     if (_classPrivateFieldGet(_emulatedNetworkConditions, this) === undefined) {
       return;
     }
-    await client.send('Network.emulateNetworkConditions', {
-      offline: _classPrivateFieldGet(_emulatedNetworkConditions, this).offline,
-      latency: _classPrivateFieldGet(_emulatedNetworkConditions, this).latency,
-      uploadThroughput: _classPrivateFieldGet(_emulatedNetworkConditions, this).upload,
-      downloadThroughput: _classPrivateFieldGet(_emulatedNetworkConditions, this).download
-    });
+    try {
+      await client.send('Network.emulateNetworkConditions', {
+        offline: _classPrivateFieldGet(_emulatedNetworkConditions, this).offline,
+        latency: _classPrivateFieldGet(_emulatedNetworkConditions, this).latency,
+        uploadThroughput: _classPrivateFieldGet(_emulatedNetworkConditions, this).upload,
+        downloadThroughput: _classPrivateFieldGet(_emulatedNetworkConditions, this).download
+      });
+    } catch (error) {
+      if (isErrorLike(error) && isTargetClosedError(error)) {
+        return;
+      }
+      throw error;
+    }
   }
   async function _applyUserAgent(client) {
     if (_classPrivateFieldGet(_userAgent, this) === undefined) {
       return;
     }
-    await client.send('Network.setUserAgentOverride', {
-      userAgent: _classPrivateFieldGet(_userAgent, this),
-      userAgentMetadata: _classPrivateFieldGet(_userAgentMetadata, this)
-    });
+    try {
+      await client.send('Network.setUserAgentOverride', {
+        userAgent: _classPrivateFieldGet(_userAgent, this),
+        userAgentMetadata: _classPrivateFieldGet(_userAgentMetadata, this)
+      });
+    } catch (error) {
+      if (isErrorLike(error) && isTargetClosedError(error)) {
+        return;
+      }
+      throw error;
+    }
   }
   async function _applyProtocolRequestInterception(client) {
     if (_classPrivateFieldGet(_userCacheDisabled, this) === undefined) {
       _classPrivateFieldSet(_userCacheDisabled, this, false);
     }
-    if (_classPrivateFieldGet(_protocolRequestInterceptionEnabled, this)) {
-      await Promise.all([_assertClassBrand(_NetworkManager_brand, this, _applyProtocolCacheDisabled).call(this, client), client.send('Fetch.enable', {
-        handleAuthRequests: true,
-        patterns: [{
-          urlPattern: '*'
-        }]
-      })]);
-    } else {
-      await Promise.all([_assertClassBrand(_NetworkManager_brand, this, _applyProtocolCacheDisabled).call(this, client), client.send('Fetch.disable')]);
+    try {
+      if (_classPrivateFieldGet(_protocolRequestInterceptionEnabled, this)) {
+        await Promise.all([_assertClassBrand(_NetworkManager_brand, this, _applyProtocolCacheDisabled).call(this, client), client.send('Fetch.enable', {
+          handleAuthRequests: true,
+          patterns: [{
+            urlPattern: '*'
+          }]
+        })]);
+      } else {
+        await Promise.all([_assertClassBrand(_NetworkManager_brand, this, _applyProtocolCacheDisabled).call(this, client), client.send('Fetch.disable')]);
+      }
+    } catch (error) {
+      if (isErrorLike(error) && isTargetClosedError(error)) {
+        return;
+      }
+      throw error;
     }
   }
   async function _applyProtocolCacheDisabled(client) {
     if (_classPrivateFieldGet(_userCacheDisabled, this) === undefined) {
       return;
     }
-    await client.send('Network.setCacheDisabled', {
-      cacheDisabled: _classPrivateFieldGet(_userCacheDisabled, this)
-    });
+    try {
+      await client.send('Network.setCacheDisabled', {
+        cacheDisabled: _classPrivateFieldGet(_userCacheDisabled, this)
+      });
+    } catch (error) {
+      if (isErrorLike(error) && isTargetClosedError(error)) {
+        return;
+      }
+      throw error;
+    }
   }
   function _onRequestWillBeSent(client, event) {
     // Request interception doesn't happen for data URLs with Network Service.
@@ -22336,6 +22392,19 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
       }
       return page;
     }
+    async installExtension(path) {
+      const {
+        id
+      } = await _classPrivateFieldGet(_connection4, this).send('Extensions.loadUnpacked', {
+        path
+      });
+      return id;
+    }
+    uninstallExtension(id) {
+      return _classPrivateFieldGet(_connection4, this).send('Extensions.uninstall', {
+        id
+      });
+    }
     targets() {
       return Array.from(_classPrivateFieldGet(_targetManager3, this).getAvailableTargets().values()).filter(target => {
         return target._isTargetExposed() && target._initializedDeferred.value() === exports.InitializationStatus.SUCCESS;
@@ -24494,9 +24563,9 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
    * @internal
    */
   const PUPPETEER_REVISIONS = Object.freeze({
-    chrome: '135.0.7049.114',
-    'chrome-headless-shell': '135.0.7049.114',
-    firefox: 'stable_137.0.2'
+    chrome: '137.0.7151.119',
+    'chrome-headless-shell': '137.0.7151.119',
+    firefox: 'stable_139.0.4'
   });
 
   /**
@@ -24670,6 +24739,7 @@ var Puppeteer = function (exports, _error, _suppressed, _PuppeteerURL, _LazyArg,
   exports.paperFormats = paperFormats;
   exports.parsePDFOptions = parsePDFOptions;
   exports.parsePSelectors = parsePSelectors;
+  exports.referrerPolicyToProtocol = referrerPolicyToProtocol;
   exports.releaseObject = releaseObject;
   exports.rewriteError = rewriteError$1;
   exports.scriptInjector = scriptInjector;

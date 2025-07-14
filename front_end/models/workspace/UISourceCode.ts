@@ -89,7 +89,12 @@ export class UISourceCode extends Common.ObjectWrapper.ObjectWrapper<EventTypes>
         this.#name = parsedURL.lastPathComponent + '?' + parsedURL.queryParams;
       } else {
         // file name looks best decoded
-        this.#name = decodeURIComponent(parsedURL.lastPathComponent);
+        try {
+          this.#name = decodeURIComponent(parsedURL.lastPathComponent);
+        } catch {
+          // Decoding might fail.
+          this.#name = parsedURL.lastPathComponent;
+        }
       }
     } else {
       this.#origin = Platform.DevToolsPath.EmptyUrlString;
@@ -658,28 +663,28 @@ export class UILocationRange {
  * where UISourceCode displaying is handled.
  */
 export class Message {
-  private readonly levelInternal: Message.Level;
-  private readonly textInternal: string;
+  readonly #level: Message.Level;
+  readonly #text: string;
   range: TextUtils.TextRange.TextRange;
-  private readonly clickHandlerInternal?: (() => void);
+  readonly #clickHandler?: (() => void);
 
   constructor(level: Message.Level, text: string, clickHandler?: (() => void), range?: TextUtils.TextRange.TextRange) {
-    this.levelInternal = level;
-    this.textInternal = text;
+    this.#level = level;
+    this.#text = text;
     this.range = range ?? new TextUtils.TextRange.TextRange(0, 0, 0, 0);
-    this.clickHandlerInternal = clickHandler;
+    this.#clickHandler = clickHandler;
   }
 
   level(): Message.Level {
-    return this.levelInternal;
+    return this.#level;
   }
 
   text(): string {
-    return this.textInternal;
+    return this.#text;
   }
 
   clickHandler(): (() => void)|undefined {
-    return this.clickHandlerInternal;
+    return this.#clickHandler;
   }
 
   lineNumber(): number {

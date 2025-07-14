@@ -8,7 +8,7 @@ import {type ChatMessage, ChatMessageEntity, type ImageInputData} from '../ui/Ch
 const UIStrings = {
 } as const;
 
-const str_ = i18n.i18n.registerUIStrings('panels/ai_chat/agent/State.ts', UIStrings);
+const str_ = i18n.i18n.registerUIStrings('panels/ai_chat/core/State.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 /**
@@ -51,6 +51,12 @@ export interface DevToolsContext {
   needsFollowUp?: boolean;
   // Counter for tracking the number of intermediate steps in the current chain
   intermediateStepsCount?: number;
+  // Tracing context for distributed tracing
+  tracingContext?: {
+    sessionId: string;
+    traceId: string;
+    parentObservationId?: string;
+  };
 }
 
 /**
@@ -113,7 +119,7 @@ export function createUserMessage(text: string, imageInput?: ImageInputData): Ch
  * Creates a new model message
  * NOTE: This will likely be replaced by direct object creation in AgentNode
  */
-export function createModelMessage(answer: string, isFinalAnswer: boolean = false): ChatMessage {
+export function createModelMessage(answer: string, isFinalAnswer = false): ChatMessage {
   // This function is now less useful as AgentNode creates the object directly
   // with action details. Keeping it temporarily might require updates later.
   return {

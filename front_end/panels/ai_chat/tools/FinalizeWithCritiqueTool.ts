@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import { type Tool } from './Tools.js';
-import { CritiqueTool} from './CritiqueTool.js';
 import { AgentService } from '../core/AgentService.js';
 import { ChatMessageEntity } from '../ui/ChatView.js';
+import { createLogger } from '../core/Logger.js';
+
+const logger = createLogger('FinalizeWithCritiqueTool');
+
+import { CritiqueTool} from './CritiqueTool.js';
+import type { Tool } from './Tools.js';
 
 /**
  * Arguments for the FinalizeWithCritiqueTool
@@ -24,7 +28,7 @@ export interface FinalizeWithCritiqueResult {
   answer?: string;
   feedback?: string;
   error?: string;
-  resultData?: { accepted: boolean; answer?: string; feedback?: string };
+  resultData?: { accepted: boolean, answer?: string, feedback?: string };
 }
 
 /**
@@ -32,7 +36,7 @@ export interface FinalizeWithCritiqueResult {
  */
 function findLastMessage<T>(messages: any[], entityType: ChatMessageEntity): T | undefined {
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
-    console.warn('findLastMessage: Empty or invalid messages array');
+    logger.warn('findLastMessage: Empty or invalid messages array');
     return undefined;
   }
 
@@ -43,7 +47,7 @@ function findLastMessage<T>(messages: any[], entityType: ChatMessageEntity): T |
     }
   }
 
-  console.warn(`findLastMessage: No message found with entity type ${entityType}`);
+  logger.warn(`findLastMessage: No message found with entity type ${entityType}`);
   return undefined;
 }
 
@@ -54,6 +58,34 @@ export class FinalizeWithCritiqueTool implements Tool<FinalizeWithCritiqueArgs, 
   name = 'finalize_with_critique';
   description = 'Submit a final answer that will be evaluated against requirements before acceptance. ' +
     'If the answer does not meet requirements, feedback will be provided for improvement.';
+
+  private async createToolTracingObservation(toolName: string, args: any): Promise<void> {
+    try {
+      const { getCurrentTracingContext, createTracingProvider } = await import('../tracing/TracingConfig.js');
+      const context = getCurrentTracingContext();
+      if (context) {
+        const tracingProvider = createTracingProvider();
+        await tracingProvider.createObservation({
+          id: `event-tool-execute-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          name: `Tool Execute: ${toolName}`,
+          type: 'event',
+          startTime: new Date(),
+          input: { 
+            toolName, 
+            toolArgs: args,
+            contextInfo: `Direct tool execution in ${toolName}`
+          },
+          metadata: {
+            executionPath: 'direct-tool',
+            toolName
+          }
+        }, context.traceId);
+      }
+    } catch (tracingError) {
+      // Don't fail tool execution due to tracing errors
+      console.error(`[TRACING ERROR in ${toolName}]`, tracingError);
+    }
+  }
 
   schema = {
     type: 'object',
@@ -70,7 +102,8 @@ export class FinalizeWithCritiqueTool implements Tool<FinalizeWithCritiqueArgs, 
    * Execute the finalize with critique tool
    */
   async execute(args: FinalizeWithCritiqueArgs): Promise<FinalizeWithCritiqueResult> {
-    console.log('[FinalizeWithCritiqueTool] Executing with answer:', args.answer.substring(0, 100) + '...');
+    await this.createToolTracingObservation(this.name, args);
+    logger.info('Executing with answer:', args.answer.substring(0, 100) + '...');
 
     try {
       // Get the current state from AgentService
@@ -78,26 +111,26 @@ export class FinalizeWithCritiqueTool implements Tool<FinalizeWithCritiqueArgs, 
       const state = agentService.getState();
       const apiKey = agentService.getApiKey();
 
-      if (!state || !state.messages || state.messages.length === 0) {
+      if (!state?.messages || state.messages.length === 0) {
         throw new Error('Invalid state or empty message history');
       }
 
       if (!apiKey) {
         // If no API key, just accept the answer without critique
-        console.log('[FinalizeWithCritiqueTool] No API key available, skipping critique');
+        logger.info('No API key available, skipping critique');
         const result = {
           success: true,
           accepted: true,
           satisfiesCriteria: true,
           answer: args.answer
         };
-        console.log('[FinalizeWithCritiqueTool] Returning result:', JSON.stringify(result));
+        logger.info('Returning result:', JSON.stringify(result));
         return result;
       }
 
       // Find the last user message
       const userMessage = findLastMessage<{ text: string }>(state.messages, ChatMessageEntity.USER);
-      if (!userMessage || !userMessage.text) {
+      if (!userMessage?.text) {
         throw new Error('Could not find user message to critique against');
       }
 
@@ -106,10 +139,10 @@ export class FinalizeWithCritiqueTool implements Tool<FinalizeWithCritiqueArgs, 
       const critiqueResult = await critiqueTool.execute({
         userInput: userMessage.text,
         finalResponse: args.answer,
-        reasoning: "Validating if the response meets all user requirements"
+        reasoning: 'Validating if the response meets all user requirements'
       });
 
-      console.log('[FinalizeWithCritiqueTool] Critique result:', critiqueResult);
+      logger.info('Critique result:', critiqueResult);
 
       if (!critiqueResult.success) {
         const result: FinalizeWithCritiqueResult = {
@@ -118,7 +151,7 @@ export class FinalizeWithCritiqueTool implements Tool<FinalizeWithCritiqueArgs, 
           satisfiesCriteria: false,
           error: critiqueResult.error || 'Critique evaluation failed'
         };
-        console.log('[FinalizeWithCritiqueTool] Returning error result:', JSON.stringify(result));
+        logger.info('Returning error result:', JSON.stringify(result));
         // Do not populate resultData on error
         return result;
       }
@@ -131,7 +164,7 @@ export class FinalizeWithCritiqueTool implements Tool<FinalizeWithCritiqueArgs, 
           satisfiesCriteria: true,
           answer: args.answer
         };
-        console.log('[FinalizeWithCritiqueTool] Accepted! Returning result:', JSON.stringify(result));
+        logger.info('Accepted! Returning result:', JSON.stringify(result));
         // Populate resultData on success/acceptance
         return { ...result, resultData: { accepted: true, answer: args.answer } };
       }
@@ -143,21 +176,21 @@ export class FinalizeWithCritiqueTool implements Tool<FinalizeWithCritiqueArgs, 
         satisfiesCriteria: false,
         feedback: critiqueResult.feedback || 'Your answer does not fully address the user\'s requirements. Please revise.'
       };
-      console.log('[FinalizeWithCritiqueTool] Rejected! Returning result with feedback:', JSON.stringify(result));
+      logger.info('Rejected! Returning result with feedback:', JSON.stringify(result));
       // Populate resultData on success/rejection
       return { ...result, resultData: { accepted: false, feedback: result.feedback } };
 
     } catch (error: any) {
-      console.error('[FinalizeWithCritiqueTool] Error:', error);
+      logger.error('[FinalizeWithCritiqueTool] Error:', error);
       const result: FinalizeWithCritiqueResult = {
         success: false,
         accepted: false,
         satisfiesCriteria: false,
         error: `Error during finalization: ${error.message || String(error)}`
       };
-      console.log('[FinalizeWithCritiqueTool] Returning error result:', JSON.stringify(result));
+      logger.info('Returning error result:', JSON.stringify(result));
       // Do not populate resultData on error
       return result;
     }
   }
-} 
+}

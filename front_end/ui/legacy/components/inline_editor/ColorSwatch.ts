@@ -9,13 +9,7 @@ import * as ColorPicker from '../../../legacy/components/color_picker/color_pick
 import * as Lit from '../../../lit/lit.js';
 import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 
-import colorSwatchStylesRaw from './colorSwatch.css.js';
-
-/* eslint-disable rulesdir/no-adopted-style-sheets --
- * TODO(crbug.com/391381439): Fully migrate off of Constructable Stylesheets.
- **/
-const colorSwatchStyles = new CSSStyleSheet();
-colorSwatchStyles.replaceSync(colorSwatchStylesRaw);
+import colorSwatchStyles from './colorSwatch.css.js';
 
 const {html} = Lit;
 
@@ -55,9 +49,6 @@ export class ColorSwatch extends HTMLElement {
 
   constructor(tooltip?: string) {
     super();
-    this.shadow.adoptedStyleSheets = [
-      colorSwatchStyles,
-    ];
     if (tooltip) {
       this.tooltip = tooltip;
     }
@@ -107,15 +98,15 @@ export class ColorSwatch extends HTMLElement {
     // clang-format off
     // Note that we use a <slot> with a default value here to display the color text. Consumers of this component are
     // free to append any content to replace what is being shown here.
-    // Note also that whitespace between nodes is removed on purpose to avoid pushing these elements apart. Do not
-    // re-format the HTML code.
-    Lit.render(
-      html`<span class=${colorSwatchClasses} title=${this.tooltip}><span class="color-swatch-inner"
-        style="background-color: ${color.asString()};"
-        jslog=${VisualLogging.showStyleEditor('color').track({click: true})}
-        @click=${this.onClick}
-        @mousedown=${this.consume}
-        @dblclick=${this.consume}></span></span><slot><span>${this.getText()}</span></slot>`,
+    Lit.render(html`
+      <style>${colorSwatchStyles}</style>
+      <span class=${colorSwatchClasses} title=${this.tooltip}>
+        <span class="color-swatch-inner" style="background-color: ${color.asString()};"
+              jslog=${VisualLogging.showStyleEditor('color').track({click: true})}
+              @click=${this.onClick} @mousedown=${this.consume} @dblclick=${this.consume}>
+        </span>
+      </span>
+      <slot><span>${this.getText()}</span></slot>`,
       this.shadow, {host: this});
     // clang-format on
   }

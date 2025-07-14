@@ -125,10 +125,10 @@ describeWithMockConnection('AutofillView', () => {
         addressText, ['Crocodile', ' Middle ', 'Dundee', 'Uluru ToursOutback Road 1Bundaberg Queensland ', '12345']);
     const expectedHeaders = ['Form field', 'Predicted autofill value', 'Value'];
     const expectedRows = [
-      ['#input1 (text)', 'First name \nheur', '"Crocodile"'],
-      ['input2 (text)', 'Last name \nheur', '"Dundee"'],
-      ['#input3 (text)', 'Country \nheur', '"Australia"'],
-      ['#input4 (text)', 'Zip code \nattr', '"12345"'],
+      ['#input1 (text)', 'First name\nheur', '"Crocodile"'],
+      ['input2 (text)', 'Last name\nheur', '"Dundee"'],
+      ['#input3 (text)', 'Country\nheur', '"Australia"'],
+      ['#input4 (text)', 'Zip code\nattr', '"12345"'],
     ];
     assertGridContents(view, expectedHeaders, expectedRows);
   };
@@ -174,7 +174,7 @@ describeWithMockConnection('AutofillView', () => {
     showViewStub.reset();
 
     // The auto-opening checkbox is the second one.
-    const checkbox = view.shadowRoot!.querySelectorAll('input')[1];
+    const checkbox = view.shadowRoot!.querySelectorAll('devtools-checkbox')[1];
     assert.isNotNull(checkbox);
     assert.isTrue(checkbox.checked);
     checkbox.checked = false;
@@ -201,7 +201,7 @@ describeWithMockConnection('AutofillView', () => {
     showViewStub.reset();
 
     // The show test addresses checkbox is the first one.
-    const checkbox = view.shadowRoot!.querySelectorAll('input')[0];
+    const checkbox = view.shadowRoot!.querySelectorAll('devtools-checkbox')[0];
     assert.isNotNull(checkbox);
     assert.isFalse(checkbox.checked);
 

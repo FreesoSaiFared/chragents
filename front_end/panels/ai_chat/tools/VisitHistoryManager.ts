@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 // Interface for visit history data
+import { createLogger } from '../core/Logger.js';
+
+const logger = createLogger('VisitHistoryManager');
 export interface VisitData {
   url: string;
   domain: string;
@@ -33,7 +36,7 @@ export class VisitHistoryManager {
 
   private async initDB(): Promise<void> {
     // TODO: Add ability to disable visit history
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       if (this.initialized) {
         resolve();
         return;
@@ -41,19 +44,19 @@ export class VisitHistoryManager {
 
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
-      request.onerror = (event) => {
-        console.error('Error opening visit history database:', event);
+      request.onerror = event => {
+        logger.error('Error opening visit history database:', event);
         reject(new Error('Failed to open database'));
       };
 
-      request.onsuccess = (event) => {
+      request.onsuccess = event => {
         this.db = (event.target as IDBOpenDBRequest).result;
         this.initialized = true;
-        console.log('Visit history database opened successfully');
+        logger.info('Visit history database opened successfully');
         resolve();
       };
 
-      request.onupgradeneeded = (event) => {
+      request.onupgradeneeded = event => {
         const db = (event.target as IDBOpenDBRequest).result;
 
         // Create the store with an auto-incrementing key
@@ -66,7 +69,7 @@ export class VisitHistoryManager {
           store.createIndex('timestampIndex', 'timestamp', { unique: false });
           store.createIndex('keywordsIndex', 'keywords', { unique: false, multiEntry: true });
 
-          console.log('Visit history object store created');
+          logger.info('Visit history object store created');
         }
       };
     });
@@ -115,7 +118,7 @@ export class VisitHistoryManager {
       const urlObj = new URL(url);
       return urlObj.hostname;
     } catch (e) {
-      console.error('Error extracting domain from URL:', e);
+      logger.error('Error extracting domain from URL:', e);
       return '';
     }
   }
@@ -123,11 +126,11 @@ export class VisitHistoryManager {
   /**
    * Stores a page visit in the database
    */
-  public async storeVisit(pageInfo: { url: string, title: string }, accessibilityTree: string | null): Promise<void> {
+  async storeVisit(pageInfo: { url: string, title: string }, accessibilityTree: string | null): Promise<void> {
     await this.initDB();
 
     if (!this.db) {
-      console.error('Database not initialized');
+      logger.error('Database not initialized');
       return;
     }
 
@@ -149,11 +152,11 @@ export class VisitHistoryManager {
 
       // First check if we already have a recent entry for this URL
       const urlIndex = store.index('urlIndex');
-      const existingEntries = await new Promise<IDBCursorWithValue[]>((resolve) => {
+      const existingEntries = await new Promise<IDBCursorWithValue[]>(resolve => {
         const result: IDBCursorWithValue[] = [];
         const request = urlIndex.openCursor(IDBKeyRange.only(url));
 
-        request.onsuccess = (event) => {
+        request.onsuccess = event => {
           const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
           if (cursor) {
             result.push(cursor);
@@ -168,15 +171,15 @@ export class VisitHistoryManager {
 
       // Check if we have a recent entry (within last hour)
       const oneHourAgo = Date.now() - (60 * 60 * 1000);
-      const recentEntry = existingEntries.find((cursor) => {
+      const recentEntry = existingEntries.find(cursor => {
         // Add null check before accessing cursor.value and its properties
-        if (!cursor || !cursor.value) return false;
+        if (!cursor?.value) {return false;}
 
         const value = cursor.value as VisitData;
         return value && value.timestamp > oneHourAgo;
       });
 
-      if (recentEntry && recentEntry.value) {
+      if (recentEntry?.value) {
         // Update the existing entry with new timestamp and possibly new keywords
         const existingData = recentEntry.value as VisitData;
         const updatedData = {
@@ -192,24 +195,24 @@ export class VisitHistoryManager {
         store.add(visitData);
       }
 
-      console.log('Stored visit:', visitData);
+      logger.info('Stored visit:', visitData);
     } catch (error) {
-      console.error('Error storing visit:', error);
+      logger.error('Error storing visit:', error);
     }
   }
 
   /**
    * Retrieves visit history filtered by domain
    */
-  public async getVisitsByDomain(domain: string): Promise<VisitData[]> {
+  async getVisitsByDomain(domain: string): Promise<VisitData[]> {
     await this.initDB();
 
     if (!this.db) {
-      console.error('Database not initialized');
+      logger.error('Database not initialized');
       return [];
     }
 
-    return new Promise((resolve) => {
+    return await new Promise(resolve => {
       const transaction = this.db!.transaction([this.storeName], 'readonly');
       const store = transaction.objectStore(this.storeName);
       const index = store.index('domainIndex');
@@ -217,7 +220,7 @@ export class VisitHistoryManager {
       const results: VisitData[] = [];
       const request = index.openCursor(IDBKeyRange.only(domain));
 
-      request.onsuccess = (event) => {
+      request.onsuccess = event => {
         const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
         if (cursor) {
           results.push(cursor.value as VisitData);
@@ -228,7 +231,7 @@ export class VisitHistoryManager {
       };
 
       request.onerror = () => {
-        console.error('Error retrieving visits by domain');
+        logger.error('Error retrieving visits by domain');
         resolve([]);
       };
     });
@@ -237,15 +240,15 @@ export class VisitHistoryManager {
   /**
    * Retrieves visit history filtered by keyword
    */
-  public async getVisitsByKeyword(keyword: string): Promise<VisitData[]> {
+  async getVisitsByKeyword(keyword: string): Promise<VisitData[]> {
     await this.initDB();
 
     if (!this.db) {
-      console.error('Database not initialized');
+      logger.error('Database not initialized');
       return [];
     }
 
-    return new Promise((resolve) => {
+    return await new Promise(resolve => {
       const transaction = this.db!.transaction([this.storeName], 'readonly');
       const store = transaction.objectStore(this.storeName);
       const index = store.index('keywordsIndex');
@@ -253,7 +256,7 @@ export class VisitHistoryManager {
       const results: VisitData[] = [];
       const request = index.openCursor(IDBKeyRange.only(keyword.toLowerCase()));
 
-      request.onsuccess = (event) => {
+      request.onsuccess = event => {
         const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
         if (cursor) {
           results.push(cursor.value as VisitData);
@@ -264,7 +267,7 @@ export class VisitHistoryManager {
       };
 
       request.onerror = () => {
-        console.error('Error retrieving visits by keyword');
+        logger.error('Error retrieving visits by keyword');
         resolve([]);
       };
     });
@@ -273,15 +276,15 @@ export class VisitHistoryManager {
   /**
    * Retrieves all visit history within a date range
    */
-  public async getVisitsByDateRange(startTime: number, endTime: number): Promise<VisitData[]> {
+  async getVisitsByDateRange(startTime: number, endTime: number): Promise<VisitData[]> {
     await this.initDB();
 
     if (!this.db) {
-      console.error('Database not initialized');
+      logger.error('Database not initialized');
       return [];
     }
 
-    return new Promise((resolve) => {
+    return await new Promise(resolve => {
       const transaction = this.db!.transaction([this.storeName], 'readonly');
       const store = transaction.objectStore(this.storeName);
       const index = store.index('timestampIndex');
@@ -289,7 +292,7 @@ export class VisitHistoryManager {
       const results: VisitData[] = [];
       const request = index.openCursor(IDBKeyRange.bound(startTime, endTime));
 
-      request.onsuccess = (event) => {
+      request.onsuccess = event => {
         const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
         if (cursor) {
           results.push(cursor.value as VisitData);
@@ -300,7 +303,7 @@ export class VisitHistoryManager {
       };
 
       request.onerror = () => {
-        console.error('Error retrieving visits by date range');
+        logger.error('Error retrieving visits by date range');
         resolve([]);
       };
     });
@@ -309,23 +312,23 @@ export class VisitHistoryManager {
   /**
    * Performs a search across all visit data using multiple criteria
    */
-  public async searchVisits(options: {
+  async searchVisits(options: {
     domain?: string,
     keyword?: string,
     startTime?: number,
     endTime?: number,
-    limit?: number
+    limit?: number,
   }): Promise<VisitData[]> {
     await this.initDB();
 
     if (!this.db) {
-      console.error('Database not initialized');
+      logger.error('Database not initialized');
       return [];
     }
 
     const { domain, keyword, startTime, endTime, limit = 100 } = options;
 
-    return new Promise((resolve) => {
+    return await new Promise(resolve => {
       const transaction = this.db!.transaction([this.storeName], 'readonly');
       const store = transaction.objectStore(this.storeName);
 
@@ -348,7 +351,7 @@ export class VisitHistoryManager {
         request = index.openCursor(null, 'prev');
       }
 
-      request.onsuccess = (event) => {
+      request.onsuccess = event => {
         const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
 
         if (cursor) {
@@ -388,7 +391,7 @@ export class VisitHistoryManager {
       };
 
       request.onerror = () => {
-        console.error('Error searching visits');
+        logger.error('Error searching visits');
         resolve([]);
       };
     });
@@ -397,15 +400,15 @@ export class VisitHistoryManager {
   /**
    * Clears all visit history data from the database
    */
-  public async clearHistory(): Promise<void> {
+  async clearHistory(): Promise<void> {
     await this.initDB();
 
     if (!this.db) {
-      console.error('Database not initialized');
+      logger.error('Database not initialized');
       return;
     }
 
-    return new Promise<void>((resolve, reject) => {
+    return await new Promise<void>((resolve, reject) => {
       try {
         const transaction = this.db!.transaction([this.storeName], 'readwrite');
         const store = transaction.objectStore(this.storeName);
@@ -414,16 +417,16 @@ export class VisitHistoryManager {
         const request = store.clear();
 
         request.onsuccess = () => {
-          console.log('Visit history cleared successfully');
+          logger.info('Visit history cleared successfully');
           resolve();
         };
 
-        request.onerror = (event) => {
-          console.error('Error clearing visit history:', event);
+        request.onerror = event => {
+          logger.error('Error clearing visit history:', event);
           reject(new Error('Failed to clear visit history'));
         };
       } catch (error) {
-        console.error('Error clearing visit history:', error);
+        logger.error('Error clearing visit history:', error);
         reject(error);
       }
     });

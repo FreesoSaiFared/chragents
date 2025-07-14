@@ -46,10 +46,10 @@ export type View = (input: ViewInput, output: object, target: HTMLElement) => vo
 
 const DEFAULT_VIEW: View = (input, _output, target: HTMLElement) => {
   // clang-format off
-  render(html`${(input.tagName || input.pseudo) ?
-    html`<style>${domLinkifierStyles}</style
-    ><span class="monospace"
-     ><button class="node-link text-button link-style ${classMap({
+  render(html`${(input.tagName || input.pseudo) ?  html`
+    <style>${domLinkifierStyles}</style>
+    <span class="monospace">
+      <button class="node-link text-button link-style ${classMap({
             'dynamic-link': Boolean(input.dynamic),
             disabled: Boolean(input.disabled)
           })}"
@@ -70,8 +70,8 @@ const DEFAULT_VIEW: View = (input, _output, target: HTMLElement) => {
           ...input.classes.map(className => html`<span class="extra node-label-class">.${className}</span>`),
           input.pseudo ? html`<span class="extra node-label-pseudo">${input.pseudo}</span>` : nothing,
         ]
-      }</button
-    ></span>` : i18nString(UIStrings.node)}`, target, {host: input});
+      }</button>
+    </span>` : i18nString(UIStrings.node)}`, target, {host: input});
   // clang-format on
 };
 
@@ -86,6 +86,16 @@ export class DOMNodeLink extends UI.Widget.Widget {
     this.#node = node;
     this.#options = options;
     this.#view = view;
+    this.performUpdate();
+  }
+
+  set node(node: SDK.DOMModel.DOMNode|undefined) {
+    this.#node = node;
+    this.performUpdate();
+  }
+
+  set options(options: Options|undefined) {
+    this.#options = options;
     this.performUpdate();
   }
 

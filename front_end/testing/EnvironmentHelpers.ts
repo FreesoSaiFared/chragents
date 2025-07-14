@@ -56,7 +56,8 @@ function createSettingValue(
 
 export function stubNoopSettings() {
   sinon.stub(Common.Settings.Settings, 'instance').returns({
-    createSetting: () => ({
+    createSetting: (name: string) => ({
+      name,
       get: () => [],
       set: () => {},
       addChangeListener: () => {},
@@ -68,7 +69,8 @@ export function stubNoopSettings() {
       type: () => Common.Settings.SettingType.BOOLEAN,
       getAsArray: () => [],
     }),
-    moduleSetting: () => ({
+    moduleSetting: (name: string) => ({
+      name,
       get: () => [],
       set: () => {},
       addChangeListener: () => {},
@@ -80,7 +82,8 @@ export function stubNoopSettings() {
       type: () => Common.Settings.SettingType.BOOLEAN,
       getAsArray: () => [],
     }),
-    createLocalSetting: () => ({
+    createLocalSetting: (name: string) => ({
+      name,
       get: () => [],
       set: () => {},
       addChangeListener: () => {},
@@ -120,12 +123,12 @@ const REGISTERED_EXPERIMENTS = [
   Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL,
   Root.Runtime.ExperimentName.USE_SOURCE_MAP_SCOPES,
   'font-editor',
-  Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN,
   Root.Runtime.ExperimentName.TIMELINE_DEBUG_MODE,
   Root.Runtime.ExperimentName.FULL_ACCESSIBILITY_TREE,
   Root.Runtime.ExperimentName.TIMELINE_SHOW_POST_MESSAGE_EVENTS,
   Root.Runtime.ExperimentName.TIMELINE_ENHANCED_TRACES,
   Root.Runtime.ExperimentName.TIMELINE_EXPERIMENTAL_INSIGHTS,
+  Root.Runtime.ExperimentName.VERTICAL_DRAWER,
 ];
 
 export async function initializeGlobalVars({reset = true} = {}) {
@@ -186,6 +189,8 @@ export async function initializeGlobalVars({reset = true} = {}) {
         Common.Settings.SettingType.ENUM),
     createSettingValue(
         Common.Settings.SettingCategory.RENDERING, 'emulated-vision-deficiency', '', Common.Settings.SettingType.ENUM),
+    createSettingValue(
+        Common.Settings.SettingCategory.RENDERING, 'emulated-os-text-scale', '', Common.Settings.SettingType.ENUM),
     createSettingValue(
         Common.Settings.SettingCategory.RENDERING, 'emulate-auto-dark-mode', '', Common.Settings.SettingType.ENUM),
     createSettingValue(Common.Settings.SettingCategory.RENDERING, 'local-fonts-disabled', false),
@@ -390,6 +395,14 @@ describeWithEnvironment.only = function(title: string, fn: (this: Mocha.Suite) =
     after(async () => await deinitializeGlobalVars());
   });
 };
+describeWithEnvironment.skip = function(title: string, fn: (this: Mocha.Suite) => void, _opts: {reset: boolean} = {
+  reset: true,
+}) {
+  // eslint-disable-next-line rulesdir/check-test-definitions
+  return describe.skip(title, function() {
+    fn.call(this);
+  });
+};
 
 export async function initializeGlobalLocaleVars() {
   // Expose the locale.
@@ -445,8 +458,9 @@ export function createFakeSetting<T>(name: string, defaultValue: T): Common.Sett
   return new Common.Settings.Setting(name, defaultValue, new Common.ObjectWrapper.ObjectWrapper(), storage);
 }
 
-export function enableFeatureForTest(feature: string): void {
-  Root.Runtime.experiments.enableForTest(feature);
+export function createFakeRegExpSetting(name: string, defaultValue: string): Common.Settings.RegExpSetting {
+  const storage = new Common.Settings.SettingsStorage({}, Common.Settings.NOOP_STORAGE, 'test');
+  return new Common.Settings.RegExpSetting(name, defaultValue, new Common.ObjectWrapper.ObjectWrapper(), storage);
 }
 
 export function setupActionRegistry() {
@@ -465,6 +479,7 @@ export function setupActionRegistry() {
   });
 }
 
+// This needs to be invoked within a describe block, rather than within an it() block.
 export function expectConsoleLogs(expectedLogs: {warn?: string[], log?: string[], error?: string[]}) {
   const {error, warn, log} = console;
   before(() => {

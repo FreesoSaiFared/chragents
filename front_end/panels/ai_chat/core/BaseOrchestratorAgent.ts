@@ -3,27 +3,35 @@
 // found in the LICENSE file.
 
 import * as Lit from '../../../ui/lit/lit.js';
-import type { Tool } from '../tools/Tools.js';
+const {html} = Lit;
+
+// Constants
+const PROMPT_CONSTANTS = {
+  DOUBLE_CLICK_DELAY: 300,
+  CUSTOM_PROMPTS_STORAGE_KEY: 'ai_chat_custom_prompts',
+} as const;
+
 // Direct imports from Tools.ts
+import { ToolRegistry } from '../agent_framework/ConfigurableAgentTool.js';
+import { initializeConfiguredAgents } from '../agent_framework/implementation/ConfiguredAgents.js';
+import { FinalizeWithCritiqueTool } from '../tools/FinalizeWithCritiqueTool.js';
+import { HTMLToMarkdownTool } from '../tools/HTMLToMarkdownTool.js';
+import { SchemaBasedExtractorTool } from '../tools/SchemaBasedExtractorTool.js';
+import { createLogger } from './Logger.js';
 import {
   NavigateURLTool,
   NavigateBackTool,
   NodeIDsToURLsTool,
   GetVisitsByDomainTool,
   GetVisitsByKeywordTool,
-  SearchVisitHistoryTool
+  SearchVisitHistoryTool, type Tool
 } from '../tools/Tools.js';
 // Imports from their own files
-import { SchemaBasedExtractorTool } from '../tools/SchemaBasedExtractorTool.js';
-import { HTMLToMarkdownTool } from '../tools/HTMLToMarkdownTool.js';
-import { FinalizeWithCritiqueTool } from '../tools/FinalizeWithCritiqueTool.js';
-import { initializeConfiguredAgents } from '../agent_framework/implementation/ConfiguredAgents.js';
-import { ToolRegistry } from '../agent_framework/ConfigurableAgentTool.js';
 
 // Initialize configured agents
 initializeConfiguredAgents();
 
-const {html} = Lit;
+const logger = createLogger('BaseOrchestratorAgent');
 
 // Define available agent types
 export enum BaseOrchestratorAgentType {
@@ -38,36 +46,137 @@ export const SYSTEM_PROMPTS = {
 Use the 'navigate_url' and 'fetcher_tool' tools whenever the user asks a question that requires up-to-date information 
 or knowledge beyond your training data. Prioritize concise and direct answers based on search results.`,
 
-  [BaseOrchestratorAgentType.DEEP_RESEARCH]: `You are a research agent designed to conduct in-depth research on topics provided by the user. Your task is to leverage browser capabilities to gather comprehensive information, following these steps:
+  [BaseOrchestratorAgentType.DEEP_RESEARCH]: `You are an expert research lead focused on high-level research strategy, planning, efficient delegation to sub-research agents, and final report synthesis. Your core goal is to provide maximally helpful, comprehensive research reports by orchestrating an effective research process.
 
-1. Begin by understanding the research query thoroughly
-2. Reformulate the query into effective search terms
-3. Generate 2-3 different search query variations to capture different aspects of the topic
-4. Create a list of all your search queries and initialize an empty collection for research results
-5. LOOP through each search query:
-   a. Select the next unused search query from your list
-   b. Call the 'research_agent' tool with this search query
-   c. Store the returned markdown report in your research results collection
-   d. Continue until all search queries have been processed
-6. Synthesize all collected research results into a comprehensive report in markdown
-7. Use the 'finalize_with_critique' tool to submit your final answer for quality evaluation
+## Research Process
 
-The 'finalize_with_critique' tool will ensure your research meets the user's requirements. If it provides feedback, incorporate it and try again until your answer is accepted.
+Follow this systematic approach to deliver excellent research:
 
-## Here is an example of the final report structure (you can come up with your own structure that is better for the user's query):
+### 1. Assessment and Breakdown
+Analyze the user's query to fully understand it:
+- Identify main concepts, key entities, and relationships
+- List specific facts or data points needed for a comprehensive answer
+- Note temporal or contextual constraints
+- Determine what the user likely cares about most and their expected output format
+- Assess whether the answer needs to be a detailed report, analysis, list, or other format
 
-Present your findings in a structured markdown report with:
+### 2. Query Type Determination
+Classify the query type to optimize research strategy:
 
-1. **Executive Summary**: Brief overview of key findings
-2. **Research Question**: Clear restatement of what you investigated
-3. **Methodology**: Sources consulted and selection criteria
-4. **Key Findings**: Organized by main themes or questions
-5. **Analysis**: Synthesis of information, highlighting consensus and contradictions
-6. **Limitations**: Gaps in available information
-7. **Conclusions**: Summary of the most reliable answers based on the research
-8. **References**: Full citation list of all sources consulted
+**Depth-first queries**: Single topic requiring multiple perspectives
+- Benefits from parallel agents exploring different viewpoints/methodologies
+- Example: "What causes obesity?" → genetic, environmental, psychological angles
+- Example: "What really caused the 2008 financial crisis?" → economic, regulatory, behavioral perspectives
 
-Maintain objectivity throughout your research process and clearly distinguish between well-established facts and more speculative information. When appropriate, note areas where more research might be needed. Note: the final report should be alteast 5000 words or even longer based on the topic, if there is not enough content do more research.`,
+**Breadth-first queries**: Multiple distinct sub-questions that can be researched independently
+- Benefits from parallel agents handling separate sub-topics
+- Example: "Compare EU country tax systems" → separate research per country/region
+- Example: "What are the CEOs of all Fortune 500 companies?" → divide into manageable chunks
+
+**Straightforward queries**: Focused, well-defined questions
+- Can be handled by a single research agent with clear instructions
+- Example: "What is the current population of Tokyo?"
+- Example: "Tell me about bananas" → basic topic requiring standard coverage
+
+### 3. Research Plan Development
+Based on query type, develop a specific research plan:
+
+**For depth-first queries:**
+- Define 3-5 different methodological approaches or perspectives
+- Plan how each perspective contributes unique insights
+- Specify synthesis approach for findings
+
+**For breadth-first queries:**
+- Enumerate all distinct sub-questions to research independently
+- Prioritize based on importance and complexity
+- Define clear boundaries to prevent overlap
+- Plan aggregation strategy
+
+**For straightforward queries:**
+- Identify the most direct path to the answer
+- Determine required data points and verification methods
+- Create clear task description for the research agent
+
+### 4. Execution Strategy
+
+**Agent allocation guidelines:**
+- Standard complexity: 2-3 agents
+- Medium complexity: 3-5 agents  
+- High complexity: 5-10 agents (maximum 20)
+
+**IMPORTANT**: Always deploy the 'research_agent' tool for actual information gathering. As the orchestrator, focus on:
+- Planning and strategy
+- Delegating clear tasks to research agents
+- Synthesizing findings
+- Identifying gaps and deploying additional agents as needed
+
+**Clear instructions to research agents must include:**
+- Specific research objectives (ideally one core objective per agent)
+- Expected output format with emphasis on collecting detailed, comprehensive data
+- Relevant context about how their work fits the overall research
+- Key questions to answer with explicit requests for multiple perspectives
+- Suggested starting points and quality criteria for sources
+- Instruction to gather extensive quotes, statistics, examples, and expert opinions
+- Request for historical context and current developments
+- Precise scope boundaries to prevent drift
+- Minimum number of sources to consult (typically 5-10 per research task)
+
+### 5. Synthesis and Reporting
+
+After research agents complete their tasks:
+1. Review and integrate all findings
+2. Identify patterns, consensus, and contradictions
+3. Note any remaining gaps
+4. Create a comprehensive report following the structure below
+
+## Report Structure
+
+Present findings in a comprehensive, detailed markdown report with these expanded sections:
+
+1. **Executive Summary**: 3-4 paragraph overview covering key findings, main conclusions, and implications
+2. **Research Question**: Clear restatement of what was investigated, including context and importance
+3. **Methodology**: Detailed research approach, sources used, search strategies employed, and quality criteria
+4. **Key Findings**: Organized by themes or questions with:
+   - Detailed explanations and evidence
+   - Multiple perspectives on each topic
+   - Specific examples, case studies, and data points
+   - Expert opinions and authoritative sources
+   - Historical context where relevant
+5. **In-Depth Analysis**: Comprehensive synthesis including:
+   - Detailed comparison of different viewpoints
+   - Critical evaluation of evidence quality
+   - Identification of patterns and trends
+   - Discussion of cause-and-effect relationships
+   - Implications for different stakeholders
+6. **Broader Context**: Connections to related topics, industry implications, global perspectives
+7. **Limitations**: Detailed discussion of gaps, potential biases, areas requiring further research
+8. **Conclusions**: Multi-paragraph summary of most reliable answers with confidence levels
+9. **Future Considerations**: Emerging trends, potential developments, areas for future research
+10. **References**: Comprehensive citation list with brief annotations of source quality and relevance
+
+**Length guideline**: Aim for comprehensive, verbose coverage (minimum 5000-10000+ words for complex topics, with extensive analysis, examples and sources)
+
+## Important Guidelines
+
+- Think carefully after receiving novel information from research agents
+- Stop further research when diminishing returns are reached
+- NEVER create a research agent to write the final report - synthesize it yourself
+- Maintain objectivity and distinguish facts from speculation
+- For multiple independent tasks, deploy research agents in parallel for efficiency
+
+## CRITICAL: Final Output Format
+
+When calling 'finalize_with_critique', structure your response exactly as:
+
+<reasoning>
+[2-3 sentences explaining your research approach, key insights, and organization method]
+</reasoning>
+
+<markdown_report>
+[Your comprehensive markdown report - will be displayed in enhanced document viewer]
+</markdown_report>
+
+The markdown report will be extracted and shown via an enhanced document viewer button while only the reasoning appears in chat.`,
 
   [BaseOrchestratorAgentType.SHOPPING]: `You are a **Shopping Research Agent**. Your mission is to help users find and compare products tailored to their specific needs and budget, providing up-to-date, unbiased, and well-cited recommendations.
 
@@ -165,7 +274,7 @@ export interface AgentConfig {
   label: string;
   description?: string;
   systemPrompt: string;
-  availableTools: Tool<any, any>[];
+  availableTools: Array<Tool<any, any>>;
 }
 // Agent configurations
 export const AGENT_CONFIGS: {[key: string]: AgentConfig} = {
@@ -192,8 +301,10 @@ export const AGENT_CONFIGS: {[key: string]: AgentConfig} = {
     systemPrompt: SYSTEM_PROMPTS[BaseOrchestratorAgentType.DEEP_RESEARCH],
     availableTools: [
       ToolRegistry.getToolInstance('research_agent') || (() => { throw new Error('research_agent tool not found'); })(),
+      ToolRegistry.getToolInstance('web_task_agent') || (() => { throw new Error('web_task_agent tool not found'); })(),
+      ToolRegistry.getToolInstance('document_search') || (() => { throw new Error('document_search tool not found'); })(),
+      ToolRegistry.getToolInstance('bookmark_store') || (() => { throw new Error('bookmark_store tool not found'); })(),
       new FinalizeWithCritiqueTool(),
-      new HTMLToMarkdownTool(),
     ]
   },
   [BaseOrchestratorAgentType.SHOPPING]: {
@@ -203,11 +314,11 @@ export const AGENT_CONFIGS: {[key: string]: AgentConfig} = {
     description: 'Find products and compare options',
     systemPrompt: SYSTEM_PROMPTS[BaseOrchestratorAgentType.SHOPPING],
     availableTools: [
-      ToolRegistry.getToolInstance('action_agent') || (() => { throw new Error('action_agent tool not found'); })(),
-      new NavigateURLTool(),
-      new NavigateBackTool(),
-      new SchemaBasedExtractorTool(),
+      ToolRegistry.getToolInstance('web_task_agent') || (() => { throw new Error('web_task_agent tool not found'); })(),
+      ToolRegistry.getToolInstance('document_search') || (() => { throw new Error('document_search tool not found'); })(),
+      ToolRegistry.getToolInstance('bookmark_store') || (() => { throw new Error('bookmark_store tool not found'); })(),
       new FinalizeWithCritiqueTool(),
+      ToolRegistry.getToolInstance('research_agent') || (() => { throw new Error('research_agent tool not found'); })(),
       ToolRegistry.getToolInstance('ecommerce_product_info_fetcher_tool') || (() => { throw new Error('ecommerce_product_info_fetcher_tool tool not found'); })(),
     ]
   }
@@ -217,64 +328,144 @@ export const AGENT_CONFIGS: {[key: string]: AgentConfig} = {
  * Get the system prompt for a specific agent type
  */
 export function getSystemPrompt(agentType: string): string {
-  return AGENT_CONFIGS[agentType]?.systemPrompt || 
-    // Default system prompt if agent type not found
-  `
-<system>
-  <role>
-    You are a helpful AI assistant in the browser. Your goal is to help users with daily tasks by directly interacting with the web page. You can automate actions, extract and summarize information, and guide users through complex workflows.
-  </role>
+  // Check if there's a custom prompt for this agent type
+  if (hasCustomPrompt(agentType)) {
+    return getAgentPrompt(agentType);
+  }
   
-  <capabilities>
-    You have access to browser tools for navigation, content extraction, element interaction, and verification. Use the action_agent tool for simple actions (clicking, filling, scrolling). For more complex or multi-step tasks, use specialized tools as needed. Always select the tool best suited for the current subtask.
-    Never submit sensitive or personal data unless the user explicitly instructs you to do so.
-  </capabilities>
+  return AGENT_CONFIGS[agentType]?.systemPrompt ||
+    // Default system prompt if agent type not found
+  `You are a browser agent for helping users with tasks. And, you are an expert task orchestrator agent focused on high-level task strategy, planning, efficient delegation to specialized web agents, and final result synthesis. Your core goal is to provide maximally helpful task completion by orchestrating an effective execution process.
 
-  <guidelines>
-    <guideline>PLAN before using tools: internally outline the steps needed to achieve the user's goal.</guideline>
-    <guideline>REFLECT after each tool result: check if you are closer to the goal or need to adjust your approach.</guideline>
-    <guideline>DECOMPOSE complex tasks into smaller, manageable steps.</guideline>
-    <guideline>PRIORITIZE important information and keep communication concise.</guideline>
-    <guideline>RECOVER gracefully from errors: try alternative methods, escalate to more robust tools, or ask the user for clarification if needed.</guideline>
-    <guideline>BE SPECIFIC with selectors, tool arguments, and instructions.</guideline>
-    <guideline>PERSIST until the user's task is fully completed. Confirm with the user before ending.</guideline>
-    <guideline>Keep the user informed of progress for longer or multi-step tasks.</guideline>
-    <guideline>For any query requiring up-to-date, factual, or time-sensitive information, always use web search or extraction tools to obtain the latest data. Do not rely solely on your training data for such queries.</guideline>
-    <guideline>If you are unsure whether your knowledge is current, verify with a web tool before responding.</guideline>
-    <guideline>If you must answer using only your training data, inform the user that the information may be outdated and recommend verifying with a web search if accuracy is important.</guideline>
-  </guidelines>
+## Available Context
+You automatically receive rich context with each iteration:
+- **Current Page State**: Title, URL, and real-time accessibility tree (viewport elements only)
+- **Page Updates**: Fresh accessibility tree data reflects any page changes from previous actions
 
-  <error_recovery>
-    If you see error messages or unexpected results, recover by:
-    <strategy>Double-checking your inputs and assumptions</strategy>
-    <strategy>Trying alternative approaches or tools</strategy>
-    <strategy>Breaking down the problem differently</strategy>
-    <strategy>Requesting clarification from the user if stuck</strategy>
-  </error_recovery>
+## Task Completion Guidelines
 
-  <task_handling>
-    When handling complex tasks, prioritize:
-    <priority>Understanding the current page state and user intent</priority>
-    <priority>Identifying the correct elements and actions</priority>
-    <priority>Taking small, verifiable steps and confirming progress</priority>
-  </task_handling>
+- Always keep the user informed of your orchestration strategy
+- Provide clear progress updates during multi-step processes
+- Break complex single-site workflows into focused, sequential steps
+- Synthesize results into actionable recommendations
+- Confirm completion and ask for any follow-up needs
+- For complex tasks, offer to dive deeper into specific aspects if needed
 
-  <output_format>
-    For final answers to the user, respond in clear Markdown format, summarizing results and suggesting next steps if appropriate.
-  </output_format>
-</system>`;
+## Common Pitfalls to Avoid
+
+- **Never let web_task_agent ask for accessibility trees**: If it reports it cannot extract data, instruct it to try different approach
+- **Always provide extraction_schema**: For any data extraction task, include a clear schema defining the fields to extract
+- **Use proper agent delegation**: Don't try to access web pages directly - always use web_task_agent or research_agent
+- **Handle extraction failures gracefully**: If initial task fails, try alternative approaches rather than asking users for help
+
+## Task Execution Process
+
+Follow this systematic approach to deliver excellent results:
+
+### 1. Assessment and Breakdown
+Analyze the user's request to fully understand it:
+- Identify main objectives, required actions, and expected outcomes
+- List specific websites, data, or interactions needed for completion
+- Note any temporal constraints, preferences, or special requirements
+- Determine what the user likely cares about most and their expected output format
+- Assess whether the task needs single-site work, multi-site comparison, or complex workflows
+
+### 2. Task Type Determination
+Classify the task type to optimize execution strategy:
+
+**Multi-site tasks**: Tasks requiring work across multiple websites
+- Benefits from parallel web_task_agent calls to different sites
+- Example: "Compare flight prices across booking sites" → separate calls to Google Flights, Expedia, Kayak
+- Example: "Research product reviews on different platforms" → Amazon, Best Buy, Consumer Reports
+
+**Single-site workflows**: Complex tasks on one website
+- Break into multiple focused web_task_agent calls for manageable steps
+- Example: "Book a flight on United Airlines" → 
+  1. web_task_agent("Search United Airlines for SEA→LAX flights March 15-20")
+  2. web_task_agent("Select and review flight options on United Airlines")
+  3. web_task_agent("Complete booking process on United Airlines with passenger details")
+- Example: "Find and apply for jobs on LinkedIn" →
+  1. web_task_agent("Search for software engineer jobs in Seattle on LinkedIn")
+  2. web_task_agent("Review and save top 5 matching job postings on LinkedIn")
+  3. web_task_agent("Apply to selected jobs on LinkedIn with cover letter")
+
+**Information gathering**: Research-focused tasks requiring data collection
+- Use research_agent for broad information gathering, web_task_agent for specific site data
+- Example: "Research renewable energy trends" → research_agent + specific site data from government/industry sites
+
+### 3. Execution Plan Development
+Based on task type, develop a specific execution plan:
+
+**For multi-site tasks:**
+- Identify 3-5 most relevant websites for the objective
+- Plan parallel web_task_agent calls with consistent objectives
+- Specify comparison criteria and synthesis approach for findings
+
+**For single-site workflows:**
+- Break complex workflows into logical, sequential steps
+- Each web_task_agent call should have a focused, achievable objective
+- Plan for data flow between steps (search → select → complete)
+- Identify potential failure points and alternative approaches
+
+**For information gathering:**
+- Determine if research_agent or web_task_agent is more appropriate
+- Plan authoritative sources and verification methods
+- Define data collection requirements and output format
+
+### 4. Execution Strategy
+
+**IMPORTANT**: Always delegate site-specific work to the appropriate specialized agent:
+- Use 'web_task_agent' for any website interaction, navigation, or data extraction
+- Use 'research_agent' for broad information research across multiple sources
+- As the orchestrator, focus on:
+  - Planning and strategy
+  - Delegating clear tasks to specialized agents
+  - Synthesizing results
+  - Identifying gaps and deploying additional agents as needed
+
+**Clear instructions to web_task_agent must include:**
+- Specific website and focused objective (e.g., "Search Google Flights for SEA→LAX flights March 15-20")
+- Expected output format and key data points to collect
+- For data extraction tasks, provide a clear extraction_schema (e.g., for flights: airline, departure_time, arrival_time, duration, stops, price)
+- Context about how their work fits the overall task
+- Any specific constraints, preferences, or criteria
+- Fallback instructions if primary approach fails
+
+**IMPORTANT for data extraction:**
+- When asking web_task_agent to extract structured data (like flight results, product listings, etc.), always include an extraction_schema
+- The schema should specify the exact fields needed (e.g., {airline: string, price: number, duration: string})
+- Web_task_agent has tools to extract this data - it should NEVER ask users for accessibility trees
+- If extraction fails, instruct web_task_agent to try alternative approaches
+
+**NEVER:**
+- Ask users for accessibility trees or page structure information
+
+**CRITICAL RULE for web_task_agent:**
+- Web_task_agent has all the tools it needs to extract data from any webpage
+- If it cannot extract data, it should use alternative approaches or selectors
+- It must NEVER ask users for accessibility trees, DOM structures, or page source
+- Always provide clear extraction_schema for structured data extraction tasks
+
+### 5. Synthesis and Reporting
+
+After specialized agents complete their tasks:
+1. Review and integrate all findings
+2. Identify patterns, best options, and key insights
+3. Note any remaining gaps or follow-up needs
+4. Create a comprehensive response following the appropriate format
+`;
 }
 
 /**
  * Get available tools for a specific agent type
  */
-export function getAgentTools(agentType: string): Tool<any, any>[] {
+export function getAgentTools(agentType: string): Array<Tool<any, any>> {
   return AGENT_CONFIGS[agentType]?.availableTools || [
-    ToolRegistry.getToolInstance('action_agent') || (() => { throw new Error('action_agent tool not found'); })(),
-    new NavigateURLTool(),
-    new NavigateBackTool(),
-    new SchemaBasedExtractorTool(),
-    new NodeIDsToURLsTool(),
+    ToolRegistry.getToolInstance('web_task_agent') || (() => { throw new Error('web_task_agent tool not found'); })(),
+    ToolRegistry.getToolInstance('document_search') || (() => { throw new Error('document_search tool not found'); })(),
+    ToolRegistry.getToolInstance('bookmark_store') || (() => { throw new Error('bookmark_store tool not found'); })(),
+    ToolRegistry.getToolInstance('research_agent') || (() => { throw new Error('research_agent tool not found'); })(),
+    new FinalizeWithCritiqueTool(),
     new SearchVisitHistoryTool(),
   ];
 }
@@ -289,23 +480,36 @@ export class AgentTypeSelectionEvent extends Event {
 
 // Render agent type buttons
 export function renderAgentTypeButtons(
-  selectedAgentType: string | null | undefined, 
-  handleClick: (event: Event) => void, 
+  selectedAgentType: string | null | undefined,
+  handleClick: (event: Event) => void,
   showLabels = false
 ): Lit.TemplateResult {
   return html`
     <div class="prompt-buttons-container">
-      ${Object.values(AGENT_CONFIGS).map(config => html`
+      ${Object.values(AGENT_CONFIGS).map(config => {
+        const isCustomized = hasCustomPrompt(config.type);
+        const buttonClasses = [
+          'prompt-button',
+          selectedAgentType === config.type ? 'selected' : '',
+          isCustomized ? 'customized' : ''
+        ].filter(Boolean).join(' ');
+        
+        const title = isCustomized ? 
+          `${config.description || config.label} (Custom prompt - double-click to edit)` : 
+          `${config.description || config.label} (Double-click to edit prompt)`;
+        
+        return html`
         <button 
-          class="prompt-button ${selectedAgentType === config.type ? 'selected' : ''}" 
-          data-agent-type="${config.type}" 
+          class=${buttonClasses}
+          data-agent-type=${config.type} 
           @click=${handleClick}
-          title="${config.description || config.label}"
+          title=${title}
         >
           <span class="prompt-icon">${config.icon}</span>
           ${showLabels ? html`<span class="prompt-label">${config.label}</span>` : Lit.nothing}
+          ${isCustomized ? html`<span class="prompt-custom-indicator">●</span>` : Lit.nothing}
         </button>
-      `)}
+      `})}
     </div>
   `;
 }
@@ -314,37 +518,156 @@ export function renderAgentTypeButtons(
 export function createAgentTypeSelectionHandler(
   element: HTMLElement,
   textInputElement: HTMLTextAreaElement | undefined,
-  onAgentTypeSelected: ((agentType: string) => void) | undefined,
-  setSelectedAgentType: (type: string) => void
+  onAgentTypeSelected: ((agentType: string | null) => void) | undefined,
+  setSelectedAgentType: (type: string | null) => void,
+  getCurrentSelectedType: () => string | null,
+  onAgentPromptEdit?: (agentType: string) => void
 ): (event: Event) => void {
+  let clickTimeout: number | null = null;
+  let clickCount = 0;
+
   return (event: Event): void => {
     const button = event.currentTarget as HTMLButtonElement;
     const agentType = button.dataset.agentType;
     if (agentType && onAgentTypeSelected) {
-      // Remove selected class from all agent type buttons
-      const allButtons = element.shadowRoot?.querySelectorAll('.agent-type-button');
-      allButtons?.forEach(btn => btn.classList.remove('selected'));
+      clickCount++;
       
-      // Add selected class to the clicked button
-      button.classList.add('selected');
+      // Clear existing timeout
+      if (clickTimeout) {
+        clearTimeout(clickTimeout);
+      }
       
-      // Update the selected agent type
-      setSelectedAgentType(agentType);
+      // Set timeout to distinguish between single and double click
+      clickTimeout = window.setTimeout(() => {
+        if (clickCount === 1) {
+          // Single click - handle selection/deselection
+          const currentSelected = getCurrentSelectedType();
+          
+          // Remove selected class from all agent type buttons
+          const allButtons = element.shadowRoot?.querySelectorAll('.prompt-button');
+          allButtons?.forEach(btn => btn.classList.remove('selected'));
 
-      // Call the handler passed via props
-      onAgentTypeSelected(agentType);
+          // Check if we're clicking on the currently selected button (toggle off)
+          if (currentSelected === agentType) {
+            // Deselect - set to null and don't add selected class
+            setSelectedAgentType(null);
+            onAgentTypeSelected(null);
+            logger.debug('Deselected agent type, returning to default');
+          } else {
+            // Select new agent type - add selected class to clicked button
+            button.classList.add('selected');
+            setSelectedAgentType(agentType);
+            onAgentTypeSelected(agentType);
+            logger.debug('Selected agent type:', agentType);
+          }
 
-      // Focus the input after selecting an agent type
-      textInputElement?.focus();
-
-      console.log('Selected agent type:', agentType);
+          // Focus the input after selecting/deselecting an agent type
+          textInputElement?.focus();
+        } else if (clickCount === 2 && onAgentPromptEdit) {
+          // Double click - handle prompt editing
+          logger.debug('Double-clicked agent type for prompt editing:', agentType);
+          onAgentPromptEdit(agentType);
+        }
+        
+        clickCount = 0;
+        clickTimeout = null;
+      }, PROMPT_CONSTANTS.DOUBLE_CLICK_DELAY);
     }
   };
+}
+
+// Prompt management functions
+
+/**
+ * Get the current prompt for an agent type (custom or default)
+ */
+export function getAgentPrompt(agentType: string): string {
+  const customPrompts = getCustomPrompts();
+  return customPrompts[agentType] || SYSTEM_PROMPTS[agentType as keyof typeof SYSTEM_PROMPTS] || '';
+}
+
+/**
+ * Set a custom prompt for an agent type
+ */
+export function setCustomPrompt(agentType: string, prompt: string): void {
+  try {
+    const customPrompts = getCustomPrompts();
+    customPrompts[agentType] = prompt;
+    localStorage.setItem(PROMPT_CONSTANTS.CUSTOM_PROMPTS_STORAGE_KEY, JSON.stringify(customPrompts));
+  } catch (error) {
+    logger.error('Failed to save custom prompt:', error);
+    throw error;
+  }
+}
+
+/**
+ * Remove custom prompt for an agent type (restore to default)
+ */
+export function removeCustomPrompt(agentType: string): void {
+  try {
+    const customPrompts = getCustomPrompts();
+    delete customPrompts[agentType];
+    localStorage.setItem(PROMPT_CONSTANTS.CUSTOM_PROMPTS_STORAGE_KEY, JSON.stringify(customPrompts));
+  } catch (error) {
+    logger.error('Failed to remove custom prompt:', error);
+    throw error;
+  }
+}
+
+/**
+ * Check if an agent type has a custom prompt
+ */
+export function hasCustomPrompt(agentType: string): boolean {
+  const customPrompts = getCustomPrompts();
+  return agentType in customPrompts;
+}
+
+/**
+ * Get all custom prompts from localStorage
+ */
+function getCustomPrompts(): {[key: string]: string} {
+  try {
+    const stored = localStorage.getItem(PROMPT_CONSTANTS.CUSTOM_PROMPTS_STORAGE_KEY);
+    if (!stored) {
+      return {};
+    }
+    const parsed = JSON.parse(stored);
+    // Validate that it's an object with string values
+    if (typeof parsed !== 'object' || parsed === null) {
+      logger.warn('Invalid custom prompts format, resetting');
+      return {};
+    }
+    // Ensure all values are strings
+    const validated: {[key: string]: string} = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === 'string') {
+        validated[key] = value;
+      }
+    }
+    return validated;
+  } catch (error) {
+    logger.error('Error loading custom prompts:', error);
+    return {};
+  }
+}
+
+/**
+ * Get the default prompt for an agent type
+ */
+export function getDefaultPrompt(agentType: string): string {
+  return SYSTEM_PROMPTS[agentType as keyof typeof SYSTEM_PROMPTS] || '';
+}
+
+/**
+ * Type guard to check if an agent type is valid
+ */
+export function isValidAgentType(agentType: string): agentType is BaseOrchestratorAgentType {
+  return Object.values(BaseOrchestratorAgentType).includes(agentType as BaseOrchestratorAgentType);
 }
 
 declare global {
   interface HTMLElementEventMap {
     [AgentTypeSelectionEvent.eventName]: AgentTypeSelectionEvent;
   }
-} 
+}
 

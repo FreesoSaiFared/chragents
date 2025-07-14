@@ -54,14 +54,15 @@ function assert(condition: unknown, message: string): void {
 type WidgetConstructor<WidgetT extends Widget> = new (element: WidgetElement<WidgetT>) => WidgetT;
 type WidgetProducer<WidgetT extends Widget> = (element: WidgetElement<WidgetT>) => WidgetT;
 type WidgetFactory<WidgetT extends Widget> = WidgetConstructor<WidgetT>|WidgetProducer<WidgetT>;
+type InferWidgetTFromFactory<F> = F extends WidgetFactory<infer WidgetT>? WidgetT : never;
 
 export class WidgetConfig<WidgetT extends Widget> {
   constructor(readonly widgetClass: WidgetFactory<WidgetT>, readonly widgetParams?: Partial<WidgetT>) {
   }
 }
 
-export function widgetConfig<WidgetT extends Widget, ParamKeys extends keyof WidgetT>(
-    widgetClass: WidgetFactory<WidgetT>, widgetParams?: Pick<WidgetT, ParamKeys>&Partial<WidgetT>):
+export function widgetConfig<F extends WidgetFactory<Widget>, ParamKeys extends keyof InferWidgetTFromFactory<F>>(
+    widgetClass: F, widgetParams?: Pick<InferWidgetTFromFactory<F>, ParamKeys>&Partial<InferWidgetTFromFactory<F>>):
     // This is a workaround for https://github.com/runem/lit-analyzer/issues/163
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     WidgetConfig<any> {
@@ -135,7 +136,7 @@ export class WidgetElement<WidgetT extends Widget> extends HTMLElement {
 
   override insertBefore<T extends Node>(child: T, referenceChild: Node): T {
     if (child instanceof HTMLElement && child.tagName !== 'STYLE') {
-      Widget.getOrCreateWidget(child).show(this, referenceChild);
+      Widget.getOrCreateWidget(child).show(this, referenceChild, true);
       return child;
     }
     return super.insertBefore(child, referenceChild);
@@ -158,6 +159,16 @@ export class WidgetElement<WidgetT extends Widget> extends HTMLElement {
       }
     }
     super.removeChildren();
+  }
+
+  override cloneNode(deep: boolean): Node {
+    const clone = super.cloneNode(deep) as WidgetElement<WidgetT>;
+    if (!this.#widgetClass) {
+      throw new Error('No widgetClass defined');
+    }
+    clone.#widgetClass = this.#widgetClass;
+    clone.#widgetParams = this.#widgetParams;
+    return clone;
   }
 }
 
@@ -399,7 +410,6 @@ export class Widget {
         if (!currentParent) {
           if (suppressOrphanWidgetError) {
             this.#isRoot = true;
-            console.warn('A Widget has silently been marked as a root widget');
             this.show(parentElement, insertBefore);
             return;
           }
@@ -914,30 +924,34 @@ export class WidgetFocusRestorer {
   }
 }
 
+function domOperationError(funcName: 'appendChild'|'insertBefore'|'removeChild'|'removeChildren'): Error {
+  return new Error(`Attempt to modify widget with native DOM method \`${funcName}\``);
+}
+
 Element.prototype.appendChild = function<T extends Node>(node: T): T {
   if (widgetMap.get(node) && node.parentElement !== this) {
-    throw new Error('Attempt to add widget via regular DOM operation.');
+    throw domOperationError('appendChild');
   }
   return originalAppendChild.call(this, node) as T;
 };
 
 Element.prototype.insertBefore = function<T extends Node>(node: T, child: Node|null): T {
   if (widgetMap.get(node) && node.parentElement !== this) {
-    throw new Error('Attempt to add widget via regular DOM operation.');
+    throw domOperationError('insertBefore');
   }
   return originalInsertBefore.call(this, node, child) as T;
 };
 
 Element.prototype.removeChild = function<T extends Node>(child: T): T {
   if (widgetCounterMap.get(child) || widgetMap.get(child)) {
-    throw new Error('Attempt to remove element containing widget via regular DOM operation');
+    throw domOperationError('removeChild');
   }
   return originalRemoveChild.call(this, child) as T;
 };
 
 Element.prototype.removeChildren = function(): void {
   if (widgetCounterMap.get(this)) {
-    throw new Error('Attempt to remove element containing widget via regular DOM operation');
+    throw domOperationError('removeChildren');
   }
   return originalRemoveChildren.call(this);
 };

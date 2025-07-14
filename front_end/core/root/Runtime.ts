@@ -314,12 +314,12 @@ export const enum ExperimentName {
   JUST_MY_CODE = 'just-my-code',
   HIGHLIGHT_ERRORS_ELEMENTS_PANEL = 'highlight-errors-elements-panel',
   USE_SOURCE_MAP_SCOPES = 'use-source-map-scopes',
-  NETWORK_PANEL_FILTER_BAR_REDESIGN = 'network-panel-filter-bar-redesign',
   TIMELINE_SHOW_POST_MESSAGE_EVENTS = 'timeline-show-postmessage-events',
   TIMELINE_DEBUG_MODE = 'timeline-debug-mode',
   TIMELINE_ENHANCED_TRACES = 'timeline-enhanced-traces',
   TIMELINE_COMPILED_SOURCES = 'timeline-compiled-sources',
   TIMELINE_EXPERIMENTAL_INSIGHTS = 'timeline-experimental-insights',
+  VERTICAL_DRAWER = 'vertical-drawer',
   // Adding or removing an entry from this enum?
   // You will need to update:
   // 1. REGISTERED_EXPERIMENTS in EnvironmentHelpers.ts (to create this experiment in the test env)
@@ -429,10 +429,6 @@ export interface HostConfigThirdPartyCookieControls {
   managedBlockThirdPartyCookies: string|boolean;
 }
 
-interface CSSValueTracing {
-  enabled: boolean;
-}
-
 interface AiGeneratedTimelineLabels {
   enabled: boolean;
 }
@@ -470,7 +466,6 @@ export type HostConfig = Platform.TypeScriptUtilities.RecursivePartial<{
   devToolsEnableOriginBoundCookies: HostConfigEnableOriginBoundCookies,
   devToolsAnimationStylesInStylesTab: HostConfigAnimationStylesInStylesTab,
   thirdPartyCookieControls: HostConfigThirdPartyCookieControls,
-  devToolsCssValueTracing: CSSValueTracing,
   devToolsAiGeneratedTimelineLabels: AiGeneratedTimelineLabels,
 }>;
 

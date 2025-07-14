@@ -47,11 +47,6 @@ async function getRequestRowInfo(frontend: BrowserAndPages['frontend'], name: st
 }
 
 describe('The Network Tab', function() {
-  if (this.timeout() !== 0.0) {
-    // These tests take some time on slow windows machines.
-    this.timeout(10000);
-  }
-
   // See byte formatting in front_end/core/i18n/ByteUtilities.ts
   const formatKbSize = (value: number) => {
     const kilobytes = value / 1000;
@@ -113,7 +108,7 @@ describe('The Network Tab', function() {
       const expectedValues = JSON.stringify(['Last-Modified', '', 'Sun, 26 Sep 2010 22:04:35 GMT']);
       await waitForFunction(async () => {
         const lastModifiedColumnValues = await frontend.$$eval(
-            'pierce/.last-modified-column',
+            'pierce/.response-header-last-modified-column',
             cells => cells.map(element => element.textContent),
         );
         return JSON.stringify(lastModifiedColumnValues) === expectedValues;

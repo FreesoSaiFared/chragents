@@ -2,74 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import { ChatMessage, ChatMessageEntity } from '../ui/ChatView.js';
-import { type AgentState } from './State.js';
+import type { getTools } from '../tools/Tools.js';
+import { ChatMessageEntity, type ChatMessage } from '../ui/ChatView.js';
+
 import * as BaseOrchestratorAgent from './BaseOrchestratorAgent.js';
+import { createLogger } from './Logger.js';
 import { enhancePromptWithPageContext } from './PageInfoManager.js';
+import type { AgentState } from './State.js';
 import { NodeType } from './Types.js';
-import { getTools } from '../tools/Tools.js';
 
-// ChatPromptFormatter
-export class ChatPromptFormatter {
-  format(values: { messages: ChatMessage[] }): string {
-    const messageHistory = values.messages || [];
-    const formattedParts: string[] = [];
+const logger = createLogger('GraphHelpers');
 
-    // Find the last GetAccessibilityTreeTool result, if any
-    let lastAccessibilityTreeIndex = -1;
-    for (let i = messageHistory.length - 1; i >= 0; i--) {
-      const message = messageHistory[i];
-      if (message.entity === ChatMessageEntity.TOOL_RESULT &&
-        message.toolName === 'get_accessibility_tree') {
-        lastAccessibilityTreeIndex = i;
-        break;
-      }
-    }
-
-    for (let i = 0; i < messageHistory.length; i++) {
-      const message = messageHistory[i];
-      switch (message.entity) {
-        case ChatMessageEntity.USER:
-          if (message.text) {
-            formattedParts.push(`user: ${message.text}`);
-          }
-          break;
-        case ChatMessageEntity.MODEL:
-          // Format model message based on its action
-          if (message.action === 'tool') {
-            // Represent tool call concisely for the prompt
-            const argsString = message.toolArgs ? JSON.stringify(message.toolArgs) : '';
-            formattedParts.push(`assistant: {"action":"tool", "toolName":"${message.toolName || 'unknown'}", "toolArgs":${argsString}}`);
-          } else if (message.answer) {
-            // Represent final answer - now just using plain markdown text
-            formattedParts.push(`assistant: ${message.answer}`);
-          }
-          break;
-        case ChatMessageEntity.TOOL_RESULT:
-          // For GetAccessibilityTreeTool, only include the most recent result
-          if (message.toolName === 'get_accessibility_tree' && i !== lastAccessibilityTreeIndex) {
-            // Skip older accessibility tree results
-            const resultPrefix = message.isError ? `tool_error[${message.toolName}]` : `tool_result[${message.toolName}]`;
-            formattedParts.push(`${resultPrefix}: Hidden to save on tokens`);
-            continue;
-          }
-
-          // Represent tool results clearly
-          const resultPrefix = message.isError ? `tool_error[${message.toolName}]` : `tool_result[${message.toolName}]`;
-          formattedParts.push(`${resultPrefix}: ${message.resultText}`);
-          break;
-      }
-    }
-    return formattedParts.join('\n\n');
-  }
-}
 
 // Replace createSystemPrompt with this version
 export function createSystemPrompt(state: AgentState): string {
   const { selectedAgentType } = state;
 
   // Get base prompt
-  let basePrompt = selectedAgentType ?
+  const basePrompt = selectedAgentType ?
     BaseOrchestratorAgent.getSystemPrompt(selectedAgentType) :
     BaseOrchestratorAgent.getSystemPrompt('default');
 
@@ -82,7 +32,7 @@ export async function createSystemPromptAsync(state: AgentState): Promise<string
   const { selectedAgentType } = state;
 
   // Get base prompt
-  let basePrompt = selectedAgentType ?
+  const basePrompt = selectedAgentType ?
     BaseOrchestratorAgent.getSystemPrompt(selectedAgentType) :
     BaseOrchestratorAgent.getSystemPrompt('default');
 
@@ -113,18 +63,17 @@ export function routeNextNode(state: AgentState): string { // Return type is now
     case ChatMessageEntity.MODEL:
       if (lastMessage.action === 'tool') {
         return NodeType.TOOL_EXECUTOR;
-      } else if (lastMessage.action === 'final') {
+      } if (lastMessage.action === 'final') {
         return NodeType.FINAL; // Route TO FinalNode
-      } else {
-        console.warn("routeNextNode: MODEL message has invalid action:", lastMessage.action);
-        return 'end'; // Map invalid action to 'end' key
       }
+        logger.warn('routeNextNode: MODEL message has invalid action:', lastMessage.action);
+        return 'end'; // Map invalid action to 'end' key
 
     case ChatMessageEntity.TOOL_RESULT:
       return NodeType.AGENT;
 
     default:
-      console.warn("routeNextNode: Unhandled last message entity type encountered.");
+      logger.warn('routeNextNode: Unhandled last message entity type encountered.');
       return 'end'; // Map unhandled types to 'end' key
   }
-} 
+}

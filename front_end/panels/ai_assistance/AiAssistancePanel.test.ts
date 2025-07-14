@@ -6,6 +6,7 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
+import type * as Protocol from '../../generated/protocol.js';
 import * as AiAssistanceModel from '../../models/ai_assistance/ai_assistance.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import {
@@ -25,6 +26,7 @@ import {
 import {expectCall} from '../../testing/ExpectStubCall.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import {createNetworkPanelForMockConnection} from '../../testing/NetworkHelpers.js';
+import * as Snackbars from '../../ui/components/snackbars/snackbars.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as Elements from '../elements/elements.js';
 import * as Network from '../network/network.js';
@@ -55,22 +57,40 @@ describeWithMockConnection('AI Assistance Panel', () => {
   });
 
   describe('consent view', () => {
+    it('should render chat view when no account email', async () => {
+      const {view} =
+          await createAiAssistancePanel({aidaAvailability: Host.AidaClient.AidaAccessPreconditions.NO_ACCOUNT_EMAIL});
+      assert.strictEqual(view.input.state, AiAssistancePanel.State.CHAT_VIEW);
+    });
+
+    it('should render chat view when sync paused', async () => {
+      const {view} =
+          await createAiAssistancePanel({aidaAvailability: Host.AidaClient.AidaAccessPreconditions.SYNC_IS_PAUSED});
+      assert.strictEqual(view.input.state, AiAssistancePanel.State.CHAT_VIEW);
+    });
+
+    it('should render chat view when no internet', async () => {
+      const {view} =
+          await createAiAssistancePanel({aidaAvailability: Host.AidaClient.AidaAccessPreconditions.NO_INTERNET});
+      assert.strictEqual(view.input.state, AiAssistancePanel.State.CHAT_VIEW);
+    });
+
     it('should render consent view when the consent is not given before', async () => {
       const {view} = await createAiAssistancePanel();
       assert.strictEqual(view.input.state, AiAssistancePanel.State.CONSENT_VIEW);
     });
 
-    it('should switch from consent view to chat view when enabling setting', async () => {
+    it('should switch from consent view to empty state when enabling setting', async () => {
       const {view} = await createAiAssistancePanel();
       assert.strictEqual(view.input.state, AiAssistancePanel.State.CONSENT_VIEW);
       Common.Settings.moduleSetting('ai-assistance-enabled').set(true);
-      assert.strictEqual((await view.nextInput).state, AiAssistancePanel.State.CHAT_VIEW);
+      assert.strictEqual((await view.nextInput).state, AiAssistancePanel.State.EXPLORE_VIEW);
     });
 
-    it('should render chat view when the consent is given before', async () => {
+    it('should render empty state when the consent is given before', async () => {
       Common.Settings.moduleSetting('ai-assistance-enabled').set(true);
       const {view} = await createAiAssistancePanel();
-      assert.strictEqual(view.input.state, AiAssistancePanel.State.CHAT_VIEW);
+      assert.strictEqual(view.input.state, AiAssistancePanel.State.EXPLORE_VIEW);
     });
 
     it('should render the consent view when the setting is disabled', async () => {
@@ -109,7 +129,7 @@ describeWithMockConnection('AI Assistance Panel', () => {
       Host.AidaClient.HostConfigTracker.instance().dispatchEventToListeners(
           Host.AidaClient.Events.AIDA_AVAILABILITY_CHANGED);
 
-      assert.strictEqual((await view.nextInput).state, AiAssistancePanel.State.CHAT_VIEW);
+      assert.strictEqual((await view.nextInput).state, AiAssistancePanel.State.EXPLORE_VIEW);
       assert.strictEqual(view.input.aidaAvailability, Host.AidaClient.AidaAccessPreconditions.AVAILABLE);
     });
   });
@@ -1194,6 +1214,69 @@ describeWithMockConnection('AI Assistance Panel', () => {
            assert.isTrue(view.input.isTextInputDisabled);
            assert.strictEqual(view.input.inputPlaceholder, 'Select an element to ask a question');
          });
+
+      it('shows the right placeholder for the performance agent when the user has no trace', async () => {
+        updateHostConfig({
+          devToolsAiAssistancePerformanceAgent: {
+            enabled: true,
+          },
+        });
+        UI.Context.Context.instance().setFlavor(
+            Timeline.TimelinePanel.TimelinePanel, sinon.createStubInstance(Timeline.TimelinePanel.TimelinePanel));
+        Common.Settings.moduleSetting('ai-assistance-enabled').set(true);
+        const {panel, view} =
+            await createAiAssistancePanel({aidaAvailability: Host.AidaClient.AidaAccessPreconditions.AVAILABLE});
+        panel.handleAction('drjones.performance-panel-context');
+
+        assert.isNull((await view.nextInput).selectedContext);
+        assert.isTrue(view.input.isTextInputDisabled);
+        assert.strictEqual(
+            view.input.inputPlaceholder, 'Record a performance trace and select an item to ask a question');
+      });
+
+      it('shows the right placeholder for the performance agent when the user has a trace but no selected item',
+         async () => {
+           updateHostConfig({
+             devToolsAiAssistancePerformanceAgent: {
+               enabled: true,
+             },
+           });
+
+           const timelinePanel = sinon.createStubInstance(Timeline.TimelinePanel.TimelinePanel);
+           timelinePanel.hasActiveTrace.callsFake(() => true);
+           UI.Context.Context.instance().setFlavor(Timeline.TimelinePanel.TimelinePanel, timelinePanel);
+           Common.Settings.moduleSetting('ai-assistance-enabled').set(true);
+           const {panel, view} =
+               await createAiAssistancePanel({aidaAvailability: Host.AidaClient.AidaAccessPreconditions.AVAILABLE});
+           panel.handleAction('drjones.performance-panel-context');
+
+           assert.isNull((await view.nextInput).selectedContext);
+           assert.isTrue(view.input.isTextInputDisabled);
+           assert.strictEqual(view.input.inputPlaceholder, 'Select an item to ask a question');
+         });
+
+      it('shows the right placeholder for the performance agent when the user has a trace and a selected item',
+         async () => {
+           updateHostConfig({
+             devToolsAiAssistancePerformanceAgent: {
+               enabled: true,
+             },
+           });
+
+           const timelinePanel = sinon.createStubInstance(Timeline.TimelinePanel.TimelinePanel);
+           timelinePanel.hasActiveTrace.callsFake(() => true);
+           UI.Context.Context.instance().setFlavor(Timeline.TimelinePanel.TimelinePanel, timelinePanel);
+
+           const fakeCallTree = sinon.createStubInstance(TimelineUtils.AICallTree.AICallTree);
+           UI.Context.Context.instance().setFlavor(TimelineUtils.AICallTree.AICallTree, fakeCallTree);
+           Common.Settings.moduleSetting('ai-assistance-enabled').set(true);
+           const {panel, view} =
+               await createAiAssistancePanel({aidaAvailability: Host.AidaClient.AidaAccessPreconditions.AVAILABLE});
+           panel.handleAction('drjones.performance-panel-context');
+
+           assert.isFalse(view.input.isTextInputDisabled);
+           assert.strictEqual(view.input.inputPlaceholder, 'Ask a question about the selected item and its call tree');
+         });
     });
 
     it('should disable the send button when the input is empty', async () => {
@@ -1394,10 +1477,10 @@ describeWithMockConnection('AI Assistance Panel', () => {
     });
   });
 
-  describe('debugProblem', () => {
+  describe('handleExternalRequest', () => {
     const explanation = 'I need more information';
-    const notAvailable =
-        'For AI features to be available, you need to log into Chrome and enable AI assistance in DevTools settings';
+    let evaluateStub: sinon.SinonStub;
+    let callFunctionOnStub: sinon.SinonStub;
 
     beforeEach(() => {
       Common.Settings.moduleSetting('ai-assistance-enabled').set(true);
@@ -1406,6 +1489,22 @@ describeWithMockConnection('AI Assistance Panel', () => {
           enabled: true,
         },
       });
+
+      const target = createTarget();
+      const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
+      assert.exists(runtimeModel);
+      runtimeModel.executionContextCreated({
+        id: 1 as Protocol.Runtime.ExecutionContextId,
+        origin: urlString`http://www.example.com`,
+        name: 'name',
+        uniqueId: 'uniqueId',
+      });
+      const executionContext = runtimeModel.defaultExecutionContext();
+      assert.isNotNull(executionContext);
+      evaluateStub = sinon.stub().returns({object: {objectId: 'some-id'}});
+      executionContext.evaluate = evaluateStub;
+      callFunctionOnStub = sinon.stub().returns({object: {}});
+      executionContext.callFunctionOn = callFunctionOnStub;
     });
 
     it('can be blocked by a setting', async () => {
@@ -1414,10 +1513,12 @@ describeWithMockConnection('AI Assistance Panel', () => {
         aidaClient: mockAidaClient([[{explanation}]]),
       });
       try {
-        await panel.debugProblem('Please help me debug this problem');
-        assert.fail('Expected `debugProblem` to throw');
+        await panel.handleExternalRequest(
+            'Please help me debug this problem', AiAssistanceModel.ConversationType.STYLING);
+        assert.fail('Expected `handleExternalRequest` to throw');
       } catch (err) {
-        assert.strictEqual(err.message, notAvailable);
+        assert.strictEqual(
+            err.message, 'For AI features to be available, you need to enable AI assistance in DevTools settings.');
       }
     });
 
@@ -1427,10 +1528,12 @@ describeWithMockConnection('AI Assistance Panel', () => {
         aidaAvailability: Host.AidaClient.AidaAccessPreconditions.SYNC_IS_PAUSED,
       });
       try {
-        await panel.debugProblem('Please help me debug this problem');
-        assert.fail('Expected `debugProblem` to throw');
+        await panel.handleExternalRequest(
+            'Please help me debug this problem', AiAssistanceModel.ConversationType.STYLING);
+        assert.fail('Expected `handleExternalRequest` to throw');
       } catch (err) {
-        assert.strictEqual(err.message, notAvailable);
+        assert.strictEqual(
+            err.message, 'This feature is only available when you sign into Chrome with your Google account.');
       }
     });
 
@@ -1447,19 +1550,35 @@ describeWithMockConnection('AI Assistance Panel', () => {
         aidaClient: mockAidaClient([[{explanation}]]),
       });
       try {
-        await panel.debugProblem('Please help me debug this problem');
-        assert.fail('Expected `debugProblem` to throw');
+        await panel.handleExternalRequest(
+            'Please help me debug this problem', AiAssistanceModel.ConversationType.STYLING);
+        assert.fail('Expected `handleExternalRequest` to throw');
       } catch (err) {
-        assert.strictEqual(err.message, notAvailable);
+        assert.strictEqual(err.message, 'This feature is only available to users who are 18 years of age or older.');
       }
     });
 
-    it('returns an explanation', async () => {
+    it('returns an explanation for styling assistance requests', async () => {
       const {panel} = await createAiAssistancePanel({
         aidaClient: mockAidaClient([[{explanation}]]),
       });
-      const response = await panel.debugProblem('Please help me debug this problem');
-      assert.strictEqual(response, explanation);
+      const snackbarShowStub = sinon.stub(Snackbars.Snackbar.Snackbar, 'show');
+      const response = await panel.handleExternalRequest(
+          'Please help me debug this problem', AiAssistanceModel.ConversationType.STYLING);
+      assert.strictEqual(response.response, explanation);
+      sinon.assert.calledOnceWithExactly(snackbarShowStub, {message: 'DevTools received an external request'});
+    });
+
+    it('handles styling assistance requests which contain a selector', async () => {
+      const {panel} = await createAiAssistancePanel({
+        aidaClient: mockAidaClient([[{explanation}]]),
+      });
+      const response = await panel.handleExternalRequest(
+          'Please help me debug this problem', AiAssistanceModel.ConversationType.STYLING, 'h1');
+      assert.strictEqual(response.response, explanation);
+      sinon.assert.calledOnce(evaluateStub);
+      sinon.assert.calledOnce(callFunctionOnStub);
+      assert.strictEqual(callFunctionOnStub.getCall(0).args[0].arguments[1].value, 'h1');
     });
 
     it('throws an error if no answer could be generated', async () => {
@@ -1473,10 +1592,190 @@ STOP`,
         ])
       });
       try {
-        await panel.debugProblem('Please help me debug this problem');
-        assert.fail('Expected `debugProblem` to throw');
+        await panel.handleExternalRequest(
+            'Please help me debug this problem', AiAssistanceModel.ConversationType.STYLING);
+        assert.fail('Expected `handleExternalRequest` to throw');
       } catch (err) {
         assert.strictEqual(err.message, 'Something went wrong. No answer was generated.');
+      }
+    });
+
+    it('persists external conversations to history', async () => {
+      const {panel, view} = await createAiAssistancePanel({
+        aidaClient: mockAidaClient([[{explanation}]]),
+      });
+      await panel.handleExternalRequest(
+          'Please help me debug this problem', AiAssistanceModel.ConversationType.STYLING);
+      const {contextMenu, id} = openHistoryContextMenu(view.input, '[External] Please help me debug this problem');
+      assert.isDefined(id);
+      contextMenu.invokeHandler(id);
+      assert.isTrue((await view.nextInput).isReadOnly);
+      assert.deepEqual(view.input.messages, [
+        {
+          entity: AiAssistancePanel.ChatMessageEntity.USER,
+          imageInput: undefined,
+          text: 'Please help me debug this problem',
+        },
+        {
+          answer: explanation,
+          entity: AiAssistancePanel.ChatMessageEntity.MODEL,
+          rpcId: undefined,
+          suggestions: undefined,
+          steps: [],
+        },
+      ]);
+    });
+
+    it('can switch contexts', async () => {
+      const steps = [
+        {
+          contextDetails: [
+            {
+              text: 'Request URL: https://a.test\n\nRequest headers:\ncontent-type: bar1',
+              title: 'Request',
+            },
+            {
+              text: 'Response Status: 200 \n\nResponse headers:\ncontent-type: bar2\nx-forwarded-for: bar3',
+              title: 'Response',
+            },
+            {
+              text:
+                  'Queued at (timestamp): 0 μs\nStarted at (timestamp): 0 μs\nConnection start (stalled) (duration): -\nDuration (duration): -',
+              title: 'Timing',
+            },
+            {
+              text: '- URL: https://a.test',
+              title: 'Request initiator chain',
+            },
+          ],
+          isLoading: false,
+          sideEffect: undefined,
+          title: 'Analyzing network data',
+        },
+      ] as AiAssistancePanel.Step[];
+
+      await createNetworkPanelForMockConnection();
+      updateHostConfig({
+        devToolsFreestyler: {
+          enabled: true,
+        },
+      });
+      const networkRequest = createNetworkRequest({
+        url: urlString`https://a.test`,
+      });
+      UI.Context.Context.instance().setFlavor(SDK.NetworkRequest.NetworkRequest, networkRequest);
+      Common.Settings.moduleSetting('ai-assistance-enabled').set(true);
+      const {panel, view} = await createAiAssistancePanel(
+          {aidaClient: mockAidaClient([[{explanation: 'test'}], [{explanation: 'test2'}], [{explanation: 'test3'}]])});
+
+      panel.handleAction('drjones.network-floating-button');
+      (await view.nextInput).onTextSubmit('User question to DrJones?');
+      assert.deepEqual((await view.nextInput).messages, [
+        {
+          entity: AiAssistancePanel.ChatMessageEntity.USER,
+          text: 'User question to DrJones?',
+          imageInput: undefined,
+        },
+        {
+          answer: 'test',
+          entity: AiAssistancePanel.ChatMessageEntity.MODEL,
+          rpcId: undefined,
+          suggestions: undefined,
+          steps,
+        },
+      ]);
+
+      const response = await panel.handleExternalRequest(
+          'Please help me debug this problem', AiAssistanceModel.ConversationType.STYLING);
+      assert.strictEqual(response.response, 'test2');
+
+      view.input.onTextSubmit('Follow-up question to DrJones?');
+      assert.deepEqual((await view.nextInput).messages, [
+        {
+          entity: AiAssistancePanel.ChatMessageEntity.USER,
+          text: 'User question to DrJones?',
+          imageInput: undefined,
+        },
+        {
+          answer: 'test',
+          entity: AiAssistancePanel.ChatMessageEntity.MODEL,
+          rpcId: undefined,
+          suggestions: undefined,
+          steps,
+        },
+        {
+          entity: AiAssistancePanel.ChatMessageEntity.USER,
+          text: 'Follow-up question to DrJones?',
+          imageInput: undefined,
+        },
+        {
+          answer: 'test3',
+          entity: AiAssistancePanel.ChatMessageEntity.MODEL,
+          rpcId: undefined,
+          suggestions: undefined,
+          steps,
+        },
+      ]);
+    });
+
+    it('throws an error for file assistance requests', async () => {
+      const {panel} = await createAiAssistancePanel({
+        aidaClient: mockAidaClient([[{explanation}]]),
+      });
+      try {
+        await panel.handleExternalRequest('Please help me debug this problem', AiAssistanceModel.ConversationType.FILE);
+        assert.fail('Expected `handleExternalRequest` to throw');
+      } catch (err) {
+        assert.strictEqual(
+            err.message,
+            `Debugging with an agent of type '${AiAssistanceModel.ConversationType.FILE}' is not implemented yet.`);
+      }
+    });
+
+    it('throws an error for network assistance requests', async () => {
+      const {panel} = await createAiAssistancePanel({
+        aidaClient: mockAidaClient([[{explanation}]]),
+      });
+      try {
+        await panel.handleExternalRequest(
+            'Please help me debug this problem', AiAssistanceModel.ConversationType.NETWORK);
+        assert.fail('Expected `handleExternalRequest` to throw');
+      } catch (err) {
+        assert.strictEqual(
+            err.message,
+            `Debugging with an agent of type '${AiAssistanceModel.ConversationType.NETWORK}' is not implemented yet.`);
+      }
+    });
+
+    it('throws an error for performance assistance requests', async () => {
+      const {panel} = await createAiAssistancePanel({
+        aidaClient: mockAidaClient([[{explanation}]]),
+      });
+      try {
+        await panel.handleExternalRequest(
+            'Please help me debug this problem', AiAssistanceModel.ConversationType.PERFORMANCE);
+        assert.fail('Expected `handleExternalRequest` to throw');
+      } catch (err) {
+        assert.strictEqual(
+            err.message,
+            `Debugging with an agent of type '${
+                AiAssistanceModel.ConversationType.PERFORMANCE}' is not implemented yet.`);
+      }
+    });
+
+    it('throws an error for performance-insight assistance requests', async () => {
+      const {panel} = await createAiAssistancePanel({
+        aidaClient: mockAidaClient([[{explanation}]]),
+      });
+      try {
+        await panel.handleExternalRequest(
+            'Please help me debug this problem', AiAssistanceModel.ConversationType.PERFORMANCE_INSIGHT);
+        assert.fail('Expected `handleExternalRequest` to throw');
+      } catch (err) {
+        assert.strictEqual(
+            err.message,
+            `Debugging with an agent of type '${
+                AiAssistanceModel.ConversationType.PERFORMANCE_INSIGHT}' is not implemented yet.`);
       }
     });
   });

@@ -138,17 +138,13 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
       ((node: any, columnId: string, valueBeforeEditing: any, newText: any, moveDirection?: string) => void)|undefined;
   deleteCallback: ((arg0: any) => void)|undefined;
   refreshCallback: (() => void)|undefined;
-  private dataTableHeaders: {
-    [x: string]: Element,
-  };
+  private dataTableHeaders: Record<string, Element>;
   scrollContainerInternal: Element;
   private dataContainerInternal: Element;
   private readonly dataTable: Element;
   protected inline: boolean;
   private columnsArray: ColumnDescriptor[];
-  columns: {
-    [x: string]: ColumnDescriptor,
-  };
+  columns: Record<string, ColumnDescriptor>;
   visibleColumnsArray: ColumnDescriptor[];
   cellClass: string|null;
   private dataTableHeadInternal: HTMLTableSectionElement;
@@ -1012,9 +1008,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     if (!this.columnWeightsSetting) {
       return;
     }
-    const weights: {
-      [x: string]: any,
-    } = {};
+    const weights: Record<string, any> = {};
     for (let i = 0; i < this.columnsArray.length; ++i) {
       const column = this.columnsArray[i];
       weights[column.id] = column.weight;
@@ -1035,7 +1029,8 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
   }
 
   private applyColumnWeights(): void {
-    let tableWidth = this.element.offsetWidth - this.cornerWidth;
+    // Subtract 1 to prevent unnecessary overflow in x-axis
+    let tableWidth = this.element.offsetWidth - this.cornerWidth - 1;
     if (tableWidth <= 0) {
       return;
     }
@@ -1054,7 +1049,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     }
     let sum = 0;
     let lastOffset = 0;
-    const minColumnWidth = 14;  // px
+    const minColumnWidth = ColumnResizePadding;  // px
 
     for (let i = 0; i < this.visibleColumnsArray.length; ++i) {
       const column = this.visibleColumnsArray[i];
@@ -1139,9 +1134,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     if (this.creationNode) {
       this.creationNode.isCreationNode = false;
     }
-    const emptyData: {
-      [x: string]: any,
-    } = {};
+    const emptyData: Record<string, any> = {};
     for (const column in this.columns) {
       emptyData[column] = null;
     }
@@ -1713,7 +1706,7 @@ export const enum DataType {
   BOOLEAN = 'Boolean',
 }
 
-export const ColumnResizePadding = 34;
+export const ColumnResizePadding = 30;
 export const CenterResizerOverBorderAdjustment = 3;
 
 export const enum ResizeMethod {
@@ -1722,9 +1715,7 @@ export const enum ResizeMethod {
   LAST = 'last',
 }
 
-export interface DataGridData {
-  [key: string]: any;
-}
+export type DataGridData = Record<string, any>;
 
 export class DataGridNode<T> {
   elementInternal: HTMLElement|null = null;
@@ -2510,11 +2501,7 @@ export class DataGridNode<T> {
 
 export class CreationDataGridNode<T> extends DataGridNode<T> {
   override isCreationNode: boolean;
-  constructor(
-      data?: {
-        [x: string]: any,
-      }|null,
-      hasChildren?: boolean) {
+  constructor(data?: Record<string, any>|null, hasChildren?: boolean) {
     super(data, hasChildren);
     this.isCreationNode = true;
   }

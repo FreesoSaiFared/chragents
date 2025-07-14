@@ -2,12 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import { Tool } from '../tools/Tools.js';
-import { OpenAIClient, OpenAIResponse } from '../core/OpenAIClient.js';
-import { ChatMessage, ChatMessageEntity, ModelChatMessage, ToolResultMessage } from '../ui/ChatView.js';
-import { ChatPromptFormatter } from '../core/Graph.js';
 import { enhancePromptWithPageContext } from '../core/PageInfoManager.js';
-import { ConfigurableAgentArgs, ConfigurableAgentResult, AgentRunTerminationReason, ConfigurableAgentTool, ToolRegistry, HandoffConfig, HandoffTrigger /*, HandoffContextTransform, ContextFilterRegistry*/ } from './ConfigurableAgentTool.js';
+import { LLMClient } from '../LLM/LLMClient.js';
+import type { LLMResponse, ParsedLLMAction, LLMMessage, LLMProvider } from '../LLM/LLMTypes.js';
+import type { Tool } from '../tools/Tools.js';
+import { AIChatPanel } from '../ui/AIChatPanel.js';
+import { ChatMessageEntity, type ChatMessage, type ModelChatMessage, type ToolResultMessage } from '../ui/ChatView.js';
+import { createLogger } from '../core/Logger.js';
+import { createTracingProvider, getCurrentTracingContext } from '../tracing/TracingConfig.js';
+import type { TracingProvider } from '../tracing/TracingProvider.js';
+
+const logger = createLogger('AgentRunner');
+
+import { ConfigurableAgentTool, ToolRegistry, HandoffTrigger, type ConfigurableAgentArgs, type ConfigurableAgentResult, type AgentRunTerminationReason, type HandoffConfig /* , HandoffContextTransform, ContextFilterRegistry*/ } from './ConfigurableAgentTool.js';
 
 /**
  * Configuration for the AgentRunner
@@ -16,7 +23,7 @@ export interface AgentRunnerConfig {
   apiKey: string;
   modelName: string;
   systemPrompt: string;
-  tools: Tool<any, any>[];
+  tools: Array<Tool<any, any>>;
   maxIterations: number;
   temperature?: number;
 }
@@ -44,6 +51,61 @@ function isConfigurableAgentResult(obj: any): obj is ConfigurableAgentResult {
  * Runs the core agent execution loop
  */
 export class AgentRunner {
+  /**
+   * Helper function to convert ChatMessage[] to LLMMessage[]
+   */
+  private static convertToLLMMessages(messages: ChatMessage[]): LLMMessage[] {
+    const llmMessages: LLMMessage[] = [];
+    
+    for (const msg of messages) {
+      if (msg.entity === ChatMessageEntity.USER) {
+        // User message
+        if ('text' in msg) {
+          llmMessages.push({
+            role: 'user',
+            content: msg.text,
+          });
+        }
+      } else if (msg.entity === ChatMessageEntity.MODEL) {
+        // Model message
+        const modelMsg = msg as ModelChatMessage;
+        if (modelMsg.action === 'final' && modelMsg.answer) {
+          llmMessages.push({
+            role: 'assistant',
+            content: modelMsg.answer,
+          });
+        } else if (modelMsg.action === 'tool' && modelMsg.toolCallId) {
+          // Tool call message
+          llmMessages.push({
+            role: 'assistant',
+            content: undefined,
+            tool_calls: [{
+              id: modelMsg.toolCallId,
+              type: 'function',
+              function: {
+                name: modelMsg.toolName || '',
+                arguments: JSON.stringify(modelMsg.toolArgs || {}),
+              }
+            }],
+          });
+        }
+      } else if (msg.entity === ChatMessageEntity.TOOL_RESULT) {
+        // Tool result message
+        const toolResult = msg as ToolResultMessage;
+        if (toolResult.toolCallId && toolResult.resultText) {
+          llmMessages.push({
+            role: 'tool',
+            content: toolResult.resultText,
+            tool_call_id: toolResult.toolCallId,
+          });
+        }
+      }
+    }
+    
+    return llmMessages;
+  }
+
+
   // Helper function to execute the handoff logic (to avoid duplication)
   private static async executeHandoff(
     currentMessages: ChatMessage[],
@@ -63,51 +125,54 @@ export class AgentRunner {
 
     if (!(targetAgentTool instanceof ConfigurableAgentTool)) {
       const errorMsg = `Handoff target '${targetAgentName}' not found or is not a ConfigurableAgentTool.`;
-      console.error(`[AgentRunner] ${errorMsg}`);
+      logger.error(`${errorMsg}`);
       // Use the default error creator from the initiating agent's context
       return defaultCreateErrorResult(errorMsg, currentMessages, 'error');
     }
 
-    console.log(`[AgentRunner] Initiating handoff from ${executingAgent.name} to ${targetAgentTool.name} (Trigger: ${handoffConfig.trigger || 'llm_tool_call'})`);
+    logger.info(`Initiating handoff from ${executingAgent.name} to ${targetAgentTool.name} (Trigger: ${handoffConfig.trigger || 'llm_tool_call'})`);
 
     let handoffMessages: ChatMessage[] = []; // Initialize handoff messages
     const targetConfig = targetAgentTool.config;
 
-    // Collect specified tool results
-    const collectedToolResultMessages: ToolResultMessage[] = [];
-    if (handoffConfig.includeToolResults && handoffConfig.includeToolResults.length > 0) {
-      for (const message of currentMessages) {
-        if (message.entity === ChatMessageEntity.TOOL_RESULT) {
-          const toolResult = message as ToolResultMessage;
-          if (!toolResult.isError && toolResult.toolName && handoffConfig.includeToolResults.includes(toolResult.toolName)) {
-            collectedToolResultMessages.push(toolResult);
-          }
-        }
-      }
-    }
-
     // Determine the messages to hand off based on includeToolResults
     if (handoffConfig.includeToolResults && handoffConfig.includeToolResults.length > 0) {
-      // Filter messages: original query + specified tool results
-      console.log(`[AgentRunner] Filtering messages for handoff to ${targetAgentTool.name} based on includeToolResults.`);
-      const firstUserMessage = currentMessages.find(m => m.entity === ChatMessageEntity.USER);
-      if (firstUserMessage) {
-        handoffMessages.push(firstUserMessage);
-      }
-      handoffMessages.push(...collectedToolResultMessages);
+      // Filter messages: keep user messages, final answers, and only tool calls/results for specified tools
+      logger.info('Filtering messages for handoff to ${targetAgentTool.name} based on includeToolResults.');
+      handoffMessages = currentMessages.filter(message => {
+        if (message.entity === ChatMessageEntity.USER) {
+          return true; // Always include user messages
+        }
+        if (message.entity === ChatMessageEntity.MODEL) {
+          const modelMsg = message as ModelChatMessage;
+          if (modelMsg.action === 'final') {
+            return true; // Always include final answers
+          }
+          if (modelMsg.action === 'tool' && modelMsg.toolName) {
+            return handoffConfig.includeToolResults!.includes(modelMsg.toolName); // Include tool calls for specified tools
+          }
+        }
+        if (message.entity === ChatMessageEntity.TOOL_RESULT) {
+          const toolResult = message as ToolResultMessage;
+          return !toolResult.isError && toolResult.toolName && handoffConfig.includeToolResults!.includes(toolResult.toolName); // Include tool results for specified tools
+        }
+        return false; // Exclude other message types
+      });
     } else {
       // No filter specified: pass the entire message history
-      console.log(`[AgentRunner] Passing full message history for handoff to ${targetAgentTool.name}.`);
+      logger.info('Passing full message history for handoff to ${targetAgentTool.name}.');
       handoffMessages = [...currentMessages];
     }
 
     // Enhance the target agent's system prompt with page context
     const enhancedSystemPrompt = await enhancePromptWithPageContext(targetConfig.systemPrompt);
-    
+
     // Construct Runner Config & Hooks for the target agent
     const targetRunnerConfig: AgentRunnerConfig = {
-      apiKey: apiKey,
-      modelName: targetConfig.modelName || defaultModelName,
+      apiKey,
+      modelName: typeof targetConfig.modelName === 'function'
+        ? targetConfig.modelName()
+        : (targetConfig.modelName || defaultModelName),
       systemPrompt: enhancedSystemPrompt,
       tools: targetConfig.tools
               .map(toolName => ToolRegistry.getRegisteredTool(toolName))
@@ -128,7 +193,7 @@ export class AgentRunner {
     // Determine args for the target agent: use llmToolArgs if provided, otherwise originalArgs
     const targetAgentArgs = llmToolArgs ?? originalArgs;
 
-    console.log(`[AgentRunner] Executing handoff target agent: ${targetAgentTool.name} with ${handoffMessages.length} messages.`);
+    logger.info('Executing handoff target agent: ${targetAgentTool.name} with ${handoffMessages.length} messages.');
     const handoffResult = await AgentRunner.run(
         handoffMessages,
         targetAgentArgs, // Use determined args
@@ -137,12 +202,12 @@ export class AgentRunner {
         targetAgentTool // Target agent is now the executing agent
     );
 
-    console.log(`[AgentRunner] Handoff target agent ${targetAgentTool.name} finished. Result success: ${handoffResult.success}`);
+    logger.info('Handoff target agent ${targetAgentTool.name} finished. Result success: ${handoffResult.success}');
 
     // Check if the target agent is configured to *include* intermediate steps
     if (targetAgentTool instanceof ConfigurableAgentTool && targetAgentTool.config.includeIntermediateStepsOnReturn === true) {
       // Combine message history if the target agent requests it
-      console.log(`[AgentRunner] Including intermediateSteps from ${targetAgentTool.name} based on its config.`);
+      logger.info('Including intermediateSteps from ${targetAgentTool.name} based on its config.');
       const combinedIntermediateSteps = [
           ...currentMessages, // History *before* the recursive call
           ...(handoffResult.intermediateSteps || []) // History *from* the recursive call (should exist if flag is true)
@@ -153,21 +218,21 @@ export class AgentRunner {
           intermediateSteps: combinedIntermediateSteps,
           terminationReason: handoffResult.terminationReason || 'handed_off',
       };
-    } else {
-      // Otherwise (default), omit the target's intermediate steps
-      console.log(`[AgentRunner] Omitting intermediateSteps from ${targetAgentTool.name} based on its config (default or flag set to false).`);
-      // Return result from target, ensuring intermediateSteps are omitted
-      const finalResult = {
-        ...handoffResult,
-        terminationReason: handoffResult.terminationReason || 'handed_off',
-      };
-      // Explicitly delete intermediateSteps if they somehow exist on handoffResult (shouldn't due to target config)
-      delete finalResult.intermediateSteps; 
-      return finalResult;
     }
+    // Otherwise (default), omit the target's intermediate steps
+    logger.info('Omitting intermediateSteps from ${targetAgentTool.name} based on its config (default or flag set to false).');
+    // Return result from target, ensuring intermediateSteps are omitted
+    const finalResult = {
+      ...handoffResult,
+      terminationReason: handoffResult.terminationReason || 'handed_off',
+    };
+    // Explicitly delete intermediateSteps if they somehow exist on handoffResult (shouldn't due to target config)
+    delete finalResult.intermediateSteps;
+    return finalResult;
+
   }
 
-  public static async run(
+  static async run(
     initialMessages: ChatMessage[],
     args: ConfigurableAgentArgs,
     config: AgentRunnerConfig,
@@ -175,7 +240,7 @@ export class AgentRunner {
     executingAgent: ConfigurableAgentTool | null
   ): Promise<ConfigurableAgentResult> {
     const agentName = executingAgent?.name || 'Unknown';
-    console.log(`[AgentRunner] Starting execution loop for agent: ${agentName}`);
+    logger.info('Starting execution loop for agent: ${agentName}');
     const { apiKey, modelName, systemPrompt, tools, maxIterations, temperature } = config;
     const { prepareInitialMessages, createSuccessResult, createErrorResult } = hooks;
 
@@ -189,13 +254,15 @@ export class AgentRunner {
     const toolMap = new Map(tools.map(tool => [tool.name, tool]));
     const toolSchemas = tools.map(tool => ({
       type: 'function',
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.schema
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.schema
+      }
     }));
 
     // Add handoff tools based on the executing agent's config
-    if (executingAgent && executingAgent.config.handoffs) {
+    if (executingAgent?.config.handoffs) {
         // Iterate over the configured handoffs
         for (const handoffConfig of executingAgent.config.handoffs) {
             // Only add handoffs triggered by LLM tool calls to the schema
@@ -206,27 +273,28 @@ export class AgentRunner {
                     const handoffToolName = `handoff_to_${targetAgentName}`;
                     toolSchemas.push({
                       type: 'function',
-                      name: handoffToolName,
-                      description: `Handoff the current task to the specialized agent: ${targetAgentName}. Use this agent when the task requires ${targetAgentName}'s capabilities. Agent Description: ${targetTool.description}`,
-                      parameters: targetTool.schema // Use target agent's input schema
+                      function: {
+                        name: handoffToolName,
+                        description: `Handoff the current task to the specialized agent: ${targetAgentName}. Use this agent when the task requires ${targetAgentName}'s capabilities. Agent Description: ${targetTool.description}`,
+                        parameters: targetTool.schema // Use target agent's input schema
+                      }
                     });
                      // Add a mapping for the handoff tool 'name' to the actual target tool instance
                      // This allows us to find the target agent later when this tool is called.
                     toolMap.set(handoffToolName, targetTool);
-                    console.log(`[AgentRunner] Added LLM handoff tool schema: ${handoffToolName}`);
+                    logger.info('Added LLM handoff tool schema: ${handoffToolName}');
                 } else {
-                  console.warn(`[AgentRunner] Configured LLM handoff target '${targetAgentName}' not found or is not a ConfigurableAgentTool.`);
+                  logger.warn(`Configured LLM handoff target '${targetAgentName}' not found or is not a ConfigurableAgentTool.`);
                 }
             }
         }
     }
 
-    const promptFormatter = new ChatPromptFormatter();
     let iteration = 0; // Initialize iteration counter
 
     for (iteration = 0; iteration < maxIterations; iteration++) {
-      console.log(`[AgentRunner] ${agentName} Iteration ${iteration + 1}/${maxIterations}`);
-      
+      logger.info('${agentName} Iteration ${iteration + 1}/${maxIterations}');
+
       // Prepare prompt and call LLM
       const iterationInfo = `
 ## Current Progress
@@ -237,22 +305,24 @@ export class AgentRunner {
       // This includes updating the accessibility tree inside enhancePromptWithPageContext
       const currentSystemPrompt = await enhancePromptWithPageContext(systemPrompt + iterationInfo);
 
-      const promptText = promptFormatter.format({ messages });
-      let openAIResponse: OpenAIResponse;
+      let llmResponse: LLMResponse;
       try {
-        console.log(`[AgentRunner] ${agentName} Calling LLM. Prompt size: ${promptText.length}`);
-        openAIResponse = await OpenAIClient.callOpenAI(
-          apiKey,
-          modelName,
-          promptText,
-          {
-            tools: toolSchemas,
-            systemPrompt: currentSystemPrompt,
-            temperature: temperature ?? 0,
-          }
-        );
+        logger.info('${agentName} Calling LLM with ${messages.length} messages');
+        
+        const llm = LLMClient.getInstance();
+        const provider = AIChatPanel.getProviderForModel(modelName);
+        const llmMessages = AgentRunner.convertToLLMMessages(messages);
+        
+        llmResponse = await llm.call({
+          provider,
+          model: modelName,
+          messages: llmMessages,
+          systemPrompt: currentSystemPrompt,
+          tools: toolSchemas,
+          temperature: temperature ?? 0,
+        });
       } catch (error: any) {
-        console.error(`[AgentRunner] ${agentName} LLM call failed:`, error);
+        logger.error(`${agentName} LLM call failed:`, error);
         const errorMsg = `LLM call failed: ${error.message || String(error)}`;
         // Add system error message to history
         const systemErrorMessage: ToolResultMessage = {
@@ -268,7 +338,8 @@ export class AgentRunner {
       }
 
       // Parse LLM response
-      const parsedAction = OpenAIClient.parseOpenAIResponse(openAIResponse);
+      const llm = LLMClient.getInstance();
+      const parsedAction = llm.parseResponse(llmResponse);
 
       // Process parsed action
       try {
@@ -276,16 +347,63 @@ export class AgentRunner {
 
         if (parsedAction.type === 'tool_call') {
           const { name: toolName, args: toolArgs } = parsedAction;
+          const toolCallId = crypto.randomUUID(); // Generate unique ID for OpenAI format
+          
+          // Create tool-call event observation using current tracing context
+          const tracingContext = getCurrentTracingContext();
+          logger.info(`AgentRunner tool call with tracing context:`, { 
+            hasTracingContext: !!tracingContext, 
+            traceId: tracingContext?.traceId,
+            toolName,
+            agentName 
+          });
+          console.log(`[TRACING DEBUG] AgentRunner tool call with tracing context:`, { 
+            hasTracingContext: !!tracingContext, 
+            traceId: tracingContext?.traceId,
+            toolName,
+            agentName 
+          });
+          
+          if (tracingContext?.traceId) {
+            const tracingProvider = createTracingProvider();
+            try {
+              await tracingProvider.createObservation({
+                id: `event-tool-call-runner-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                name: `Tool Call (AgentRunner): ${toolName}`,
+                type: 'event',
+                startTime: new Date(),
+                parentObservationId: tracingContext.parentObservationId,
+                input: {
+                  toolName,
+                  toolArgs,
+                  toolCallId,
+                  agentName,
+                  reasoning: llmResponse.reasoning?.summary
+                },
+                metadata: {
+                  executingAgent: agentName,
+                  toolCallId,
+                  phase: 'tool_call_decision',
+                  iteration,
+                  source: 'AgentRunner'
+                }
+              }, tracingContext.traceId);
+            } catch (tracingError) {
+              logger.warn('Failed to create tool-call tracing observation:', tracingError);
+            }
+          }
+          
           newModelMessage = {
             entity: ChatMessageEntity.MODEL,
             action: 'tool',
-            toolName: toolName,
-            toolArgs: toolArgs,
+            toolName,
+            toolArgs,
+            toolCallId, // Add for linking with tool response
             isFinalAnswer: false,
-            reasoning: openAIResponse.reasoning?.summary,
+            reasoning: llmResponse.reasoning?.summary,
           };
           messages.push(newModelMessage);
-          console.log(`[AgentRunner] ${agentName} LLM requested tool: ${toolName}`);
+          logger.info('${agentName} LLM requested tool: ${toolName}');
 
           // Execute tool
           const toolToExecute = toolMap.get(toolName);
@@ -324,12 +442,13 @@ export class AgentRunner {
               // LLM tool handoff replaces the current agent's execution entirely
               return handoffResult;
 
-          } else if (!toolToExecute) { // Regular tool, but not found
+          }
+          if (!toolToExecute) { // Regular tool, but not found
               throw new Error(`Agent requested unknown tool: ${toolName}`);
           } else {
             // *** Regular tool execution ***
              try {
-              console.log(`[AgentRunner] ${agentName} Executing tool: ${toolToExecute.name} with args:`, toolArgs);
+              logger.info('${agentName} Executing tool: ${toolToExecute.name} with args:', toolArgs);
               toolResultData = await toolToExecute.execute(toolArgs as any);
               toolResultText = typeof toolResultData === 'string' ? toolResultData : JSON.stringify(toolResultData, null, 2);
 
@@ -346,7 +465,7 @@ export class AgentRunner {
                  }
               }
              } catch (err: any) {
-              console.error(`[AgentRunner] ${agentName} Error executing tool ${toolToExecute.name}:`, err);
+              logger.error(`${agentName} Error executing tool ${toolToExecute.name}:`, err);
               toolResultText = `Error during tool execution: ${err.message || String(err)}`;
               toolIsError = true;
               toolResultData = { error: toolResultText }; // Store error in data
@@ -356,26 +475,27 @@ export class AgentRunner {
           // Add tool result message
           const toolResultMessage: ToolResultMessage = {
             entity: ChatMessageEntity.TOOL_RESULT,
-            toolName: toolName,
+            toolName,
             resultText: toolResultText,
             isError: toolIsError,
+            toolCallId, // Link back to the tool call for OpenAI format
             ...(toolIsError && { error: toolResultText }), // Include raw error message if error occurred
             ...(toolResultData && { resultData: toolResultData }) // Include structured result data
           };
           messages.push(toolResultMessage);
-          console.log(`[AgentRunner] ${agentName} Tool ${toolName} execution result added. Error: ${toolIsError}`);
+          logger.info('${agentName} Tool ${toolName} execution result added. Error: ${toolIsError}');
 
         } else if (parsedAction.type === 'final_answer') {
           const { answer } = parsedAction;
           newModelMessage = {
             entity: ChatMessageEntity.MODEL,
             action: 'final',
-            answer: answer,
+            answer,
             isFinalAnswer: true,
-            reasoning: openAIResponse.reasoning?.summary,
+            reasoning: llmResponse.reasoning?.summary,
           };
           messages.push(newModelMessage);
-          console.log(`[AgentRunner] ${agentName} LLM provided final answer.`);
+          logger.info('${agentName} LLM provided final answer.');
           // Exit loop and return success with 'final_answer' reason
           return createSuccessResult(answer, messages, 'final_answer');
 
@@ -384,7 +504,7 @@ export class AgentRunner {
         }
 
       } catch (error: any) {
-        console.error(`[AgentRunner] ${agentName} Error processing LLM response or executing tool:`, error);
+        logger.error(`${agentName} Error processing LLM response or executing tool:`, error);
         const errorMsg = `Agent loop error: ${error.message || String(error)}`;
          // Add system error message to history
         const systemErrorMessage: ToolResultMessage = {
@@ -401,13 +521,13 @@ export class AgentRunner {
     }
 
     // Max iterations reached - Check for 'max_iterations' handoff trigger
-    console.warn(`[AgentRunner] ${agentName} Reached max iterations (${maxIterations}) without completion.`);
+    logger.warn(`${agentName} Reached max iterations (${maxIterations}) without completion.`);
 
-    if (executingAgent && executingAgent.config.handoffs) {
+    if (executingAgent?.config.handoffs) {
         const maxIterHandoffConfig = executingAgent.config.handoffs.find(h => h.trigger === 'max_iterations');
 
         if (maxIterHandoffConfig) {
-            console.log(`[AgentRunner] ${agentName} Found 'max_iterations' handoff config. Initiating handoff to ${maxIterHandoffConfig.targetAgentName}.`);
+            logger.info(`${agentName} Found 'max_iterations' handoff config. Initiating handoff to ${maxIterHandoffConfig.targetAgentName}.`);
 
             // Use the shared handoff execution logic
             // Pass the original `args` received by *this* agent runner instance. No llmToolArgs here.
@@ -424,7 +544,7 @@ export class AgentRunner {
     }
 
     // If no max_iterations handoff is configured, return the standard error
-    console.warn(`[AgentRunner] ${agentName} No 'max_iterations' handoff configured. Returning error.`);
+    logger.warn(`${agentName} No 'max_iterations' handoff configured. Returning error.`);
     return createErrorResult(`Agent reached maximum iterations (${maxIterations})`, messages, 'max_iterations');
   }
-} 
+}

@@ -2,36 +2,39 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import { type AgentState } from './State.js';
-import { type CompiledGraph, NodeType } from './Types.js';
-import { ChatOpenAI } from './ChatOpenAI.js';
-import { createAgentGraphFromConfig } from './ConfigurableGraph.js';
-import { defaultAgentGraphConfig } from './GraphConfigs.js';
-import {
-  ChatPromptFormatter,
-  createSystemPrompt,
-  getAgentToolsFromState,
-  routeNextNode,
-} from './GraphHelpers.js';
 import {
   createAgentNode,
   createToolExecutorNode,
   createFinalNode,
 } from './AgentNodes.js';
+import { createAgentGraphFromConfig } from './ConfigurableGraph.js';
+import { defaultAgentGraphConfig } from './GraphConfigs.js';
+import { createLogger } from './Logger.js';
+import {
+  createSystemPrompt,
+  getAgentToolsFromState,
+  routeNextNode,
+} from './GraphHelpers.js';
+import { type CompiledGraph, NodeType } from './Types.js';
 
-// createAgentGraph now uses the imported typed configuration object
-export function createAgentGraph(apiKey: string, customModelName?: string): CompiledGraph {
-  const modelName = customModelName || 'o4-mini-2025-04-16';
+const logger = createLogger('Graph');
 
-  const model = new ChatOpenAI({
-    openAIApiKey: apiKey,
-    modelName,
+// createAgentGraph now uses the LLM SDK directly
+export function createAgentGraph(_apiKey: string | null, modelName: string): CompiledGraph {
+  if (!modelName) {
+    throw new Error('Model name is required');
+  }
+
+  logger.debug('Creating graph for model:', modelName);
+
+  // Create graph configuration with model name - nodes will use LLMClient directly
+  const graphConfigWithModel = {
+    ...defaultAgentGraphConfig,
+    modelName: modelName,
     temperature: 0,
-  });
+  };
 
-  // Use the imported configuration object directly
-  console.log('Using defaultAgentGraphConfig to create graph.');
-  return createAgentGraphFromConfig(defaultAgentGraphConfig, model);
+  return createAgentGraphFromConfig(graphConfigWithModel);
 }
 
-export { ChatPromptFormatter, createAgentNode, createToolExecutorNode, createFinalNode, routeNextNode, createSystemPrompt, getAgentToolsFromState, NodeType };
+export { createAgentNode, createToolExecutorNode, createFinalNode, routeNextNode, createSystemPrompt, getAgentToolsFromState, NodeType };

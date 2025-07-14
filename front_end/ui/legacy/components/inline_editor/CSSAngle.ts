@@ -6,9 +6,10 @@
 import './CSSAngleEditor.js';
 import './CSSAngleSwatch.js';
 
+import * as Platform from '../../../../core/platform/platform.js';
 import * as Lit from '../../../lit/lit.js';
 
-import cssAngleStylesRaw from './cssAngle.css.js';
+import cssAngleStyles from './cssAngle.css.js';
 import {
   type Angle,
   AngleUnit,
@@ -19,12 +20,6 @@ import {
   roundAngleByUnit,
 } from './CSSAngleUtils.js';
 import {ValueChangedEvent} from './InlineEditorUtils.js';
-
-/* eslint-disable rulesdir/no-adopted-style-sheets --
- * TODO(crbug.com/391381439): Fully migrate off of Constructable Stylesheets.
- **/
-const cssAngleStyles = new CSSStyleSheet();
-cssAngleStyles.replaceSync(cssAngleStylesRaw);
 
 const {render, html} = Lit;
 const styleMap = Lit.Directives.styleMap;
@@ -66,7 +61,6 @@ const DefaultAngle = {
 };
 
 export class CSSAngle extends HTMLElement {
-  private readonly shadow = this.attachShadow({mode: 'open'});
   private angle: Angle = DefaultAngle;
   private displayedAngle: Angle = DefaultAngle;
   private propertyValue = '';
@@ -77,10 +71,6 @@ export class CSSAngle extends HTMLElement {
   private popoverStyleTop = '';
   private popoverStyleLeft = '';
   private onMinifyingAction = this.minify.bind(this);
-
-  connectedCallback(): void {
-    this.shadow.adoptedStyleSheets = [cssAngleStyles];
-  }
 
   set data(data: CSSAngleData) {
     const parsedResult = parseText(data.angleText);
@@ -106,10 +96,10 @@ export class CSSAngle extends HTMLElement {
     }
 
     if (!this.angleElement) {
-      this.angleElement = this.shadow.querySelector<HTMLElement>('.css-angle');
+      this.angleElement = this.querySelector<HTMLElement>('.css-angle');
     }
     if (!this.swatchElement) {
-      this.swatchElement = this.shadow.querySelector<HTMLElement>('devtools-css-angle-swatch');
+      this.swatchElement = this.querySelector<HTMLElement>('devtools-css-angle-swatch');
     }
     if (!this.angleElement || !this.swatchElement) {
       return;
@@ -192,7 +182,7 @@ export class CSSAngle extends HTMLElement {
     }
   }
 
-  private onMiniIconClick(event: MouseEvent): void {
+  private onMiniIconClick(event: MouseEvent|KeyboardEvent): void {
     event.stopPropagation();
     if (event.shiftKey && !this.popoverOpen) {
       this.displayNextUnit();
@@ -208,6 +198,10 @@ export class CSSAngle extends HTMLElement {
 
   private onKeydown(event: KeyboardEvent): void {
     if (!this.popoverOpen) {
+      if (Platform.KeyboardUtilities.isEnterOrSpaceKey(event)) {
+        this.onMiniIconClick(event);
+        event.preventDefault();
+      }
       return;
     }
 
@@ -233,6 +227,7 @@ export class CSSAngle extends HTMLElement {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     render(html`
+      <style>${cssAngleStyles}</style>
       <div class="css-angle" @focusout=${this.minify} @keydown=${this.onKeydown} tabindex="-1">
         <div class="preview">
           <devtools-css-angle-swatch
@@ -242,10 +237,12 @@ export class CSSAngle extends HTMLElement {
             .data=${{
               angle: this.angle,
             }}>
-          </devtools-css-angle-swatch><slot></slot></div>
+          </devtools-css-angle-swatch>
+          <slot></slot>
+        </div>
         ${this.popoverOpen ? this.renderPopover() : null}
       </div>
-    `, this.shadow, {
+    `, this, {
       host: this,
     });
     // clang-format on
@@ -260,19 +257,18 @@ export class CSSAngle extends HTMLElement {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     return html`
-    <devtools-css-angle-editor
-      class="popover popover-css-angle"
-      style=${styleMap({top: this.popoverStyleTop, left: this.popoverStyleLeft})}
-      .data=${{
-        angle: this.angle,
-        onAngleUpdate: (angle: Angle):void => {
-          this.updateAngle(angle);
-        },
-        background: contextualBackground,
-      }}
-    ></devtools-css-angle-editor>
-    `;
-        // clang-format on
+      <devtools-css-angle-editor
+        class="popover popover-css-angle"
+        style=${styleMap({top: this.popoverStyleTop, left: this.popoverStyleLeft})}
+        .data=${{
+          angle: this.angle,
+          onAngleUpdate: (angle: Angle):void => {
+            this.updateAngle(angle);
+          },
+          background: contextualBackground,
+        }}>
+      </devtools-css-angle-editor>`;
+    // clang-format on
   }
 }
 

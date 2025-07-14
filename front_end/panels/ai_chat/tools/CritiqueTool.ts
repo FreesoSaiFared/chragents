@@ -2,9 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import { type Tool } from './Tools.js';
-import { OpenAIClient } from '../core/OpenAIClient.js';
 import { AgentService } from '../core/AgentService.js';
+import { createLogger } from '../core/Logger.js';
+import { LLMClient } from '../LLM/LLMClient.js';
+import { AIChatPanel } from '../ui/AIChatPanel.js';
+
+import type { Tool } from './Tools.js';
+
+const logger = createLogger('Tool:Critique');
 
 /**
  * Arguments for the CritiqueTool
@@ -39,13 +44,41 @@ interface EvaluationCriteria {
 
 /**
  * Agent that evaluates if a planning agent's response satisfies the user's requirements.
- * 
- * This agent compares user input against a planning response to determine if 
+ *
+ * This agent compares user input against a planning response to determine if
  * all requirements are met, and provides constructive feedback if not.
  */
 export class CritiqueTool implements Tool<CritiqueToolArgs, CritiqueToolResult> {
   name = 'critique_tool';
   description = 'Evaluates if finalresponse satisfies the user\'s requirements and provides feedback if needed.';
+
+  private async createToolTracingObservation(toolName: string, args: any): Promise<void> {
+    try {
+      const { getCurrentTracingContext, createTracingProvider } = await import('../tracing/TracingConfig.js');
+      const context = getCurrentTracingContext();
+      if (context) {
+        const tracingProvider = createTracingProvider();
+        await tracingProvider.createObservation({
+          id: `event-tool-execute-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          name: `Tool Execute: ${toolName}`,
+          type: 'event',
+          startTime: new Date(),
+          input: { 
+            toolName, 
+            toolArgs: args,
+            contextInfo: `Direct tool execution in ${toolName}`
+          },
+          metadata: {
+            executionPath: 'direct-tool',
+            toolName
+          }
+        }, context.traceId);
+      }
+    } catch (tracingError) {
+      // Don't fail tool execution due to tracing errors
+      console.error(`[TRACING ERROR in ${toolName}]`, tracingError);
+    }
+  }
 
   schema = {
     type: 'object',
@@ -70,7 +103,8 @@ export class CritiqueTool implements Tool<CritiqueToolArgs, CritiqueToolResult> 
    * Execute the critique agent
    */
   async execute(args: CritiqueToolArgs): Promise<CritiqueToolResult> {
-    console.log('[CritiqueTool] Executing with args:', args);
+    await this.createToolTracingObservation(this.name, args);
+    logger.debug('Executing with args', args);
     const { userInput, finalResponse, reasoning } = args;
     const agentService = AgentService.getInstance();
     const apiKey = agentService.getApiKey();
@@ -93,8 +127,8 @@ export class CritiqueTool implements Tool<CritiqueToolArgs, CritiqueToolResult> 
     }
 
     try {
-      console.log('[CritiqueTool] Evaluating planning response against user requirements.');
-      
+      logger.info('Evaluating planning response against user requirements');
+
       // First, extract requirements from user input
       const requirementsResult = await this.extractRequirements(userInput, apiKey);
       if (!requirementsResult.success) {
@@ -103,8 +137,8 @@ export class CritiqueTool implements Tool<CritiqueToolArgs, CritiqueToolResult> 
 
       // Then evaluate the planning response against the requirements
       const evaluationResult = await this.evaluateResponse(
-        userInput, 
-        finalResponse, 
+        userInput,
+        finalResponse,
         requirementsResult.requirements,
         apiKey
       );
@@ -114,16 +148,18 @@ export class CritiqueTool implements Tool<CritiqueToolArgs, CritiqueToolResult> 
       }
 
       const criteria = evaluationResult.criteria;
-      
+
       // Generate feedback only if criteria not satisfied
       let feedback = undefined;
       if (!criteria.satisfiesCriteria) {
         feedback = await this.generateFeedback(criteria, userInput, finalResponse, apiKey);
       }
 
-      console.log('[CritiqueTool] Evaluation complete:', 
-        criteria.satisfiesCriteria ? 'Requirements satisfied' : 'Requirements not satisfied');
-      
+      logger.info('Evaluation complete', {
+        satisfiesCriteria: criteria.satisfiesCriteria,
+        result: criteria.satisfiesCriteria ? 'Requirements satisfied' : 'Requirements not satisfied'
+      });
+
       return {
         satisfiesCriteria: criteria.satisfiesCriteria,
         feedback,
@@ -131,7 +167,7 @@ export class CritiqueTool implements Tool<CritiqueToolArgs, CritiqueToolResult> 
       };
 
     } catch (error: any) {
-      console.error('[CritiqueTool] Error during evaluation process:', error);
+      logger.error('Error during evaluation process', error);
       return {
         satisfiesCriteria: false,
         success: false,
@@ -158,13 +194,18 @@ Return a JSON array of requirement statements. Example format:
 ["Requirement 1", "Requirement 2", ...]`;
 
     try {
-      const modelName = 'gpt-4.1-mini-2025-04-14';
-      const response = await OpenAIClient.callOpenAI(
-        apiKey,
-        modelName,
-        userPrompt,
-        { systemPrompt, temperature: 0.1 }
-      );
+      const { model, provider } = AIChatPanel.getNanoModelWithProvider();
+      const llm = LLMClient.getInstance();
+      
+      const response = await llm.call({
+        provider,
+        model,
+        messages: [
+          { role: 'user', content: userPrompt }
+        ],
+        systemPrompt,
+        temperature: 0.1,
+      });
 
       if (!response.text) {
         return { success: false, requirements: [], error: 'No response received' };
@@ -179,7 +220,7 @@ Return a JSON array of requirement statements. Example format:
       const requirements = JSON.parse(requirementsMatch[0]);
       return { success: true, requirements };
     } catch (error: any) {
-      console.error('[CritiqueTool] Error extracting requirements:', error);
+      logger.error('Error extracting requirements', error);
       return { success: false, requirements: [], error: String(error) };
     }
   }
@@ -188,8 +229,8 @@ Return a JSON array of requirement statements. Example format:
    * Evaluate planning response against requirements
    */
   private async evaluateResponse(
-    userInput: string, 
-    finalResponse: string, 
+    userInput: string,
+    finalResponse: string,
     requirements: string[],
     apiKey: string
   ): Promise<{success: boolean, criteria?: EvaluationCriteria, error?: string}> {
@@ -246,13 +287,18 @@ Return a JSON object evaluating the plan against the requirements using this sch
 ${JSON.stringify(evaluationSchema, null, 2)}`;
 
     try {
-      const modelName = 'gpt-4.1-mini-2025-04-14';
-      const response = await OpenAIClient.callOpenAI(
-        apiKey,
-        modelName,
-        userPrompt,
-        { systemPrompt, temperature: 0.1 }
-      );
+      const { model, provider } = AIChatPanel.getNanoModelWithProvider();
+      const llm = LLMClient.getInstance();
+      
+      const response = await llm.call({
+        provider,
+        model,
+        messages: [
+          { role: 'user', content: userPrompt }
+        ],
+        systemPrompt,
+        temperature: 0.1,
+      });
 
       if (!response.text) {
         return { success: false, error: 'No response received' };
@@ -267,7 +313,7 @@ ${JSON.stringify(evaluationSchema, null, 2)}`;
       const criteria = JSON.parse(jsonMatch[0]) as EvaluationCriteria;
       return { success: true, criteria };
     } catch (error: any) {
-      console.error('[CritiqueTool] Error evaluating response:', error);
+      logger.error('Error evaluating response', error);
       return { success: false, error: String(error) };
     }
   }
@@ -301,18 +347,23 @@ Provide clear, actionable feedback focused on helping improve the final response
 Be concise, specific, and constructive.`;
 
     try {
-      const modelName = 'gpt-4.1-mini-2025-04-14';
-      const response = await OpenAIClient.callOpenAI(
-        apiKey,
-        modelName,
-        userPrompt,
-        { systemPrompt, temperature: 0.7 }
-      );
+      const { model, provider } = AIChatPanel.getNanoModelWithProvider();
+      const llm = LLMClient.getInstance();
+      
+      const response = await llm.call({
+        provider,
+        model,
+        messages: [
+          { role: 'user', content: userPrompt }
+        ],
+        systemPrompt,
+        temperature: 0.7,
+      });
 
       return response.text || 'The plan does not meet all requirements, but no specific feedback could be generated.';
     } catch (error: any) {
-      console.error('[CritiqueTool] Error generating feedback:', error);
+      logger.error('Error generating feedback', error);
       return 'Failed to generate detailed feedback, but the plan does not meet all requirements.';
     }
   }
-} 
+}

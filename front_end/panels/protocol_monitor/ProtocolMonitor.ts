@@ -143,9 +143,9 @@ const enumsByName = ProtocolClient.InspectorBackend.inspectorBackend.enumMap as 
 export interface Message {
   id?: number;
   method: string;
-  error?: {[x: string]: unknown};
-  result?: {[x: string]: unknown};
-  params?: {[x: string]: unknown};
+  error?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  params?: Record<string, unknown>;
   requestTime: number;
   elapsedTime?: number;
   sessionId?: string;
@@ -161,9 +161,7 @@ export interface LogMessage {
 
 export interface ProtocolDomain {
   readonly domain: string;
-  readonly metadata: {
-    [commandName: string]: {parameters: Parameter[], description: string, replyArgs: string[]},
-  };
+  readonly metadata: Record<string, {parameters: Parameter[], description: string, replyArgs: string[]}>;
 }
 
 export interface ViewInput {
@@ -206,7 +204,7 @@ export const DEFAULT_VIEW: View = (input, output, target) => {
                              sidebar-initial-size="400"
                              sidebar-visibility=${input.sidebarVisible ? 'visible' : 'hidden'}
                              @change=${input.onSplitChange}>
-          <div slot="main" class="vbox">
+          <div slot="main" class="vbox protocol-monitor-main">
             <devtools-toolbar class="protocol-monitor-toolbar"
                                jslog=${VisualLogging.toolbar('top')}>
                <devtools-button title=${i18nString(UIStrings.record)}
@@ -239,7 +237,8 @@ export const DEFAULT_VIEW: View = (input, output, target) => {
                 </datalist>
               </devtools-toolbar-input>
             </devtools-toolbar>
-            <devtools-split-view direction="column" sidebar-position="second" name="protocol-monitor-panel-split" sidebar-initial-size="250">
+            <devtools-split-view direction="column" sidebar-position="second"
+                                 name="protocol-monitor-panel-split" sidebar-initial-size="250">
               <devtools-data-grid
                   striped
                   slot="main"
@@ -248,14 +247,30 @@ export const DEFAULT_VIEW: View = (input, output, target) => {
                   .filters=${input.parseFilter(input.filter)}>
                 <table>
                     <tr>
-                      <th id="type" sortable style="text-align: center" hideable weight="1">${i18nString(UIStrings.type)}</th>
-                      <th id="method" weight="5">${i18nString(UIStrings.method)}</th>
-                      <th id="request" hideable weight="5">${i18nString(UIStrings.request)}</th>
-                      <th id="response" hideable weight="5">${i18nString(UIStrings.response)}</th>
-                      <th id="elapsed-time" sortable hideable weight="2">${i18nString(UIStrings.elapsedTime)}</th>
-                      <th id="timestamp" sortable hideable weight="5">${i18nString(UIStrings.timestamp)}</th>
-                      <th id="target" sortable hideable weight="5">${i18nString(UIStrings.target)}</th>
-                      <th id="session" sortable hideable weight="5">${i18nString(UIStrings.session)}</th>
+                      <th id="type" sortable style="text-align: center" hideable weight="1">
+                        ${i18nString(UIStrings.type)}
+                      </th>
+                      <th id="method" weight="5">
+                        ${i18nString(UIStrings.method)}
+                      </th>
+                      <th id="request" hideable weight="5">
+                        ${i18nString(UIStrings.request)}
+                      </th>
+                      <th id="response" hideable weight="5">
+                        ${i18nString(UIStrings.response)}
+                      </th>
+                      <th id="elapsed-time" sortable hideable weight="2">
+                        ${i18nString(UIStrings.elapsedTime)}
+                      </th>
+                      <th id="timestamp" sortable hideable weight="5">
+                        ${i18nString(UIStrings.timestamp)}
+                      </th>
+                      <th id="target" sortable hideable weight="5">
+                        ${i18nString(UIStrings.target)}
+                      </th>
+                      <th id="session" sortable hideable weight="5">
+                        ${i18nString(UIStrings.session)}
+                      </th>
                     </tr>
                     ${
             input.messages.map(
@@ -477,7 +492,7 @@ export class ProtocolMonitorImpl extends UI.Panel.Panel {
       if (!this.#selectedMessage) {
         return;
       }
-      const parameters = this.#selectedMessage.params as {[x: string]: unknown};
+      const parameters = this.#selectedMessage.params as Record<string, unknown>;
       const targetId = this.#selectedMessage.target?.id() || '';
       const command = message.method;
       this.#command = JSON.stringify({command, parameters});
@@ -573,7 +588,7 @@ export class ProtocolMonitorImpl extends UI.Panel.Panel {
   }
 
   private messageSent(
-      message: {domain: string, method: string, params: {[x: string]: unknown}, id: number, sessionId?: string},
+      message: {domain: string, method: string, params: Record<string, unknown>, id: number, sessionId?: string},
       target: ProtocolClient.InspectorBackend.TargetBase|null): void {
     const messageRecord = {
       method: message.method,
@@ -648,8 +663,8 @@ export class CommandAutocompleteSuggestionProvider {
 
 export class InfoWidget extends UI.Widget.VBox {
   private readonly tabbedPane: UI.TabbedPane.TabbedPane;
-  request: {[x: string]: unknown}|undefined;
-  response: {[x: string]: unknown}|undefined;
+  request: Record<string, unknown>|undefined;
+  response: Record<string, unknown>|undefined;
   type: 'sent'|'received'|undefined;
   selectedTab: 'request'|'response'|undefined;
   constructor(element: HTMLElement) {
@@ -689,7 +704,7 @@ export class InfoWidget extends UI.Widget.VBox {
   }
 }
 
-export function parseCommandInput(input: string): {command: string, parameters: {[paramName: string]: unknown}} {
+export function parseCommandInput(input: string): {command: string, parameters: Record<string, unknown>} {
   // If input cannot be parsed as json, we assume it's the command name
   // for a command without parameters. Otherwise, we expect an object
   // with "command"/"method"/"cmd" and "parameters"/"params"/"args"/"arguments" attributes.

@@ -39,11 +39,13 @@ const str_ = i18n.i18n.registerUIStrings('panels/changes/CombinedDiffView.ts', U
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 interface SingleDiffViewInput {
+  // `DiffArray` can be empty for the modified files that
+  // do not have any diff. (e.g. the file content transition was A -> B -> A)
+  diff: Diff.Diff.DiffArray;
   fileName: string;
   fileUrl: string;
   mimeType: string;
   icon: Lit.TemplateResult;
-  diff: Diff.Diff.DiffArray;
   copied: boolean;
   selectedFileUrl?: string;
   onCopy: (fileUrl: string) => void;
@@ -226,42 +228,34 @@ export class CombinedDiffView extends UI.Widget.Widget {
                                    // `requestDiff` caches the response from the previous `requestDiff` calls if the file did not change
                                    // so we can safely call it here without concerns for performance.
                                    const diffResponse = await this.#workspaceDiff?.requestDiff(modifiedUISourceCode);
-                                   if (!diffResponse || diffResponse.diff.length === 0) {
-                                     return;
-                                   }
-
                                    return {
-                                     diff: diffResponse.diff,
+                                     diff: diffResponse?.diff ?? [],
                                      uiSourceCode: modifiedUISourceCode,
                                    };
                                  }))).filter(uiSourceCodeAndDiff => !!uiSourceCodeAndDiff);
 
-    const singleDiffViewInputs =
-        uiSourceCodeAndDiffs.map(
-            ({uiSourceCode, diff}) => {
-              let displayText = uiSourceCode.fullDisplayName();
-              // If the UISourceCode is backed by a workspace, we show the path as "{workspace-name}/path/relative/to/workspace"
-              const fileSystemUiSourceCode =
-                  Persistence.Persistence.PersistenceImpl.instance().fileSystem(uiSourceCode);
-              if (fileSystemUiSourceCode) {
-                displayText = [
-                  fileSystemUiSourceCode.project().displayName(),
-                  ...Persistence.FileSystemWorkspaceBinding.FileSystemWorkspaceBinding.relativePath(
-                      fileSystemUiSourceCode)
-                ].join('/');
-              }
-              return {
-                diff,
-                fileName: `${uiSourceCode.isDirty() ? '*' : ''}${displayText}`,
-                fileUrl: uiSourceCode.url(),
-                mimeType: uiSourceCode.mimeType(),
-                icon: PanelUtils.PanelUtils.getIconForSourceFile(uiSourceCode),
-                copied: this.#copiedFiles[uiSourceCode.url()],
-                selectedFileUrl: this.#selectedFileUrl,
-                onCopy: this.#onCopyFileContent.bind(this),
-                onFileNameClick: this.#onFileNameClick.bind(this),
-              };
-            });
+    const singleDiffViewInputs = uiSourceCodeAndDiffs.map(({uiSourceCode, diff}) => {
+      let displayText = uiSourceCode.fullDisplayName();
+      // If the UISourceCode is backed by a workspace, we show the path as "{workspace-name}/path/relative/to/workspace"
+      const fileSystemUiSourceCode = Persistence.Persistence.PersistenceImpl.instance().fileSystem(uiSourceCode);
+      if (fileSystemUiSourceCode) {
+        displayText = [
+          fileSystemUiSourceCode.project().displayName(),
+          ...Persistence.FileSystemWorkspaceBinding.FileSystemWorkspaceBinding.relativePath(fileSystemUiSourceCode)
+        ].join('/');
+      }
+      return {
+        diff,
+        fileName: `${uiSourceCode.isDirty() ? '*' : ''}${displayText}`,
+        fileUrl: uiSourceCode.url(),
+        mimeType: uiSourceCode.mimeType(),
+        icon: PanelUtils.PanelUtils.getIconForSourceFile(uiSourceCode),
+        copied: this.#copiedFiles[uiSourceCode.url()],
+        selectedFileUrl: this.#selectedFileUrl,
+        onCopy: this.#onCopyFileContent.bind(this),
+        onFileNameClick: this.#onFileNameClick.bind(this),
+      };
+    });
 
     this.#view({singleDiffViewInputs}, this.#viewOutput, this.contentElement);
   }

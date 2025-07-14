@@ -2,27 +2,57 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import { Tool, ErrorResult } from './Tools.js';
 import { AgentService } from '../core/AgentService.js';
-import { OpenAIClient } from '../core/OpenAIClient.js';
-import { GetAccessibilityTreeTool } from './Tools.js';
+import { LLMClient } from '../LLM/LLMClient.js';
+import { AIChatPanel } from '../ui/AIChatPanel.js';
+
+import { GetAccessibilityTreeTool, type Tool, type ErrorResult } from './Tools.js';
 
 export interface FullPageAccessibilityTreeToMarkdownResult {
   success: boolean;
   markdown: string;
   treeLength: number;
   truncated: boolean;
-  metadata?: { url: string, title: string };
+  metadata?: { url: string, title?: string, urls?: string };
 }
 
 export class FullPageAccessibilityTreeToMarkdownTool implements Tool<Record<string, unknown>, FullPageAccessibilityTreeToMarkdownResult | ErrorResult> {
   name = 'accessibility_tree_full_to_markdown';
   description = 'Gets the full page accessibility tree, sends it to an LLM, and returns a Markdown summary of the entire tree.';
 
+  private async createToolTracingObservation(toolName: string, args: any): Promise<void> {
+    try {
+      const { getCurrentTracingContext, createTracingProvider } = await import('../tracing/TracingConfig.js');
+      const context = getCurrentTracingContext();
+      if (context) {
+        const tracingProvider = createTracingProvider();
+        await tracingProvider.createObservation({
+          id: `event-tool-execute-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          name: `Tool Execute: ${toolName}`,
+          type: 'event',
+          startTime: new Date(),
+          input: { 
+            toolName, 
+            toolArgs: args,
+            contextInfo: `Direct tool execution in ${toolName}`
+          },
+          metadata: {
+            executionPath: 'direct-tool',
+            toolName
+          }
+        }, context.traceId);
+      }
+    } catch (tracingError) {
+      // Don't fail tool execution due to tracing errors
+      console.error(`[TRACING ERROR in ${toolName}]`, tracingError);
+    }
+  }
+
   schema = {
     type: 'object',
     properties: {},
   };
+
 
   private getSystemPrompt(): string {
     return `You are an expert Markdown tool. 
@@ -32,6 +62,7 @@ export class FullPageAccessibilityTreeToMarkdownTool implements Tool<Record<stri
   }
 
   async execute(_args: Record<string, unknown>): Promise<FullPageAccessibilityTreeToMarkdownResult | ErrorResult> {
+    await this.createToolTracingObservation(this.name, _args);
     const getAccTreeTool = new GetAccessibilityTreeTool();
     const treeResult = await getAccTreeTool.execute({ reasoning: 'Get full accessibility tree for Markdown conversion' });
     if ('error' in treeResult) {
@@ -47,27 +78,39 @@ export class FullPageAccessibilityTreeToMarkdownTool implements Tool<Record<stri
     if (!apiKey) {
       return { error: 'API key not configured.' };
     }
-    const modelName = 'gpt-4.1-nano-2025-04-14';
+    const { model, provider } = AIChatPanel.getNanoModelWithProvider();
 
     const prompt = `Accessibility Tree:\n\n\`\`\`\n${accessibilityTreeString}\n\`\`\``;
 
     try {
-      const openAIResponse = await OpenAIClient.callOpenAI(
-        apiKey,
-        modelName,
-        prompt,
-        { systemPrompt: this.getSystemPrompt() }
-      );
-      if (openAIResponse.text) {
+      const llm = LLMClient.getInstance();
+      const llmResponse = await llm.call({
+        provider,
+        model,
+        messages: [
+          { role: 'system', content: this.getSystemPrompt() },
+          { role: 'user', content: prompt }
+        ],
+        systemPrompt: this.getSystemPrompt(),
+        temperature: 0.7
+      });
+      const response = llmResponse.text;
+      if (response) {
         return {
           success: true,
-          markdown: openAIResponse.text,
+          markdown: response,
           treeLength: accessibilityTreeString.length,
           truncated: false,
-          metadata: treeResult.iframes && treeResult.iframes.length > 0 ? { title: 'Contains iframes', url: '' } : undefined,
+          metadata: {
+            ...(treeResult.iframes && treeResult.iframes.length > 0 && { title: 'Contains iframes' }),
+            ...(treeResult.idToUrl && Object.keys(treeResult.idToUrl).length > 0 && { 
+              urls: Object.values(treeResult.idToUrl).slice(0, 5).join(', ') // Include up to 5 URLs found
+            }),
+            url: ''
+          },
         };
       }
-      return { error: 'No Markdown response from OpenAI.' };
+      return { error: 'No Markdown response from LLM.' };
     } catch (err) {
       return { error: err instanceof Error ? err.message : String(err) };
     }

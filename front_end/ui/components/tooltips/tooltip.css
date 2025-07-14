@@ -12,13 +12,13 @@
   border: none;
   padding: 0;
   overflow: visible;
-  position-area: bottom;
-  position-visibility: anchors-visible;
-  /* stylelint-disable-next-line declaration-property-value-no-unknown */
-  justify-self: anchor-center;
-  position-try-fallbacks: flip-block;
+  position: absolute;
+  max-width: var(--devtools-window-width);
+  max-height: var(--devtools-window-height);
+  visibility: hidden;
 
   & .container {
+    max-width: 100%;
     width: max-content;
     margin: var(--sys-size-2);
     font: var(--sys-typescale-body4-regular);
@@ -33,12 +33,11 @@
 :host([variant='rich']) {
   justify-self: unset;
   margin: 0 var(--tooltip-viewport-distance) var(--tooltip-viewport-distance) 0;
-  position-area: bottom span-right;
-  position-try-fallbacks: --bottom-left, --bottom-center, --top-right,
-    --top-left, --top-center;
+  position: absolute;
 
   & .container {
-    max-width: calc(100vw - 2 * (/* host margin */ var(--tooltip-viewport-distance) +
+    max-width: calc(var(--devtools-window-width) - 2 * (
+                                 /* host margin */ var(--tooltip-viewport-distance) +
                                  /* container horizontal padding */ var(--sys-size-8) +
                                  /* container margin */ var(--sys-size-3)));
     margin-inline: 0;
@@ -49,38 +48,4 @@
     padding: var(--sys-size-6) var(--sys-size-8);
     overflow: auto;
   }
-}
-
-@position-try --bottom-left {
-  /* stylelint-disable-next-line at-rule-descriptor-no-unknown */
-  position-area: bottom span-left;
-  margin: 0 0 var(--tooltip-viewport-distance) var(--tooltip-viewport-distance);
-}
-
-@position-try --top-right {
-  /* stylelint-disable-next-line at-rule-descriptor-no-unknown */
-  position-area: top span-right;
-  margin: var(--tooltip-viewport-distance) var(--tooltip-viewport-distance) 0 0;
-}
-
-@position-try --top-left {
-  /* stylelint-disable-next-line at-rule-descriptor-no-unknown */
-  position-area: top span-left;
-  margin: var(--tooltip-viewport-distance) 0 0 var(--tooltip-viewport-distance);
-}
-
-@position-try --bottom-center {
-  justify-self: anchor-center;
-  /* stylelint-disable-next-line at-rule-descriptor-no-unknown */
-  position-area: bottom;
-  margin: 0 var(--tooltip-viewport-distance) var(--tooltip-viewport-distance)
-    var(--tooltip-viewport-distance);
-}
-
-@position-try --top-center {
-  justify-self: anchor-center;
-  /* stylelint-disable-next-line at-rule-descriptor-no-unknown */
-  position-area: top;
-  margin: var(--tooltip-viewport-distance) var(--tooltip-viewport-distance) 0
-    var(--tooltip-viewport-distance);
 }

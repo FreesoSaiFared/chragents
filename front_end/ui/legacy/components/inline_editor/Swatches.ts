@@ -11,13 +11,7 @@ import * as UI from '../../legacy.js';
 
 import bezierSwatchStyles from './bezierSwatch.css.js';
 import type {CSSShadowModel} from './CSSShadowEditor.js';
-import cssShadowSwatchStylesRaw from './cssShadowSwatch.css.js';
-
-/* eslint-disable rulesdir/no-adopted-style-sheets --
- * TODO(crbug.com/391381439): Fully migrate off of Constructable Stylesheets.
- **/
-const cssShadowSwatchStyles = new CSSStyleSheet();
-cssShadowSwatchStyles.replaceSync(cssShadowSwatchStylesRaw);
+import cssShadowSwatchStyles from './cssShadowSwatch.css.js';
 
 export class BezierSwatch extends HTMLElement {
   readonly #icon: IconButton.Icon.Icon;
@@ -61,22 +55,21 @@ export class BezierSwatch extends HTMLElement {
 customElements.define('devtools-bezier-swatch', BezierSwatch);
 
 export class CSSShadowSwatch extends HTMLElement {
-  readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #icon: IconButton.Icon.Icon;
   readonly #model: CSSShadowModel;
 
   constructor(model: CSSShadowModel) {
     super();
     this.#model = model;
-    this.#shadow.adoptedStyleSheets = [
-      cssShadowSwatchStyles,
-    ];
 
-    render(
-        html`<devtools-icon name="shadow" class="shadow-swatch-icon"></devtools-icon><slot></slot>`, this.#shadow,
-        {host: this});
+    // clang-format off
+    render(html`
+        <style>${cssShadowSwatchStyles}</style>
+        <devtools-icon tabindex=-1 name="shadow" class="shadow-swatch-icon"></devtools-icon>`,
+        this, {host: this});
+    // clang-format on
 
-    this.#icon = this.#shadow.querySelector('devtools-icon') as IconButton.Icon.Icon;
+    this.#icon = this.querySelector('devtools-icon') as IconButton.Icon.Icon;
   }
 
   model(): CSSShadowModel {

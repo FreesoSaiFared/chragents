@@ -24,11 +24,6 @@ import {
 import {openPanelViaMoreTools} from '../helpers/settings-helpers.js';
 
 describe('A user can navigate across', function() {
-  // These tests move between panels, which takes time.
-  if (this.timeout() !== 0) {
-    this.timeout(10000);
-  }
-
   beforeEach(async function() {
     await goToResource('cross_tool/default.html');
     await closeAllCloseableTabs();
@@ -52,8 +47,7 @@ describe('A user can navigate across', function() {
     await waitFor('.panel[aria-label="sources"]');
   });
 
-  // Flaky test.
-  it.skip('[crbug.com/327072692] Performance -> Sources', async () => {
+  it('Performance -> Sources', async () => {
     await navigateToPerformanceTab();
 
     await startRecording();
@@ -74,7 +68,7 @@ describe('A user can navigate across', function() {
 
     await stopRecording();
 
-    await navigateToBottomUpTab();
+    await navigateToBottomUpTab(undefined, 'script-location');
 
     await click('.devtools-link[title*="default.html"]');
     await waitFor('.panel[aria-label="sources"]');
@@ -82,8 +76,6 @@ describe('A user can navigate across', function() {
 });
 
 describe('A user can move tabs', function() {
-  this.timeout(10000);
-
   it('Move Memory to drawer', async () => {
     await navigateToMemoryTab();
     await tabExistsInMainPanel(MEMORY_TAB_ID);
@@ -101,8 +93,7 @@ describe('A user can move tabs', function() {
 });
 
 describe('A user can open panels via the "panel" query param', function() {
-  // Flaky on windows
-  it.skipOnPlatforms(['win32'], '[crbug.com/377280477] Layers is shown', async () => {
+  it('Layers is shown', async () => {
     await reloadDevTools({queryParams: {panel: 'layers'}});
     await tabExistsInMainPanel(LAYERS_TAB_SELECTOR);
   });
