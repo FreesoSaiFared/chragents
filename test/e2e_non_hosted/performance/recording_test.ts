@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,7 +42,7 @@ describe('The Performance panel', function() {
 
   it('can import a stored trace file', async ({devToolsPage, inspectedPage}) => {
     await navigateToPerformanceTab('empty', devToolsPage, inspectedPage);
-    const uploadProfileHandle = await devToolsPage.waitFor<HTMLInputElement>('input[type=file]');
+    const uploadProfileHandle = await devToolsPage.waitFor('input[type=file]');
     assert.isNotNull(uploadProfileHandle, 'unable to upload the performance profile');
     const testTrace = path.join(GEN_DIR, 'test/e2e/resources/performance/timeline/web.dev-trace.json.gz');
     await uploadProfileHandle.uploadFile(testTrace);

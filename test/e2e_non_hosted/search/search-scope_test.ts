@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,9 +20,7 @@ describe('The Search Panel', () => {
     await openPanelViaMoreTools('Search', devToolsPage);
     await devToolsPage.waitFor(SEARCH_QUERY);
     const inputElement = await devToolsPage.$(SEARCH_QUERY);
-    if (!inputElement) {
-      assert.fail('Unable to find search input field');
-    }
+    assert.isOk(inputElement, 'Unable to find search input field');
 
     // Go ahead and search.
     await inputElement.focus();
@@ -49,14 +47,15 @@ describe('The Search Panel', () => {
       const fileNameElement = value.querySelector(SEARCH_RESULT_FILE_NAME);
       const matchesCountElement = value.querySelector(SEARCH_RESULT_MATCHES_COUNT);
       if (!fileNameElement) {
-        assert.fail('Could not find search result file name element.');
+        throw new Error('Could not find search result file name element.');
       }
       if (!matchesCountElement) {
-        assert.fail('Could not find search result matches count element.');
+        throw new Error('Could not find search result matches count element.');
       }
+
       // Wrap the entries with the file details.
       return {
-        fileName: fileNameElement.firstChild?.textContent || '',
+        fileName: fileNameElement.deepInnerText().split('\u2014')[0],
         matchesCount: parseInt(matchesCountElement.textContent || '', 10),
       };
     })));
@@ -81,10 +80,10 @@ describe('The Search Panel', () => {
       const matchContentElement = value.querySelector(SEARCH_MATCH_CONTENT);
 
       if (!lineNumberElement) {
-        assert.fail('Could not find search line number element.');
+        throw new Error('Could not find search line number element.');
       }
       if (!matchContentElement) {
-        assert.fail('Could not find search match content element.');
+        throw new Error('Could not find search match content element.');
       }
 
       return {

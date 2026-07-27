@@ -1,6 +1,8 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+import type {TSESTree} from '@typescript-eslint/utils';
 
 import {createRule} from './utils/ruleCreator.ts';
 
@@ -20,9 +22,9 @@ export default createRule({
   },
   defaultOptions: [],
   create: function(context) {
-    const sourceCode = context.sourceCode ?? context.getSourceCode();
+    const sourceCode = context.sourceCode;
 
-    function checkCommentAndReportError(comment) {
+    function checkCommentAndReportError(comment: TSESTree.Comment) {
       const trimmed = comment.value.trim();
       if (trimmed.startsWith('console.log(')) {
         context.report({

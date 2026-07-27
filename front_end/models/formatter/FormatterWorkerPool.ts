@@ -1,13 +1,11 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
 import * as FormatterActions from '../../entrypoints/formatter_worker/FormatterActions.js';  // eslint-disable-line rulesdir/es-modules-import
 
-export {DefinitionKind, type ScopeTreeNode} from '../../entrypoints/formatter_worker/FormatterActions.js';
-
-const MAX_WORKERS = Math.max(2, navigator.hardwareConcurrency - 1);
+export {DefinitionKind, ScopeKind, type ScopeTreeNode} from '../../entrypoints/formatter_worker/FormatterActions.js';
 
 let formatterWorkerPoolInstance: FormatterWorkerPool;
 
@@ -37,12 +35,14 @@ export class FormatterWorkerPool {
   }
 
   private processNextTask(): void {
+    const maxWorkers = Math.max(2, navigator.hardwareConcurrency - 1);
+
     if (!this.taskQueue.length) {
       return;
     }
 
     let freeWorker = [...this.workerTasks.keys()].find(worker => !this.workerTasks.get(worker));
-    if (!freeWorker && this.workerTasks.size < MAX_WORKERS) {
+    if (!freeWorker && this.workerTasks.size < maxWorkers) {
       freeWorker = this.createWorker();
     }
     if (!freeWorker) {

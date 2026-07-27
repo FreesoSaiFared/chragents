@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,7 +43,7 @@ describeWithMockConnection('IndexedDBModel', () => {
 
   describe('StorageKeyAdded', () => {
     it('registers database only when the model is enabled', async () => {
-      const databaseAdeddSpy = sinon.spy(indexedDBModel, 'dispatchEventToListeners');
+      const databaseAddedSpy = sinon.spy(indexedDBModel, 'dispatchEventToListeners');
       const dbNamePromise = new Promise<string>(resolve => {
         indexedDBModel.addEventListener(Resources.IndexedDBModel.Events.DatabaseAdded, event => {
           resolve(event.data.databaseId.name);
@@ -52,7 +52,7 @@ describeWithMockConnection('IndexedDBModel', () => {
       setMockConnectionResponseHandler('IndexedDB.requestDatabaseNames', () => ({databaseNames: ['test-database']}));
 
       manager?.storageBucketCreatedOrUpdated({bucketInfo: testStorageBucketInfo});
-      assert.isFalse(databaseAdeddSpy.calledWithExactly(
+      assert.isFalse(databaseAddedSpy.calledWithExactly(
           Resources.IndexedDBModel.Events.DatabaseAdded as unknown as sinon.SinonMatcher,
           {model: indexedDBModel, databaseId: testDBId}));
 
@@ -144,7 +144,7 @@ describeWithMockConnection('IndexedDBModel', () => {
       storageBucket: testStorageBucket,
       databaseName: 'test-database',
       objectStoreName: 'test-store',
-      indexName: '',
+      indexName: undefined,
       skipCount: 0,
       pageSize: 50,
       keyRange: undefined,

@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -17,12 +17,12 @@ const {render, html} = Lit;
 
 const UIStrings = {
   /**
-   *@description A context menu item in the Minimap Breadcrumb context menu.
+   * @description A context menu item in the Minimap Breadcrumb context menu.
    * This context menu option activates the breadcrumb that the context menu was opened on.
    */
   activateBreadcrumb: 'Activate breadcrumb',
   /**
-   *@description A context menu item in the Minimap Breadcrumb context menu.
+   * @description A context menu item in the Minimap Breadcrumb context menu.
    * This context menu option removed all the child breadcrumbs and activates
    * the breadcrumb that the context menu was opened on.
    */
@@ -33,10 +33,12 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/BreadcrumbsUI.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-// `initialBreadcrumb` is the first breadcrumb in the breadcrumbs linked list. Since
-// breadcrumbs are a linked list, the first breadcrumb is enought to be able to iterate through all of them.
-//
-// `activeBreadcrumb` is the currently active breadcrumb that the timeline is limited to.
+/**
+ * `initialBreadcrumb` is the first breadcrumb in the breadcrumbs linked list. Since
+ * breadcrumbs are a linked list, the first breadcrumb is enough to be able to iterate through all of them.
+ *
+ * `activeBreadcrumb` is the currently active breadcrumb that the timeline is limited to.
+ **/
 export interface BreadcrumbsUIData {
   initialBreadcrumb: Trace.Types.File.Breadcrumb;
   activeBreadcrumb: Trace.Types.File.Breadcrumb;
@@ -118,15 +120,10 @@ export class BreadcrumbsUI extends HTMLElement {
           </div>
           ${breadcrumb.child !== null ?
             html`
-            <devtools-icon .data=${{
-              iconName: 'chevron-right',
-              color: 'var(--icon-default)',
-              width: '16px',
-              height: '16px',
-            }}>`
+            <devtools-icon name="chevron-right" class="medium">`
             : ''}
       `;
-              // clang-format on
+    // clang-format on
   }
 
   #render(): void {

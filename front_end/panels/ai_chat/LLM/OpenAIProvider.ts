@@ -7,6 +7,7 @@ import { LLMBaseProvider } from './LLMProvider.js';
 import { LLMRetryManager } from './LLMErrorHandler.js';
 import { LLMResponseParser } from './LLMResponseParser.js';
 import { createLogger } from '../core/Logger.js';
+import { BUILD_CONFIG } from '../core/BuildConfig.js';
 
 const logger = createLogger('OpenAIProvider');
 
@@ -54,6 +55,10 @@ export class OpenAIProvider extends LLMBaseProvider {
     if (modelName.startsWith('o')) {
       return ModelFamily.O;
     }
+    // GPT-5 models also don't support temperature parameter, treat them like O-series
+    if (modelName.includes('gpt-5')) {
+      return ModelFamily.O; // Treat GPT-5 like O-series for parameter compatibility
+    }
     // Otherwise, assume it's a GPT model (gpt-3.5-turbo, gpt-4, etc.)
     return ModelFamily.GPT;
   }
@@ -81,7 +86,7 @@ export class OpenAIProvider extends LLMBaseProvider {
    * Throws error if conversion fails
    */
   private convertContentToResponsesAPI(content: MessageContent | undefined, modelFamily: ModelFamily): any {
-    // For GPT models, return simple string content
+    // For GPT models (including GPT-4.1), handle content conversion
     if (modelFamily === ModelFamily.GPT) {
       if (!content) {
         return '';
@@ -91,15 +96,16 @@ export class OpenAIProvider extends LLMBaseProvider {
       }
       // For multimodal content on GPT models, we need to return the structured format
       if (Array.isArray(content)) {
-        // Return as OpenAI Chat API format for GPT models
+        // All models use Responses API format since we're using /v1/responses endpoint
+        // This includes GPT-4.1 models which require input_text/input_image types
         return content.map((item, index) => {
           if (item.type === 'text') {
-            return { type: 'text', text: item.text };
+            return { type: 'input_text', text: item.text };
           } else if (item.type === 'image_url') {
             if (!item.image_url?.url) {
               throw new Error(`Invalid image content at index ${index}: missing image_url.url`);
             }
-            return { type: 'image_url', image_url: item.image_url };
+            return { type: 'input_image', image_url: item.image_url.url };
           } else {
             throw new Error(`Unknown content type at index ${index}: ${(item as any).type}`);
           }
@@ -301,7 +307,7 @@ export class OpenAIProvider extends LLMBaseProvider {
 
       if (!response.ok) {
         const errorData = await response.json();
-        logger.error('OpenAI API error:', errorData);
+        logger.error('OpenAI API error:', JSON.stringify(errorData));
         const error = new Error(`OpenAI API error: ${response.statusText} - ${errorData?.error?.message || 'Unknown error'}`);
         
         // Create tracing observation for API errors
@@ -319,7 +325,7 @@ export class OpenAIProvider extends LLMBaseProvider {
 
       return data;
     } catch (error) {
-      logger.error('OpenAI API request failed:', error);
+      logger.error('OpenAI API request failed:', error instanceof Error ? error.message : String(error));
       
       // Create tracing observation for network/fetch errors
       if (error instanceof Error) {
@@ -410,10 +416,88 @@ export class OpenAIProvider extends LLMBaseProvider {
   }
 
   /**
+   * Fetch available models from OpenAI API
+   * This method makes an actual API call and throws on error (good for validation)
+   */
+  async fetchModels(): Promise<Array<{id: string; name: string}>> {
+    const response = await fetch('https://api.openai.com/v1/models', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
+      throw new Error(`OpenAI API error: ${response.statusText} - ${errorData?.error?.message || 'Unknown error'}`);
+    }
+
+    const data = await response.json();
+
+    // Models to include (chat/reasoning models that work with Responses API)
+    const SUPPORTED_PREFIXES = ['gpt-4.1', 'gpt-4o', 'gpt-5', 'o1', 'o3', 'o4'];
+
+    // Models to exclude (non-chat models like TTS, STT, embeddings, etc.)
+    const EXCLUDED_PATTERNS = ['transcribe', 'tts', 'audio', 'image', 'embedding', 'moderation', 'whisper', 'dall-e', 'realtime', 'codex', 'chat', 'search'];
+
+    return data.data
+      .filter((model: any) => {
+        const id = model.id.toLowerCase();
+        // Must start with a supported prefix
+        const hasPrefix = SUPPORTED_PREFIXES.some(prefix => id.startsWith(prefix));
+        // Must not contain excluded patterns
+        const isExcluded = EXCLUDED_PATTERNS.some(pattern => id.includes(pattern));
+        return hasPrefix && !isExcluded;
+      })
+      .map((model: any) => ({
+        id: model.id,
+        name: model.id
+      }));
+  }
+
+  /**
    * Get all OpenAI models supported by this provider
    */
   async getModels(): Promise<ModelInfo[]> {
-    // Return hardcoded OpenAI models with their capabilities
+    try {
+      const models = await this.fetchModels();
+
+      return models.map(model => ({
+        id: model.id,
+        name: model.name,
+        provider: 'openai' as LLMProvider,
+        capabilities: {
+          functionCalling: true,
+          reasoning: this.modelSupportsReasoning(model.id),
+          vision: this.modelSupportsVision(model.id),
+          structured: true
+        }
+      }));
+    } catch (error) {
+      logger.warn('Failed to fetch models from OpenAI API, using default list:', error);
+      return this.getDefaultModels();
+    }
+  }
+
+  /**
+   * Check if model supports reasoning (O-series and GPT-5)
+   */
+  private modelSupportsReasoning(modelId: string): boolean {
+    return modelId.startsWith('o') || modelId.includes('gpt-5');
+  }
+
+  /**
+   * Check if model supports vision
+   */
+  private modelSupportsVision(modelId: string): boolean {
+    // O3-mini doesn't support vision, most others do
+    return !modelId.includes('o3-mini');
+  }
+
+  /**
+   * Get default list of known OpenAI models (fallback)
+   */
+  private getDefaultModels(): ModelInfo[] {
     return [
       {
         id: 'gpt-4.1-2025-04-14',
@@ -458,6 +542,50 @@ export class OpenAIProvider extends LLMBaseProvider {
           vision: true,
           structured: true
         }
+      },
+      {
+        id: 'o3-mini-2025-01-31',
+        name: 'O3 Mini',
+        provider: 'openai',
+        capabilities: {
+          functionCalling: true,
+          reasoning: true,
+          vision: false,
+          structured: true
+        }
+      },
+      {
+        id: 'gpt-5-2025-08-07',
+        name: 'GPT-5',
+        provider: 'openai',
+        capabilities: {
+          functionCalling: true,
+          reasoning: true,
+          vision: true,
+          structured: true
+        }
+      },
+      {
+        id: 'gpt-5-mini-2025-08-07',
+        name: 'GPT-5 Mini',
+        provider: 'openai',
+        capabilities: {
+          functionCalling: true,
+          reasoning: true,
+          vision: true,
+          structured: true
+        }
+      },
+      {
+        id: 'gpt-5-nano-2025-08-07',
+        name: 'GPT-5 Nano',
+        provider: 'openai',
+        capabilities: {
+          functionCalling: true,
+          reasoning: true,
+          vision: true,
+          structured: true
+        }
       }
     ];
   }
@@ -473,9 +601,17 @@ export class OpenAIProvider extends LLMBaseProvider {
    * Validate that required credentials are available for OpenAI
    */
   validateCredentials(): {isValid: boolean, message: string, missingItems?: string[]} {
+    // In AUTOMATED_MODE, skip credential validation since API keys are provided dynamically
+    if (BUILD_CONFIG.AUTOMATED_MODE) {
+      return {
+        isValid: true,
+        message: 'OpenAI credentials validation skipped in AUTOMATED_MODE (API keys provided dynamically).'
+      };
+    }
+
     const storageKeys = this.getCredentialStorageKeys();
     const apiKey = localStorage.getItem(storageKeys.apiKey!);
-    
+
     if (!apiKey) {
       return {
         isValid: false,
@@ -483,7 +619,7 @@ export class OpenAIProvider extends LLMBaseProvider {
         missingItems: ['API Key']
       };
     }
-    
+
     return {
       isValid: true,
       message: 'OpenAI credentials are configured correctly.'

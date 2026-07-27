@@ -1,10 +1,11 @@
-### [A more reliable and productive Chrome DevTools](reliable-devtools)
-In Chrome 139, DevTools prioritized product excellence and developer experience. We tackled numerous known issues, including some years-old ones, and also made improvements to newer features. Behind the scenes, we enhanced our test coverage and migrated tests to more robust foundations.
+### [Full stack trace AI agent in Performance panel](perf-ai-agent)
+The Performance panel now integrates a more capable AI agent that has full access to the stack trace.
 
-We hope you will experience these numerous subtle fixes across various panels, making your daily debugging and development workflows smoother, more reliable, and more productive.
+### [AI code completion in Sources and Console](ai-code-completion)
+Code completion powered by AI is now available in the Sources panel and the Console.
 
-### [Upload images in AI assistance for styling](multimodal-input)
-To provide additional visual context to your prompts, you can now upload arbitrary images in the AI assistance panel when you [start your conversation from the Elements panel](from-elements) with a [DOM element selected as context](element-context).
+### [Google Developer Program support](gdp)
+The Google Developer Program, a ready-made subscription and community platform, is now in DevTools, offering a more personalized experience, a badge system, and easier discovery of new features.
 
-### [Check out the highlights from I/O](devtools-io)
-Check out the features we announced at Google I/O 2025, including features with Gemini integration: [modify and save CSS changes to your workspace](ai-styling), [ask about performance insights](ai-insights), [annotate performance findings](ai-annotations), and more.
+### [One main 'Debug with AI' button](ai-main-button)
+The primary action bar at the top of DevTools now features the primary "Debug with AI" button which opens the 'AI assistance' panel in a right-hand side bar.

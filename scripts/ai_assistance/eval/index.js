@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -162,7 +162,11 @@ const API = {
 
     function serializeFunctionResponse(functionResponse) {
       if (functionResponse.response.result) {
-        functionResponse = JSON.parse(functionResponse.response.result);
+        try {
+          functionResponse = JSON.parse(functionResponse.response.result);
+        } catch {
+          functionResponse = functionResponse.response.result;
+        }
       }
       return JSON.stringify(functionResponse, null, 2);
     }

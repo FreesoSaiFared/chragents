@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 import { createLogger } from '../core/Logger.js';
-import { HTMLToMarkdownTool, type HTMLToMarkdownResult } from './HTMLToMarkdownTool.js';
-import { NavigateURLTool, type Tool } from './Tools.js';
+import { ReadabilityExtractorTool, type ReadabilityExtractorResult } from './ReadabilityExtractorTool.js';
+import { NavigateURLTool, type Tool, type LLMContext } from './Tools.js';
 
 const logger = createLogger('Tool:Fetcher');
 
@@ -14,7 +14,7 @@ const logger = createLogger('Tool:Fetcher');
 export interface FetchedContent {
   url: string;
   title: string;
-  markdownContent: string;
+  markdownContent: string;  // Plain text content (for backwards compatibility, named markdownContent)
   success: boolean;
   error?: string;
 }
@@ -40,40 +40,16 @@ export interface FetcherToolResult {
  * Agent that fetches and extracts content from URLs
  *
  * This agent takes a list of URLs, navigates to each one, and extracts
- * the main content as markdown. It uses NavigateURLTool for navigation
- * and HTMLToMarkdownTool for content extraction.
+ * the main content as plain text. It uses NavigateURLTool for navigation
+ * and ReadabilityExtractorTool for fast content extraction.
+ *
+ * Content extraction is handled by ReadabilityExtractorTool, which uses
+ * Mozilla Readability for deterministic extraction without LLM calls.
  */
 export class FetcherTool implements Tool<FetcherToolArgs, FetcherToolResult> {
   name = 'fetcher_tool';
-  description = 'Navigates to URLs, extracts and cleans the main content, returning markdown for each source';
+  description = 'Navigates to URLs, extracts and cleans the main content, returning plain text for each source';
 
-  private async createToolTracingObservation(toolName: string, args: any): Promise<void> {
-    try {
-      const { getCurrentTracingContext, createTracingProvider } = await import('../tracing/TracingConfig.js');
-      const context = getCurrentTracingContext();
-      if (context) {
-        const tracingProvider = createTracingProvider();
-        await tracingProvider.createObservation({
-          id: `event-tool-execute-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          name: `Tool Execute: ${toolName}`,
-          type: 'event',
-          startTime: new Date(),
-          input: { 
-            toolName, 
-            toolArgs: args,
-            contextInfo: `Direct tool execution in ${toolName}`
-          },
-          metadata: {
-            executionPath: 'direct-tool',
-            toolName
-          }
-        }, context.traceId);
-      }
-    } catch (tracingError) {
-      // Don't fail tool execution due to tracing errors
-      console.error(`[TRACING ERROR in ${toolName}]`, tracingError);
-    }
-  }
 
   schema = {
     type: 'object',
@@ -94,15 +70,21 @@ export class FetcherTool implements Tool<FetcherToolArgs, FetcherToolResult> {
   };
 
   private navigateURLTool = new NavigateURLTool();
-  private htmlToMarkdownTool = new HTMLToMarkdownTool();
+  private readabilityExtractorTool = new ReadabilityExtractorTool();
 
   /**
    * Execute the fetcher agent to process multiple URLs
    */
-  async execute(args: FetcherToolArgs): Promise<FetcherToolResult> {
-    await this.createToolTracingObservation(this.name, args);
+  async execute(args: FetcherToolArgs, ctx?: LLMContext): Promise<FetcherToolResult> {
     logger.info('Executing with args', { args });
     const { urls, reasoning } = args;
+    const signal = ctx?.abortSignal;
+
+    const throwIfAborted = () => {
+      if (signal?.aborted) {
+        throw new DOMException('The operation was aborted', 'AbortError');
+      }
+    };
 
     // Validate input
     if (!Array.isArray(urls) || urls.length === 0) {
@@ -119,9 +101,10 @@ export class FetcherTool implements Tool<FetcherToolArgs, FetcherToolResult> {
 
     // Process each URL sequentially
     for (const url of urlsToProcess) {
+      throwIfAborted();
       try {
         logger.info('Processing URL', { url });
-        const fetchedContent = await this.fetchContentFromUrl(url, reasoning);
+        const fetchedContent = await this.fetchContentFromUrl(url, reasoning, ctx);
         results.push(fetchedContent);
       } catch (error: any) {
         logger.error('Error processing URL', { url, error: error.message, stack: error.stack });
@@ -144,15 +127,26 @@ export class FetcherTool implements Tool<FetcherToolArgs, FetcherToolResult> {
   /**
    * Fetch and extract content from a single URL
    */
-  private async fetchContentFromUrl(url: string, reasoning: string): Promise<FetchedContent> {
+  private async fetchContentFromUrl(
+    url: string,
+    reasoning: string,
+    ctx?: LLMContext
+  ): Promise<FetchedContent> {
+    const signal = ctx?.abortSignal;
+    const throwIfAborted = () => {
+      if (signal?.aborted) {
+        throw new DOMException('The operation was aborted', 'AbortError');
+      }
+    };
     try {
       // Step 1: Navigate to the URL
       logger.info('Navigating to URL', { url });
+      throwIfAborted();
       // Note: NavigateURLTool requires both url and reasoning parameters
-      const navigationResult = await this.navigateURLTool.execute({
-        url,
-        reasoning: `Navigating to ${url} to extract content for research`
-      } as { url: string, reasoning: string });
+        const navigationResult = await this.navigateURLTool.execute({
+          url,
+          reasoning: `Navigating to ${url} to extract content for research`
+      } as { url: string, reasoning: string }, ctx);
 
       // Check for navigation errors
       if ('error' in navigationResult) {
@@ -165,35 +159,34 @@ export class FetcherTool implements Tool<FetcherToolArgs, FetcherToolResult> {
         };
       }
 
-      // Wait for 1 second to ensure the page has time to load
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
       // Get metadata from navigation result
       const metadata = navigationResult.metadata ? navigationResult.metadata : { url: '', title: '' };
 
-      // Step 2: Extract markdown content using HTMLToMarkdownTool
+      // Step 2: Extract content using ReadabilityExtractorTool (with automatic LLM fallback)
       logger.info('Extracting content from URL', { url });
-      const extractionResult = await this.htmlToMarkdownTool.execute({
-        instruction: 'Extract the main content focusing on article text, headings, and important information. Remove ads, navigation, and distracting elements.',
+      throwIfAborted();
+
+      // Always pass ctx for LLM fallback capability
+      const extractionResult = await this.readabilityExtractorTool.execute({
         reasoning
-      });
+      }, ctx);
 
       // Check for extraction errors
-      if (!extractionResult.success || !extractionResult.markdownContent) {
+      if (!extractionResult.success || !extractionResult.textContent) {
         return {
           url,
-          title: metadata?.title || '',
+          title: metadata?.title || extractionResult.title || '',
           markdownContent: '',
           success: false,
           error: extractionResult.error || 'Failed to extract content'
         };
       }
 
-      // Return the fetched content
+      // Return the fetched content (plain text from Readability)
       return {
         url: metadata?.url || url,
-        title: metadata?.title || '',
-        markdownContent: extractionResult.markdownContent,
+        title: extractionResult.title || metadata?.title || '',
+        markdownContent: extractionResult.textContent,  // Plain text content
         success: true
       };
     } catch (error: any) {

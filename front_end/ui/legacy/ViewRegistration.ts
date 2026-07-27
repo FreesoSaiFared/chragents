@@ -1,5 +1,5 @@
 
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import * as i18n from '../../core/i18n/i18n.js';
@@ -12,31 +12,31 @@ import type {Widget} from './Widget.js';
 
 const UIStrings = {
   /**
-   *@description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Elements' panel.
+   * @description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Elements' panel.
    */
   elements: 'Elements',
   /**
-   *@description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Drawer' panel.
+   * @description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Drawer' panel.
    */
   drawer: 'Drawer',
   /**
-   *@description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Drawer sidebar' panel.
+   * @description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Drawer sidebar' panel.
    */
   drawer_sidebar: 'Drawer sidebar',
   /**
-   *@description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Panel'.
+   * @description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Panel'.
    */
   panel: 'Panel',
   /**
-   *@description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Network' panel.
+   * @description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Network' panel.
    */
   network: 'Network',
   /**
-   *@description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Settings' panel.
+   * @description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Settings' panel.
    */
   settings: 'Settings',
   /**
-   *@description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Sources' panel.
+   * @description Badge label for an entry in the Quick Open menu. Selecting the entry opens the 'Sources' panel.
    */
   sources: 'Sources',
 } as const;
@@ -154,15 +154,20 @@ export interface ViewRegistration {
    * Icon to be used next to view's title.
    */
   iconName?: string;
+  /**
+   * Whether a view needs to be promoted. A new badge is shown next to the menu items then.
+   */
+  featurePromotionId?: string;
 }
 
 const viewIdSet = new Set<string>();
 export function registerViewExtension(registration: ViewRegistration): void {
-  // START ADDED CODE: Filter out panels other than ai-chat
-  if (registration.location === ViewLocationValues.PANEL && registration.id !== 'ai-chat') {
+  // Check if panel filtering is enabled (default: true for ai-chat only mode)
+  const panelFilterEnabled = localStorage.getItem('ai_chat_panel_filter_enabled') !== 'false';
+
+  if (panelFilterEnabled && registration.location === ViewLocationValues.PANEL && registration.id !== 'ai-chat') {
     return; // Don't register this panel
   }
-  // END ADDED CODE
 
   const viewId = registration.id;
   if (viewIdSet.has(viewId)) {

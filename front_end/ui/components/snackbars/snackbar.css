@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The Chromium Authors. All rights reserved.
+ * Copyright 2025 The Chromium Authors
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
@@ -9,7 +9,7 @@
     bottom: var(--sys-size-5);
     left: var(--sys-size-5);
     z-index: 9999;
-    /* left var(--sys-size-5) * 2 so that there is equal space on the left and on the right in small screens */
+    /* subtract var(--sys-size-5) * 2 so that there is equal space on the left and on the right in small screens */
     max-width: calc(100% - 2 * var(--sys-size-5));
 
     .container {

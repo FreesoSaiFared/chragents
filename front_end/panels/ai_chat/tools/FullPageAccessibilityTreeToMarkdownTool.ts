@@ -2,11 +2,29 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import { AgentService } from '../core/AgentService.js';
-import { LLMClient } from '../LLM/LLMClient.js';
-import { AIChatPanel } from '../ui/AIChatPanel.js';
+import type { LLMContext } from './Tools.js';
+import { callLLMWithTracing } from './LLMTracingWrapper.js';
 
 import { GetAccessibilityTreeTool, type Tool, type ErrorResult } from './Tools.js';
+
+// Detect if we're in a Node.js environment (eval runner, tests)
+const isNodeEnvironment = typeof window === 'undefined' || typeof document === 'undefined';
+
+// Lazy-loaded browser-only AgentService dependency
+let AgentService: typeof import('../core/AgentService.js').AgentService | null = null;
+let agentServiceLoaded = false;
+
+async function ensureAgentService(): Promise<boolean> {
+  if (isNodeEnvironment) return false;
+  if (!agentServiceLoaded) {
+    agentServiceLoaded = true;
+    try {
+      const module = await import('../core/AgentService.js');
+      AgentService = module.AgentService;
+    } catch { return false; }
+  }
+  return AgentService !== null;
+}
 
 export interface FullPageAccessibilityTreeToMarkdownResult {
   success: boolean;
@@ -20,33 +38,6 @@ export class FullPageAccessibilityTreeToMarkdownTool implements Tool<Record<stri
   name = 'accessibility_tree_full_to_markdown';
   description = 'Gets the full page accessibility tree, sends it to an LLM, and returns a Markdown summary of the entire tree.';
 
-  private async createToolTracingObservation(toolName: string, args: any): Promise<void> {
-    try {
-      const { getCurrentTracingContext, createTracingProvider } = await import('../tracing/TracingConfig.js');
-      const context = getCurrentTracingContext();
-      if (context) {
-        const tracingProvider = createTracingProvider();
-        await tracingProvider.createObservation({
-          id: `event-tool-execute-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          name: `Tool Execute: ${toolName}`,
-          type: 'event',
-          startTime: new Date(),
-          input: { 
-            toolName, 
-            toolArgs: args,
-            contextInfo: `Direct tool execution in ${toolName}`
-          },
-          metadata: {
-            executionPath: 'direct-tool',
-            toolName
-          }
-        }, context.traceId);
-      }
-    } catch (tracingError) {
-      // Don't fail tool execution due to tracing errors
-      console.error(`[TRACING ERROR in ${toolName}]`, tracingError);
-    }
-  }
 
   schema = {
     type: 'object',
@@ -61,8 +52,7 @@ export class FullPageAccessibilityTreeToMarkdownTool implements Tool<Record<stri
     CRITICAL RULE: The output should represent the entire tree content. If the tree is empty or unavailable, return a Markdown message stating so.`;
   }
 
-  async execute(_args: Record<string, unknown>): Promise<FullPageAccessibilityTreeToMarkdownResult | ErrorResult> {
-    await this.createToolTracingObservation(this.name, _args);
+  async execute(_args: Record<string, unknown>, ctx?: LLMContext): Promise<FullPageAccessibilityTreeToMarkdownResult | ErrorResult> {
     const getAccTreeTool = new GetAccessibilityTreeTool();
     const treeResult = await getAccTreeTool.execute({ reasoning: 'Get full accessibility tree for Markdown conversion' });
     if ('error' in treeResult) {
@@ -73,27 +63,51 @@ export class FullPageAccessibilityTreeToMarkdownTool implements Tool<Record<stri
       return { error: 'Empty or blank tree content.' };
     }
 
-    const agentService = AgentService.getInstance();
-    const apiKey = agentService.getApiKey();
-    if (!apiKey) {
+    // Get API key from context first, fallback to AgentService in browser
+    await ensureAgentService();
+    let apiKey = ctx?.apiKey;
+    if (!apiKey && AgentService) {
+      apiKey = AgentService.getInstance().getApiKey() ?? undefined;
+    }
+
+    // Get provider from context
+    if (!ctx?.provider || !ctx.nanoModel) {
+      return { error: 'Missing LLM context (provider/miniModel) for AccessibilityTreeToMarkdownTool' };
+    }
+    const provider = ctx.provider;
+    const model = ctx.nanoModel;
+
+    // LiteLLM and BrowserOperator have optional API keys
+    const requiresApiKey = provider !== 'litellm' && provider !== 'browseroperator';
+
+    if (requiresApiKey && !apiKey) {
       return { error: 'API key not configured.' };
     }
-    const { model, provider } = AIChatPanel.getNanoModelWithProvider();
 
     const prompt = `Accessibility Tree:\n\n\`\`\`\n${accessibilityTreeString}\n\`\`\``;
 
     try {
-      const llm = LLMClient.getInstance();
-      const llmResponse = await llm.call({
-        provider,
-        model,
-        messages: [
-          { role: 'system', content: this.getSystemPrompt() },
-          { role: 'user', content: prompt }
-        ],
-        systemPrompt: this.getSystemPrompt(),
-        temperature: 0.7
-      });
+      const llmResponse = await callLLMWithTracing(
+        {
+          provider,
+          model,
+          messages: [
+            { role: 'system', content: this.getSystemPrompt() },
+            { role: 'user', content: prompt }
+          ],
+          systemPrompt: this.getSystemPrompt(),
+          temperature: 0.7
+        },
+        {
+          toolName: this.name,
+          operationName: 'accessibility_to_markdown',
+          context: 'accessibility_tree_conversion',
+          additionalMetadata: {
+            treeLength: accessibilityTreeString.length
+          }
+        }
+      );
+
       const response = llmResponse.text;
       if (response) {
         return {

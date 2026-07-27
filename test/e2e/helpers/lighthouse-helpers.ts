@@ -1,15 +1,10 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {assert} from 'chai';
 import type {ElementHandle} from 'puppeteer-core';
 
-import {
-  getBrowserAndPages,
-  waitFor,
-  waitForElementWithTextContent,
-} from '../../shared/helper.js';
 import {getBrowserAndPagesWrappers} from '../../shared/non_hosted_wrappers.js';
 
 import {getQuotaUsage, waitForQuotaUsage} from './application-helpers.js';
@@ -32,8 +27,10 @@ export async function navigateToLighthouseTab(
   return await devToolsPage.waitFor('.lighthouse-start-view');
 }
 
-// Instead of watching the worker or controller/panel internals, we wait for the Lighthouse renderer
-// to create the new report DOM. And we pull the LHR and artifacts off the lh-root node.
+/**
+ * Instead of watching the worker or controller/panel internals, we wait for the Lighthouse renderer
+ * to create the new report DOM. And we pull the LHR and artifacts off the lh-root node.
+ **/
 export async function waitForResult(
     devToolsPage = getBrowserAndPagesWrappers().devToolsPage,
     inspectedPage = getBrowserAndPagesWrappers().inspectedPage) {
@@ -102,13 +99,15 @@ export async function selectMode(
   await selectRadioOption(mode, 'lighthouse.mode', devToolsPage);
 }
 
-export async function selectDevice(device: 'mobile'|'desktop') {
-  await selectRadioOption(device, 'lighthouse.device-type');
+export async function selectDevice(
+    device: 'mobile'|'desktop', devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await selectRadioOption(device, 'lighthouse.device-type', devToolsPage);
 }
 
-export async function setToolbarCheckboxWithText(enabled: boolean, textContext: string) {
-  const toolbarHandle = await waitFor('.lighthouse-settings-pane .lighthouse-settings-toolbar');
-  const label = await waitForElementWithTextContent(textContext, toolbarHandle);
+export async function setToolbarCheckboxWithText(
+    enabled: boolean, textContext: string, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const toolbarHandle = await devToolsPage.waitFor('.lighthouse-settings-pane .lighthouse-settings-toolbar');
+  const label = await devToolsPage.waitForElementWithTextContent(textContext, toolbarHandle);
   await label.evaluate((label, enabled: boolean) => {
     const rootNode = label.getRootNode() as ShadowRoot;
     const checkboxId = label.getAttribute('for') as string;
@@ -118,8 +117,9 @@ export async function setToolbarCheckboxWithText(enabled: boolean, textContext: 
   }, enabled);
 }
 
-export async function setThrottlingMethod(throttlingMethod: 'simulate'|'devtools') {
-  const toolbarHandle = await waitFor('.lighthouse-settings-pane .lighthouse-settings-toolbar');
+export async function setThrottlingMethod(
+    throttlingMethod: 'simulate'|'devtools', devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const toolbarHandle = await devToolsPage.waitFor('.lighthouse-settings-pane .lighthouse-settings-toolbar');
   await toolbarHandle.evaluate((toolbar, throttlingMethod) => {
     const selectElem = toolbar.querySelector('select')!;
     const optionElem = selectElem.querySelector(`option[value="${throttlingMethod}"]`) as HTMLOptionElement;
@@ -167,12 +167,12 @@ export async function waitForStorageUsage(
   await devToolsPage.click('#tab-lighthouse');
 }
 
-export async function waitForTimespanStarted() {
-  await waitForElementWithTextContent('Timespan started');
+export async function waitForTimespanStarted(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.waitForElementWithTextContent('Timespan started');
 }
 
-export async function endTimespan() {
-  const endTimespanBtn = await waitForElementWithTextContent('End timespan');
+export async function endTimespan(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const endTimespanBtn = await devToolsPage.waitForElementWithTextContent('End timespan');
   await endTimespanBtn.click();
 }
 
@@ -212,25 +212,23 @@ export async function getTargetViewport(inspectedPage = getBrowserAndPagesWrappe
                                       }));
 }
 
-export async function getServiceWorkerCount() {
-  const {target} = await getBrowserAndPages();
-  return await target.evaluate(async () => {
+export async function getServiceWorkerCount(inspectedPage = getBrowserAndPagesWrappers().inspectedPage) {
+  return await inspectedPage.evaluate(async () => {
     return (await navigator.serviceWorker.getRegistrations()).length;
   });
 }
 
-export async function registerServiceWorker() {
-  const {target} = getBrowserAndPages();
-  await target.evaluate(async () => {
+export async function registerServiceWorker(inspectedPage = getBrowserAndPagesWrappers().inspectedPage) {
+  await inspectedPage.evaluate(async () => {
     // @ts-expect-error Custom function added to global scope.
     await window.registerServiceWorker();
   });
-  assert.strictEqual(await getServiceWorkerCount(), 1);
+  assert.strictEqual(await getServiceWorkerCount(inspectedPage), 1);
 }
 
-export async function interceptNextFileSave(): Promise<() => Promise<string>> {
-  const {frontend} = await getBrowserAndPages();
-  await frontend.evaluate(() => {
+export async function interceptNextFileSave(devToolsPage = getBrowserAndPagesWrappers().devToolsPage):
+    Promise<() => Promise<string>> {
+  await devToolsPage.evaluate(() => {
     // @ts-expect-error
     const original = InspectorFrontendHost.save;
     const nextFilePromise = new Promise(resolve => {
@@ -248,12 +246,11 @@ export async function interceptNextFileSave(): Promise<() => Promise<string>> {
   });
 
   // @ts-expect-error
-  return () => frontend.evaluate(() => window.__nextFile);
+  return () => devToolsPage.evaluate(() => window.__nextFile);
 }
 
-export async function renderHtmlInIframe(html: string) {
-  const {target} = getBrowserAndPages();
-  return (await target.evaluateHandle(async html => {
+export async function renderHtmlInIframe(html: string, inspectedPage = getBrowserAndPagesWrappers().inspectedPage) {
+  return (await inspectedPage.page.evaluateHandle(async html => {
            const iframe = document.createElement('iframe');
            iframe.srcdoc = html;
            document.documentElement.append(iframe);

@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@ import * as Elements from './elements.js';
 async function setUpStyles() {
   stubNoopSettings();
   setMockConnectionResponseHandler('CSS.enable', () => ({}));
+  setMockConnectionResponseHandler('CSS.getEnvironmentVariables', () => ({}));
   const computedStyleModel = new Elements.ComputedStyleModel.ComputedStyleModel();
   const cssModel = new SDK.CSSModel.CSSModel(createTarget());
   await cssModel.resumeModel();
@@ -23,7 +24,7 @@ async function setUpStyles() {
   const node = new SDK.DOMModel.DOMNode(domModel);
   node.id = 0 as Protocol.DOM.NodeId;
   UI.Context.Context.instance().setFlavor(SDK.DOMModel.DOMNode, node);
-  const matchedStyles = await getMatchedStylesWithBlankRule(cssModel);
+  const matchedStyles = await getMatchedStylesWithBlankRule({cssModel});
   const stylesPane = new Elements.StylesSidebarPane.StylesSidebarPane(computedStyleModel);
 
   return {matchedStyles, stylesPane};

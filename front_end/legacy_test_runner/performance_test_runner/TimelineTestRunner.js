@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,7 @@ import * as Timeline from '../../panels/timeline/timeline.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 /**
- * @fileoverview using private properties isn't a Closure violation in tests.
+ * @file using private properties isn't a Closure violation in tests.
  */
 self.PerformanceTestRunner = self.PerformanceTestRunner || {};
 
@@ -119,7 +119,7 @@ PerformanceTestRunner.createTraceEngineDataFromEvents = async function(events) {
   await model.parse(events);
   // Model only has one trace, so we can hardcode 0 here to get the latest
   // result.
-  return model.parsedTrace(0);
+  return model.parsedTrace(0)?.data;
 };
 
 PerformanceTestRunner.createTimelineController = function() {

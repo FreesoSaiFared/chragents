@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -15,10 +15,9 @@ import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 import * as MobileThrottling from '../mobile_throttling/mobile_throttling.js';
 
 import * as EmulationComponents from './components/components.js';
-
 const UIStrings = {
   /**
-   * @description Title of the device dimensions selection iteam in the Device Mode Toolbar.
+   * @description Title of the device dimensions selection item in the Device Mode Toolbar.
    * webpage in pixels.
    */
   dimensions: 'Dimensions',
@@ -49,14 +48,6 @@ const UIStrings = {
    * Mobile, Desktop.
    */
   deviceType: 'Device type',
-  /**
-   * @description Tooltip text for a button to disable Experimental Web Platform Features when they are enabled.
-   */
-  experimentalWebPlatformFeature: '"`Experimental Web Platform Feature`" flag is enabled. Click to disable it.',
-  /**
-   * @description Tooltip text for a button to enable Experimental Web Platform Features when they are disabled.
-   */
-  experimentalWebPlatformFeatureFlag: '"`Experimental Web Platform Feature`" flag is disabled. Click to enable it.',
   /**
    * @description Tooltip text for a 'three dots' style menu button which shows an expanded set of options.
    */
@@ -206,7 +197,7 @@ export class DeviceModeToolbar {
   private readonly showUserAgentTypeSetting: Common.Settings.Setting<boolean>;
   private autoAdjustScaleSetting: Common.Settings.Setting<boolean>;
   private readonly lastMode: Map<EmulationModel.EmulatedDevices.EmulatedDevice, EmulationModel.EmulatedDevices.Mode>;
-  private readonly elementInternal: HTMLDivElement;
+  readonly #element: HTMLDivElement;
   private readonly emulatedDevicesList: EmulationModel.EmulatedDevices.EmulatedDevicesList;
   private readonly persistenceSetting: Common.Settings.Setting<{device: string, orientation: string, mode: string}>;
   private spanButton!: UI.Toolbar.ToolbarButton;
@@ -218,7 +209,6 @@ export class DeviceModeToolbar {
   private deviceSelectItem!: UI.Toolbar.ToolbarMenuButton;
   private scaleItem!: UI.Toolbar.ToolbarMenuButton;
   private uaItem!: UI.Toolbar.ToolbarMenuButton;
-  private experimentalButton!: UI.Toolbar.ToolbarToggle|null;
   private cachedDeviceScale!: number|null;
   private cachedUaType!: string|null;
   private xItem?: UI.Toolbar.ToolbarItem;
@@ -250,11 +240,11 @@ export class DeviceModeToolbar {
 
     this.lastMode = new Map();
 
-    this.elementInternal = document.createElement('div');
-    this.elementInternal.classList.add('device-mode-toolbar');
-    this.elementInternal.setAttribute('jslog', `${VisualLogging.toolbar('device-mode').track({resize: true})}`);
+    this.#element = document.createElement('div');
+    this.#element.classList.add('device-mode-toolbar');
+    this.#element.setAttribute('jslog', `${VisualLogging.toolbar('device-mode').track({resize: true})}`);
 
-    const mainToolbar = this.elementInternal.createChild('devtools-toolbar', 'main-toolbar');
+    const mainToolbar = this.#element.createChild('devtools-toolbar', 'main-toolbar');
     this.appendDeviceSelectMenu(mainToolbar);
 
     this.widthInput = new EmulationComponents.DeviceSizeInputElement.SizeInputElement(
@@ -279,7 +269,7 @@ export class DeviceModeToolbar {
 
     this.appendDisplaySettings(mainToolbar);
     this.appendDevicePositionItems(mainToolbar);
-    const optionsToolbar = this.elementInternal.createChild('devtools-toolbar', 'device-mode-toolbar-options');
+    const optionsToolbar = this.#element.createChild('devtools-toolbar', 'device-mode-toolbar-options');
     optionsToolbar.wrappable = true;
     this.fillOptionsToolbar(optionsToolbar);
 
@@ -361,6 +351,7 @@ export class DeviceModeToolbar {
         MobileThrottling.ThrottlingManager.throttlingManager().createMobileThrottlingButton();
     this.throttlingConditionsItem.turnShrinkable();
     toolbar.appendToolbarItem(this.throttlingConditionsItem);
+    toolbar.appendToolbarItem(MobileThrottling.ThrottlingManager.throttlingManager().createSaveDataOverrideSelector());
   }
 
   private appendDevicePositionItems(toolbar: UI.Toolbar.Toolbar): void {
@@ -382,27 +373,6 @@ export class DeviceModeToolbar {
     this.postureItem.setDarkText();
     setTitleForButton(this.postureItem, i18nString(UIStrings.devicePosture));
     toolbar.appendToolbarItem(this.postureItem);
-
-    this.createExperimentalButton(toolbar);
-  }
-
-  private createExperimentalButton(toolbar: UI.Toolbar.Toolbar): void {
-    toolbar.appendToolbarItem(new UI.Toolbar.ToolbarSeparator(true));
-
-    const title = (this.model.webPlatformExperimentalFeaturesEnabled()) ?
-        i18nString(UIStrings.experimentalWebPlatformFeature) :
-        i18nString(UIStrings.experimentalWebPlatformFeatureFlag);
-    this.experimentalButton = new UI.Toolbar.ToolbarToggle(title, 'experiment-check');
-    this.experimentalButton.setToggled(this.model.webPlatformExperimentalFeaturesEnabled());
-    this.experimentalButton.setEnabled(true);
-    this.experimentalButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, this.experimentalClicked, this);
-
-    toolbar.appendToolbarItem(this.experimentalButton);
-  }
-
-  private experimentalClicked(): void {
-    Host.InspectorFrontendHost.InspectorFrontendHostInstance.openInNewTab(
-        'chrome://flags/#enable-experimental-web-platform-features' as Platform.DevToolsPath.UrlString);
   }
 
   private fillOptionsToolbar(toolbar: UI.Toolbar.Toolbar): void {
@@ -741,7 +711,7 @@ export class DeviceModeToolbar {
   }
 
   element(): Element {
-    return this.elementInternal;
+    return this.#element;
   }
 
   update(): void {
@@ -808,25 +778,18 @@ export class DeviceModeToolbar {
       this.cachedModelDevice = device;
     }
 
-    if (this.experimentalButton) {
-      const device = this.model.device();
-      if (device && (device.isDualScreen || device.isFoldableScreen)) {
-        if (device.isDualScreen) {
-          this.spanButton.setVisible(true);
-          this.postureItem.setVisible(false);
-        } else if (device.isFoldableScreen) {
-          this.spanButton.setVisible(false);
-          this.postureItem.setVisible(true);
-          this.postureItem.setText(this.currentDevicePosture());
-        }
-        this.experimentalButton.setVisible(true);
-      } else {
-        this.spanButton.setVisible(false);
-        this.postureItem.setVisible(false);
-        this.experimentalButton.setVisible(false);
-      }
-      setTitleForButton(this.spanButton, i18nString(UIStrings.toggleDualscreenMode));
+    if (device?.isDualScreen) {
+      this.spanButton.setVisible(true);
+      this.postureItem.setVisible(false);
+    } else if (device?.isFoldableScreen) {
+      this.spanButton.setVisible(false);
+      this.postureItem.setVisible(true);
+      this.postureItem.setText(this.currentDevicePosture());
+    } else {
+      this.spanButton.setVisible(false);
+      this.postureItem.setVisible(false);
     }
+    setTitleForButton(this.spanButton, i18nString(UIStrings.toggleDualscreenMode));
 
     if (this.model.type() === EmulationModel.DeviceModeModel.Type.Device) {
       this.lastMode.set(

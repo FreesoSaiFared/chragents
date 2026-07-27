@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ import * as RenderCoordinator from '../../../ui/components/render_coordinator/re
 import * as Components from './components.js';
 
 function getLocalMetricValue(view: Element): HTMLElement {
-  return view.shadowRoot!.querySelector('#local-value .metric-value') as HTMLElement;
+  return view.shadowRoot!.querySelector('#local-value .metric-value')!;
 }
 
 function getFieldMetricValue(view: Element): HTMLElement|null {
@@ -20,7 +20,7 @@ function getFieldMetricValue(view: Element): HTMLElement|null {
 }
 
 function getFieldHistogramPercents(view: Element): string[] {
-  const histogram = view.shadowRoot!.querySelector('.bucket-summaries') as HTMLElement;
+  const histogram = view.shadowRoot!.querySelector('.bucket-summaries')!;
   const percents = Array.from(histogram.querySelectorAll('.histogram-percent'));
   return percents.map(p => p.textContent || '');
 }

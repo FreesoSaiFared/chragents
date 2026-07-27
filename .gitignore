@@ -1,4 +1,5 @@
 .DS_Store
+.env
 .git_cl_description_backup
 *.ctc.json
 *.Makefile
@@ -11,6 +12,7 @@
 *.vcproj*
 *.vcxproj*
 *.xcodeproj*
+/GEMINI.md
 /.dev_profile
 /.test_cache
 /front_end/protocol_externs.js
@@ -28,6 +30,8 @@ npm-debug.log
 /scripts/ai_assistance/auto-run/data
 /scripts/ai_assistance/performance-trace-downloads
 /scripts/ai_assistance/auto-run/performance-trace-downloads
+# This folder is populated from the GCP bucket and managed by gclient sync.
+/scripts/ai_assistance/suite/outputs
 
 /build
 /buildtools
@@ -57,3 +61,5 @@ test/perf/.generated
 # Dependencies
 node_modules/
 **/.idea/
+node_modules/**
+eval-logs/**

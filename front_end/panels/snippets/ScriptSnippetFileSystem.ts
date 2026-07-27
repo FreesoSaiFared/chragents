@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,13 +14,13 @@ import * as UI from '../../ui/legacy/legacy.js';
 
 const UIStrings = {
   /**
-   *@description Default snippet name when a new snippet is created in the Sources panel
-   *@example {1} PH1
+   * @description Default snippet name when a new snippet is created in the Sources panel
+   * @example {1} PH1
    */
   scriptSnippet: 'Script snippet #{PH1}',
   /**
-   *@description Text to show something is linked to another
-   *@example {example.url} PH1
+   * @description Text to show something is linked to another
+   * @example {example.url} PH1
    */
   linkedTo: 'Linked to {PH1}',
 } as const;
@@ -156,7 +156,7 @@ export async function evaluateScriptSnippet(uiSourceCode: Workspace.UISourceCode
 
   const runtimeModel = executionContext.runtimeModel;
   const consoleModel = executionContext.target().model(SDK.ConsoleModel.ConsoleModel);
-  await uiSourceCode.requestContent();
+  await uiSourceCode.requestContentData();
   uiSourceCode.commitWorkingCopy();
   const expression = uiSourceCode.workingCopy();
   Common.Console.Console.instance().show();

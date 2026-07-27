@@ -1,9 +1,9 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 /**
- * @fileoverview Prefer `urlString` helper over sprinkling casts to
+ * @file Prefer `urlString` helper over sprinkling casts to
  * `UrlString` across the codebase..
  */
 

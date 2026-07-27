@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2011 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2011 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
@@ -54,102 +28,102 @@ import type {DataDisplayDelegate} from './ProfileHeader.js';
 
 const UIStrings = {
   /**
-   *@description Generic text with two placeholders separated by a comma
-   *@example {1 613 680} PH1
-   *@example {44 %} PH2
+   * @description Generic text with two placeholders separated by a comma
+   * @example {1 613 680} PH1
+   * @example {44 %} PH2
    */
   genericStringsTwoPlaceholders: '{PH1}, {PH2}',
   /**
-   *@description Text in Heap Snapshot Grid Nodes of a profiler tool
+   * @description Text in Heap Snapshot Grid Nodes of a profiler tool
    */
   internalArray: '(internal array)[]',
   /**
-   *@description Text in Heap Snapshot Grid Nodes of a profiler tool
+   * @description Text in Heap Snapshot Grid Nodes of a profiler tool
    */
   userObjectReachableFromWindow: 'User object reachable from window',
   /**
-   *@description Text in Heap Snapshot Grid Nodes of a profiler tool
+   * @description Text in Heap Snapshot Grid Nodes of a profiler tool
    */
   detachedFromDomTree: 'Detached from DOM tree',
   /**
-   *@description Text in Heap Snapshot Grid Nodes of a profiler tool
+   * @description Text in Heap Snapshot Grid Nodes of a profiler tool
    */
   previewIsNotAvailable: 'Preview is not available',
   /**
-   *@description A context menu item in the Heap Profiler Panel of a profiler tool
+   * @description A context menu item in the Heap Profiler Panel of a profiler tool
    */
   revealInSummaryView: 'Reveal in Summary view',
   /**
-   *@description Text for the summary view
+   * @description Text for the summary view
    */
   summary: 'Summary',
   /**
-   *@description A context menu item in the Heap Profiler Panel of a profiler tool
-   *@example {SomeClassConstructor} PH1
-   *@example {12345} PH2
+   * @description A context menu item in the Heap Profiler Panel of a profiler tool
+   * @example {SomeClassConstructor} PH1
+   * @example {12345} PH2
    */
   revealObjectSWithIdSInSummary: 'Reveal object \'\'{PH1}\'\' with id @{PH2} in Summary view',
   /**
-   *@description Text to store an HTML element or JavaScript variable or expression result as a global variable
+   * @description Text to store an HTML element or JavaScript variable or expression result as a global variable
    */
   storeAsGlobalVariable: 'Store as global variable',
   /**
-   *@description Text to ignore an object shown in the Retainers pane
+   * @description Text to ignore an object shown in the Retainers pane
    */
   ignoreThisRetainer: 'Ignore this retainer',
   /**
-   *@description Text to undo the "Ignore this retainer" action
+   * @description Text to undo the "Ignore this retainer" action
    */
   stopIgnoringThisRetainer: 'Stop ignoring this retainer',
   /**
-   *@description Text indicating that a node has been ignored with the "Ignore this retainer" action
+   * @description Text indicating that a node has been ignored with the "Ignore this retainer" action
    */
   ignored: 'ignored',
   /**
-   *@description Text in Heap Snapshot Grid Nodes of a profiler tool that indicates an element contained in another
+   * @description Text in Heap Snapshot Grid Nodes of a profiler tool that indicates an element contained in another
    * element.
    */
   inElement: 'in',
   /**
-   *@description A short summary of the text at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#compiled-code
+   * @description A short summary of the text at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#compiled-code
    */
   compiledCodeSummary: 'Internal data which V8 uses to run functions defined by JavaScript or WebAssembly.',
   /**
-   *@description A short summary of the text at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#concatenated-string
+   * @description A short summary of the text at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#concatenated-string
    */
   concatenatedStringSummary: 'A string which represents the contents of two other strings joined together.',
   /**
-   *@description A short summary of the text at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#system-context
+   * @description A short summary of the text at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#system-context
    */
   contextSummary:
       'An internal object containing variables from a JavaScript scope which may be needed by a function created within that scope.',
   /**
-   *@description A short description of the data type internal type DescriptorArray, which is described more fully at https://v8.dev/blog/fast-properties
+   * @description A short description of the data type internal type DescriptorArray, which is described more fully at https://v8.dev/blog/fast-properties
    */
   descriptorArraySummary: 'A list of the property names used by a JavaScript Object.',
   /**
-   *@description A short summary of the text at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#array
+   * @description A short summary of the text at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#array
    */
   internalArraySummary: 'An internal array-like data structure (not a JavaScript Array).',
   /**
-   *@description A short summary of the text at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#internal-node
+   * @description A short summary of the text at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#internal-node
    */
   internalNodeSummary: 'An object allocated by a component other than V8, such as C++ objects defined by Blink.',
   /**
-   *@description A short description of the data type "system / Map" described at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#object-shape
+   * @description A short description of the data type "system / Map" described at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#object-shape
    */
   mapSummary: 'An internal object representing the shape of a JavaScript Object (not a JavaScript Map).',
   /**
-   *@description A short summary of the "(object elements)[]" described at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#array
+   * @description A short summary of the "(object elements)[]" described at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#array
    */
   objectElementsSummary:
       'An internal object which stores the indexed properties in a JavaScript Object, such as the contents of an Array.',
   /**
-   *@description A short summary of the "(object properties)[]" described at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#array
+   * @description A short summary of the "(object properties)[]" described at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#array
    */
   objectPropertiesSummary: 'An internal object which stores the named properties in a JavaScript Object.',
   /**
-   *@description A short summary of the text at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#sliced-string
+   * @description A short summary of the text at https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots#sliced-string
    */
   slicedStringSummary: 'A string which represents some of the characters from another string.',
 } as const;
@@ -1110,6 +1084,8 @@ export class HeapSnapshotConstructorNode extends HeapSnapshotGridNode {
   readonly retainedSize: number;
   readonly classKey: string;
 
+  #numberFormatter = new Intl.NumberFormat(i18n.DevToolsLocale.DevToolsLocale.instance().locale);
+
   constructor(
       dataGrid: HeapSnapshotConstructorsDataGrid, classKey: string,
       aggregate: HeapSnapshotModel.HeapSnapshotModel.Aggregate,
@@ -1128,7 +1104,7 @@ export class HeapSnapshotConstructorNode extends HeapSnapshotGridNode {
     const shallowSizePercent = this.shallowSize / snapshot.totalSize * 100.0;
     this.data = {
       object: this.nameInternal,
-      count: Platform.NumberUtilities.withThousandsSeparator(this.count),
+      count: this.#numberFormatter.format(this.count),
       distance: this.toUIDistance(this.distance),
       shallowSize: i18n.ByteUtilities.formatBytesToKb(this.shallowSize),
       retainedSize: i18n.ByteUtilities.formatBytesToKb(this.retainedSize),
@@ -1169,7 +1145,7 @@ export class HeapSnapshotConstructorNode extends HeapSnapshotGridNode {
   override createCell(columnId: string): HTMLElement {
     const cell = columnId === 'object' ? super.createCell(columnId) : this.createValueCell(columnId);
     if (columnId === 'object' && this.count > 1) {
-      cell.appendChild(UI.Fragment.html`<span class="objects-count">×${this.count}</span>`);
+      cell.appendChild(UI.Fragment.html`<span class="objects-count">×${this.data.count}</span>`);
     }
     return cell;
   }

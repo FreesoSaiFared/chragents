@@ -1,8 +1,8 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /**
- * @fileoverview A library to associate class members with their parent class.
+ * @file A library to associate class members with their parent class.
  */
 
 import type {TSESLint, TSESTree} from '@typescript-eslint/utils';

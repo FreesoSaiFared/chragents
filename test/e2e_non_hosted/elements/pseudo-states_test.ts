@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -112,8 +112,7 @@ describe('The Elements tab', function() {
     assert.strictEqual(hiddenDisplayStyle, 'none');
   });
 
-  // Skipped temporarily to check the other tests for flakiness
-  it.skip('[crbug.com/40811680] can toggle emulate a focused page', async ({devToolsPage, inspectedPage}) => {
+  it('can toggle emulate a focused page', async ({devToolsPage, inspectedPage}) => {
     await inspectedPage.goToResource('elements/dissapearing-popup.html');
     await waitForElementsStyleSection('<body', devToolsPage);
 

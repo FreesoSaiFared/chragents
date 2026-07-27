@@ -7,6 +7,7 @@ import { createLogger } from './Logger.js';
 import type { AgentState } from './State.js';
 import { StateGraph } from './StateGraph.js';
 import { NodeType, type CompiledGraph, type Runnable } from './Types.js';
+import type { LLMProvider } from '../LLM/LLMTypes.js';
 
 const logger = createLogger('ConfigurableGraph');
 
@@ -35,6 +36,18 @@ export interface GraphConfig {
   edges: GraphEdgeConfig[];
   modelName?: string;
   temperature?: number;
+  /**
+   * Selected LLM provider for this graph's agent nodes
+   */
+  provider?: LLMProvider;
+  /**
+   * Mini model for smaller/faster operations
+   */
+  miniModel?: string;
+  /**
+   * Nano model for smallest/fastest operations
+   */
+  nanoModel?: string;
 }
 
 /**
@@ -51,11 +64,15 @@ export function createAgentGraphFromConfig(
   const graph = new StateGraph<AgentState>({ name: config.name });
 
   const nodeFactories: Record<string, (nodeConfig: GraphNodeConfig, graphInstance?: StateGraph<AgentState>) => Runnable<AgentState, AgentState>> = {
-    agent: () => createAgentNode(config.modelName!, config.temperature || 0),
+    agent: () => createAgentNode(config.modelName!, config.provider!, config.temperature || 0),
     final: () => createFinalNode(),
     toolExecutor: (nodeCfg) => {
       return {
-        invoke: async (state: AgentState) => {
+        invoke: async (state: AgentState, signal?: AbortSignal) => {
+          if (signal?.aborted) {
+            logger.info('ToolExecutorNode dummy implementation aborted');
+            throw new DOMException('Tool execution was cancelled', 'AbortError');
+          }
           logger.warn(`ToolExecutorNode "${nodeCfg.name}" invoked without being dynamically replaced. This indicates an issue.`);
           return { ...state, error: `ToolExecutor ${nodeCfg.name} not properly initialized.` };
         }
@@ -72,7 +89,11 @@ export function createAgentGraphFromConfig(
     } else {
       logger.warn(`Unknown node type: ${nodeConfig.type} for node ${nodeConfig.name}. Adding a dummy error node.`);
       graph.addNode(nodeConfig.name, {
-        invoke: async (state: AgentState) => {
+        invoke: async (state: AgentState, signal?: AbortSignal) => {
+          if (signal?.aborted) {
+            logger.info('Dummy error node aborted');
+            throw new DOMException('Execution was cancelled', 'AbortError');
+          }
           logger.error(`Dummy node ${nodeConfig.name} invoked due to unknown type ${nodeConfig.type}`);
           return { ...state, error: `Unknown node type ${nodeConfig.type} for ${nodeConfig.name}` };
         }
@@ -91,7 +112,7 @@ export function createAgentGraphFromConfig(
         const toolExecutorNodeName = edgeConfig.targetMap[NodeType.TOOL_EXECUTOR.toString()];
         if (toolExecutorNodeName && toolExecutorNodeName !== '__end__') {
           logger.debug(`Dynamically creating/updating tool executor: ${toolExecutorNodeName}`);
-          const toolExecutorInstance = createToolExecutorNode(state);
+          const toolExecutorInstance = createToolExecutorNode(state, config.provider!, config.modelName!, config.miniModel, config.nanoModel);
           graphInstance.addNode(toolExecutorNodeName, toolExecutorInstance);
         } else {
           logger.error('Tool executor node name not found in targetMap or is __end__. Routing to __end__.');

@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,8 @@ import * as Host from '../../core/host/host.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
+// TODO(crbug.com/442509324): remove UI dependency
+// eslint-disable-next-line rulesdir/no-imports-in-directory
 import * as UI from '../../ui/legacy/legacy.js';
 import * as Breakpoints from '../breakpoints/breakpoints.js';
 import * as TextUtils from '../text_utils/text_utils.js';
@@ -356,7 +358,8 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
     await PersistenceImpl.instance().addBinding(binding);
     const uiSourceCodeOfTruth =
         this.#savingForOverrides.has(networkUISourceCode) ? networkUISourceCode : fileSystemUISourceCode;
-    const {content, isEncoded} = await uiSourceCodeOfTruth.requestContent();
+    const contentDataOrError = await uiSourceCodeOfTruth.requestContentData();
+    const {content, isEncoded} = TextUtils.ContentData.ContentData.asDeferredContent(contentDataOrError);
     PersistenceImpl.instance().syncContent(uiSourceCodeOfTruth, content || '', isEncoded);
   }
 
@@ -432,7 +435,8 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
     }
     this.#savingForOverrides.add(uiSourceCode);
     let encodedPath = this.encodedPathFromUrl(uiSourceCode.url());
-    const {content, isEncoded} = await uiSourceCode.requestContent();
+    const contentDataOrError = await uiSourceCode.requestContentData();
+    const {content, isEncoded} = TextUtils.ContentData.ContentData.asDeferredContent(contentDataOrError);
     const lastIndexOfSlash = encodedPath.lastIndexOf('/');
     const encodedFileName = Common.ParsedURL.ParsedURL.substring(encodedPath, lastIndexOfSlash + 1);
     const rawFileName = Common.ParsedURL.ParsedURL.encodedPathToRawPathString(encodedFileName);
@@ -528,7 +532,9 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
 
   async #getHeaderOverridesFromUiSourceCode(uiSourceCode: Workspace.UISourceCode.UISourceCode):
       Promise<HeaderOverride[]> {
-    const content = (await uiSourceCode.requestContent()).content || '[]';
+    const contentData =
+        await uiSourceCode.requestContentData().then(TextUtils.ContentData.ContentData.contentDataOrEmpty);
+    const content = contentData.text || '[]';
     let headerOverrides: HeaderOverride[] = [];
     try {
       headerOverrides = JSON.parse(content) as HeaderOverride[];

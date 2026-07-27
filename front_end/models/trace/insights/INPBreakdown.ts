@@ -1,11 +1,12 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import * as i18n from '../../../core/i18n/i18n.js';
-import type * as Handlers from '../handlers/handlers.js';
+import * as Handlers from '../handlers/handlers.js';
 import * as Helpers from '../helpers/helpers.js';
 import type {SyntheticInteractionPair} from '../types/TraceEvents.js';
+import type * as Types from '../types/types.js';
 
 import {
   InsightCategory,
@@ -20,31 +21,31 @@ export const UIStrings = {
    * @description Text to tell the user about the longest user interaction.
    */
   description:
-      'Start investigating with the longest subpart. [Delays can be minimized](https://web.dev/articles/optimize-inp#optimize_interactions). To reduce processing duration, [optimize the main-thread costs](https://web.dev/articles/optimize-long-tasks), often JS.',
+      'Start investigating [how to improve INP](https://developer.chrome.com/docs/performance/insights/inp-breakdown) by looking at the longest subpart.',
   /**
    * @description Title for the performance insight "INP breakdown", which shows a breakdown of INP by subparts / sections.
    */
   title: 'INP breakdown',
   /**
-   *@description Label used for the subpart/component/stage/section of a larger duration.
+   * @description Label used for the subpart/component/stage/section of a larger duration.
    */
   subpart: 'Subpart',
   /**
-   *@description Label used for a time duration.
+   * @description Label used for a time duration.
    */
   duration: 'Duration',
 
   // TODO: these are repeated in InteractionBreakdown. Add a place for common strings?
   /**
-   *@description Text shown next to the interaction event's input delay time in the detail view.
+   * @description Text shown next to the interaction event's input delay time in the detail view.
    */
   inputDelay: 'Input delay',
   /**
-   *@description Text shown next to the interaction event's thread processing duration in the detail view.
+   * @description Text shown next to the interaction event's thread processing duration in the detail view.
    */
   processingDuration: 'Processing duration',
   /**
-   *@description Text shown next to the interaction event's presentation delay time in the detail view.
+   * @description Text shown next to the interaction event's presentation delay time in the detail view.
    */
   presentationDelay: 'Presentation delay',
   /**
@@ -61,25 +62,37 @@ export type INPBreakdownInsightModel = InsightModel<typeof UIStrings, {
   highPercentileInteractionEvent?: SyntheticInteractionPair,
 }>;
 
-export function isINPBreakdown(insight: InsightModel): insight is INPBreakdownInsightModel {
+export function isINPBreakdownInsight(insight: InsightModel): insight is INPBreakdownInsightModel {
   return insight.insightKey === InsightKeys.INP_BREAKDOWN;
 }
 
 function finalize(partialModel: PartialInsightModel<INPBreakdownInsightModel>): INPBreakdownInsightModel {
+  let state: INPBreakdownInsightModel['state'] = 'pass';
+  if (partialModel.longestInteractionEvent) {
+    const classification = Handlers.ModelHandlers.UserInteractions.scoreClassificationForInteractionToNextPaint(
+        partialModel.longestInteractionEvent.dur);
+    if (classification === Handlers.ModelHandlers.PageLoadMetrics.ScoreClassification.GOOD) {
+      state = 'informative';
+    } else {
+      state = 'fail';
+    }
+  }
+
   return {
     insightKey: InsightKeys.INP_BREAKDOWN,
     strings: UIStrings,
     title: i18nString(UIStrings.title),
     description: i18nString(UIStrings.description),
+    docs: 'https://developer.chrome.com/docs/performance/insights/inp-breakdown',
     category: InsightCategory.INP,
-    state: partialModel.longestInteractionEvent ? 'informative' : 'pass',
+    state,
     ...partialModel,
   };
 }
 
 export function generateInsight(
-    parsedTrace: Handlers.Types.ParsedTrace, context: InsightSetContext): INPBreakdownInsightModel {
-  const interactionEvents = parsedTrace.UserInteractions.interactionEventsWithNoNesting.filter(event => {
+    data: Handlers.Types.HandlerData, context: InsightSetContext): INPBreakdownInsightModel {
+  const interactionEvents = data.UserInteractions.interactionEventsWithNoNesting.filter(event => {
     return Helpers.Timing.eventIsInBounds(event, context.bounds);
   });
 
@@ -110,4 +123,49 @@ export function generateInsight(
     longestInteractionEvent: normalizedInteractionEvents[0],
     highPercentileInteractionEvent: normalizedInteractionEvents[highPercentileIndex],
   });
+}
+
+/**
+ * If `subpart` is -1, then all subparts are included. Otherwise it's just that index.
+ **/
+export function createOverlaysForSubpart(
+    event: Types.Events.SyntheticInteractionPair, subpartIndex = -1): Types.Overlays.Overlay[] {
+  const p1 = Helpers.Timing.traceWindowFromMicroSeconds(
+      event.ts,
+      (event.ts + event.inputDelay) as Types.Timing.Micro,
+  );
+  const p2 = Helpers.Timing.traceWindowFromMicroSeconds(
+      p1.max,
+      (p1.max + event.mainThreadHandling) as Types.Timing.Micro,
+  );
+  const p3 = Helpers.Timing.traceWindowFromMicroSeconds(
+      p2.max,
+      (p2.max + event.presentationDelay) as Types.Timing.Micro,
+  );
+  let sections = [
+    {bounds: p1, label: i18nString(UIStrings.inputDelay), showDuration: true},
+    {bounds: p2, label: i18nString(UIStrings.processingDuration), showDuration: true},
+    {bounds: p3, label: i18nString(UIStrings.presentationDelay), showDuration: true},
+  ];
+  if (subpartIndex !== -1) {
+    sections = [sections[subpartIndex]];
+  }
+
+  return [
+    {
+      type: 'TIMESPAN_BREAKDOWN',
+      sections,
+      renderLocation: 'BELOW_EVENT',
+      entry: event,
+    },
+  ];
+}
+
+export function createOverlays(model: INPBreakdownInsightModel): Types.Overlays.Overlay[] {
+  const event = model.longestInteractionEvent;
+  if (!event) {
+    return [];
+  }
+
+  return createOverlaysForSubpart(event);
 }

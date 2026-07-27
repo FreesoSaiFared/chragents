@@ -1,11 +1,11 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
-import type * as Root from '../../core/root/root.js';
+import * as Root from '../../core/root/root.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import type * as AiAssistance from './ai_assistance.js';
@@ -30,10 +30,15 @@ const UIStrings = {
    */
   enableAiAssistance: 'Enable AI assistance',
   /**
-   *@description Text of a tooltip to redirect to the AI assistance panel with
+   * @description Text of a tooltip to redirect to the AI assistance panel with
    * the current element as context
    */
   askAi: 'Ask AI',
+  /**
+   * @description Text of a context menu item to redirect to the AI assistance panel with
+   * the current context
+   */
+  debugWithAi: 'Debug with AI',
   /**
    * @description Message shown to the user if the DevTools locale is not
    * supported.
@@ -103,13 +108,21 @@ function isAnyFeatureAvailable(config?: Root.Runtime.HostConfig): boolean {
       isPerformanceAgentFeatureAvailable(config) || isFileAgentFeatureAvailable(config);
 }
 
+function titleForAiAssistanceActions(): Platform.UIString.LocalizedString {
+  if (Root.Runtime.hostConfig.devToolsAiDebugWithAi?.enabled ||
+      Root.Runtime.hostConfig.devToolsAiSubmenuPrompts?.enabled) {
+    return i18nLazyString(UIStrings.debugWithAi)();
+  }
+  return i18nLazyString(UIStrings.askAi)();
+}
+
 UI.ViewManager.registerViewExtension({
   location: UI.ViewManager.ViewLocationValues.DRAWER_VIEW,
   id: 'freestyler',
   commandPrompt: i18nLazyString(UIStrings.showAiAssistance),
   title: i18nLazyString(UIStrings.aiAssistance),
   order: 10,
-  isPreviewFeature: true,
+  featurePromotionId: 'ai-assistance',
   persistence: UI.ViewManager.ViewPersistence.CLOSEABLE,
   hasToolbar: false,
   condition: config => isAnyFeatureAvailable(config) && !isPolicyRestricted(config),
@@ -146,12 +159,27 @@ Common.Settings.registerSettingExtension({
 });
 
 UI.ActionRegistration.registerActionExtension({
+  actionId: 'freestyler.main-menu',
+  contextTypes(): [] {
+    return [];
+  },
+  category: UI.ActionRegistration.ActionCategory.GLOBAL,
+  title: titleForAiAssistanceActions,
+  featurePromotionId: 'ai-assistance',
+  async loadActionDelegate() {
+    const AiAssistance = await loadAiAssistanceModule();
+    return new AiAssistance.ActionDelegate();
+  },
+  condition: config => isAnyFeatureAvailable(config) && !isPolicyRestricted(config) && !isGeoRestricted(config),
+});
+
+UI.ActionRegistration.registerActionExtension({
   actionId: 'freestyler.elements-floating-button',
   contextTypes(): [] {
     return [];
   },
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
-  title: i18nLazyString(UIStrings.askAi),
+  title: titleForAiAssistanceActions,
   async loadActionDelegate() {
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
@@ -166,7 +194,7 @@ UI.ActionRegistration.registerActionExtension({
     return [];
   },
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
-  title: i18nLazyString(UIStrings.askAi),
+  title: titleForAiAssistanceActions,
   async loadActionDelegate() {
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
@@ -181,7 +209,7 @@ UI.ActionRegistration.registerActionExtension({
     return [];
   },
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
-  title: i18nLazyString(UIStrings.askAi),
+  title: titleForAiAssistanceActions,
   async loadActionDelegate() {
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
@@ -196,7 +224,7 @@ UI.ActionRegistration.registerActionExtension({
     return [];
   },
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
-  title: i18nLazyString(UIStrings.askAi),
+  title: titleForAiAssistanceActions,
   async loadActionDelegate() {
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
@@ -211,7 +239,7 @@ UI.ActionRegistration.registerActionExtension({
     return [];
   },
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
-  title: i18nLazyString(UIStrings.askAi),
+  title: titleForAiAssistanceActions,
   async loadActionDelegate() {
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
@@ -226,7 +254,7 @@ UI.ActionRegistration.registerActionExtension({
     return [];
   },
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
-  title: i18nLazyString(UIStrings.askAi),
+  title: titleForAiAssistanceActions,
   async loadActionDelegate() {
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
@@ -238,12 +266,28 @@ UI.ActionRegistration.registerActionExtension({
 });
 
 UI.ActionRegistration.registerActionExtension({
+  actionId: 'drjones.performance-panel-full-context',
+  contextTypes(): [] {
+    return [];
+  },
+  category: UI.ActionRegistration.ActionCategory.GLOBAL,
+  title: titleForAiAssistanceActions,
+  async loadActionDelegate() {
+    const AiAssistance = await loadAiAssistanceModule();
+    return new AiAssistance.ActionDelegate();
+  },
+  condition: config => {
+    return isPerformanceAgentFeatureAvailable(config) && !isPolicyRestricted(config) && !isGeoRestricted(config);
+  }
+});
+
+UI.ActionRegistration.registerActionExtension({
   actionId: 'drjones.sources-floating-button',
   contextTypes(): [] {
     return [];
   },
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
-  title: i18nLazyString(UIStrings.askAi),
+  title: titleForAiAssistanceActions,
   async loadActionDelegate() {
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
@@ -257,7 +301,7 @@ UI.ActionRegistration.registerActionExtension({
     return [];
   },
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
-  title: i18nLazyString(UIStrings.askAi),
+  title: titleForAiAssistanceActions,
   async loadActionDelegate() {
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();

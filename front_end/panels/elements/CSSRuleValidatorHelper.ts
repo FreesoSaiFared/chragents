@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -89,6 +89,14 @@ export const isGridContainer = (computedStyles?: Map<string, string>): boolean =
   }
   const display = computedStyles.get('display');
   return display === 'grid' || display === 'inline-grid';
+};
+
+export const isMasonryContainer = (computedStyles?: Map<string, string>): boolean => {
+  if (!computedStyles) {
+    return false;
+  }
+  const display = computedStyles.get('display');
+  return display === 'masonry' || display === 'inline-masonry';
 };
 
 export const isMulticolContainer = (computedStyles?: Map<string, string>): boolean => {

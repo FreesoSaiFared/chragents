@@ -1,35 +1,6 @@
-/*
- * Copyright (C) 2009 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-/* eslint-disable @typescript-eslint/no-unused-vars */
+// Copyright 2009 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 import * as Common from '../common/common.js';
 import * as i18n from '../i18n/i18n.js';
@@ -38,10 +9,13 @@ import * as Root from '../root/root.js';
 
 import {
   type AidaClientResult,
+  type AidaCodeCompleteResult,
   type CanShowSurveyResult,
   type ChangeEvent,
   type ClickEvent,
   type ContextMenuDescriptor,
+  type DispatchHttpRequestRequest,
+  type DispatchHttpRequestResult,
   type DoAidaConversationResult,
   type DragEvent,
   type EnumeratedHistogram,
@@ -62,18 +36,10 @@ import {
 } from './InspectorFrontendHostAPI.js';
 import {streamWrite as resourceLoaderStreamWrite} from './ResourceLoader.js';
 
-interface DecompressionStream extends GenericTransformStream {
-  readonly format: string;
-}
-declare const DecompressionStream: {
-  prototype: DecompressionStream,
-  new (format: string): DecompressionStream,
-};
-
 const UIStrings = {
   /**
-   *@description Document title in Inspector Frontend Host of the DevTools window
-   *@example {example.com} PH1
+   * @description Document title in Inspector Frontend Host of the DevTools window
+   * @example {example.com} PH1
    */
   devtoolsS: 'DevTools - {PH1}',
 } as const;
@@ -84,7 +50,7 @@ const MAX_RECORDED_HISTOGRAMS_SIZE = 100;
 const OVERRIDES_FILE_SYSTEM_PATH = '/overrides' as Platform.DevToolsPath.RawPathString;
 
 /**
- * The InspectorFrontendHostStub is a stub interface used the frontend is loaded like a webpage. Examples:
+ * The `InspectorFrontendHostStub` is a stub interface used the frontend is loaded like a webpage. Examples:
  *   - devtools://devtools/bundled/devtools_app.html
  *   - https://chrome-devtools-frontend.appspot.com/serve_rev/@030cc140435b0152645522b9864b75cac6c0a854/worker_app.html
  *   - http://localhost:9222/devtools/inspector.html?ws=localhost:9222/devtools/page/xTARGET_IDx
@@ -95,9 +61,16 @@ const OVERRIDES_FILE_SYSTEM_PATH = '/overrides' as Platform.DevToolsPath.RawPath
  * The native implementations live in devtools_ui_bindings.cc: https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/devtools/devtools_ui_bindings.cc
  */
 export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
-  readonly #urlsBeingSaved = new Map<Platform.DevToolsPath.RawPathString|Platform.DevToolsPath.UrlString, string[]>();
-  events!: Common.EventTarget.EventTarget<EventTypes>;
+  readonly #urlsBeingSaved = new Map<
+      Platform.DevToolsPath.RawPathString|Platform.DevToolsPath.UrlString, {isBase64: boolean, buffer: string[]}>();
   #fileSystem: FileSystem|null = null;
+  /**
+   * Injected bellow in both stub and normal runs via:
+   * ```ts
+   * InspectorFrontendHostInstance.events = new Common.ObjectWrapper.ObjectWrapper();
+   * ```
+   */
+  declare events: Common.EventTarget.EventTarget<EventTypes>;
 
   recordedCountHistograms:
       Array<{histogramName: string, sample: number, min: number, exclusiveMax: number, bucketSize: number}> = [];
@@ -202,20 +175,22 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
         'Show item in folder is not enabled in hosted mode. Please inspect using chrome://inspect');
   }
 
+  // Reminder: the methods in this class belong to InspectorFrontendHostStub and are typically not executed.
+  // InspectorFrontendHostStub is ONLY used in the uncommon case of devtools not being embedded. For example: trace.cafe or http://localhost:9222/devtools/inspector.html?ws=localhost:9222/devtools/page/xTARGET_IDx
   save(
       url: Platform.DevToolsPath.RawPathString|Platform.DevToolsPath.UrlString, content: string, _forceSaveAs: boolean,
-      _isBase64: boolean): void {
-    let buffer = this.#urlsBeingSaved.get(url);
+      isBase64: boolean): void {
+    let buffer = this.#urlsBeingSaved.get(url)?.buffer;
     if (!buffer) {
       buffer = [];
-      this.#urlsBeingSaved.set(url, buffer);
+      this.#urlsBeingSaved.set(url, {isBase64, buffer});
     }
     buffer.push(content);
     this.events.dispatchEventToListeners(Events.SavedURL, {url, fileSystemPath: url});
   }
 
   append(url: Platform.DevToolsPath.RawPathString|Platform.DevToolsPath.UrlString, content: string): void {
-    const buffer = this.#urlsBeingSaved.get(url);
+    const buffer = this.#urlsBeingSaved.get(url)?.buffer;
     if (buffer) {
       buffer.push(content);
       this.events.dispatchEventToListeners(Events.AppendedToURL, url);
@@ -223,7 +198,7 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
   }
 
   close(url: Platform.DevToolsPath.RawPathString|Platform.DevToolsPath.UrlString): void {
-    const buffer = this.#urlsBeingSaved.get(url) || [];
+    const {isBase64, buffer} = this.#urlsBeingSaved.get(url) || {isBase64: false, buffer: []};
     this.#urlsBeingSaved.delete(url);
     let fileName = '';
 
@@ -231,7 +206,7 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
       try {
         const trimmed = Platform.StringUtilities.trimURL(url);
         fileName = Platform.StringUtilities.removeURLFragment(trimmed);
-      } catch (error) {
+      } catch {
         // If url is not a valid URL, it is probably a filename.
         fileName = url;
       }
@@ -240,7 +215,13 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
     /* eslint-disable-next-line rulesdir/no-imperative-dom-api */
     const link = document.createElement('a');
     link.download = fileName;
-    const blob = new Blob([buffer.join('')], {type: 'text/plain'});
+    let blob;
+    if (isBase64) {
+      const bytes = Common.Base64.decode(buffer.join(''));
+      blob = new Blob([bytes], {type: 'application/gzip'});
+    } else {
+      blob = new Blob(buffer, {type: 'text/plain'});
+    }
     const blobUrl = URL.createObjectURL(blob);
     link.href = blobUrl;
     link.click();
@@ -273,6 +254,9 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
   }
 
   recordUserMetricsAction(_umaName: string): void {
+  }
+
+  recordNewBadgeUsage(_featureName: string): void {
   }
 
   connectAutomaticFileSystem(
@@ -330,28 +314,10 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
 
   loadNetworkResource(
       url: string, _headers: string, streamId: number, callback: (arg0: LoadNetworkResourceResult) => void): void {
-    // Read the first 3 bytes looking for the gzip signature in the file header
-    function isGzip(ab: ArrayBuffer): boolean {
-      const buf = new Uint8Array(ab);
-      if (!buf || buf.length < 3) {
-        return false;
-      }
-
-      // https://www.rfc-editor.org/rfc/rfc1952#page-6
-      return buf[0] === 0x1F && buf[1] === 0x8B && buf[2] === 0x08;
-    }
     fetch(url)
         .then(async result => {
-          const resultArrayBuf = await result.arrayBuffer();
-          let decoded: ReadableStream|ArrayBuffer = resultArrayBuf;
-          if (isGzip(resultArrayBuf)) {
-            const ds = new DecompressionStream('gzip');
-            const writer = ds.writable.getWriter();
-            void writer.write(resultArrayBuf);
-            void writer.close();
-            decoded = ds.readable;
-          }
-          const text = await new Response(decoded).text();
+          const respBuffer = await result.arrayBuffer();
+          const text = await Common.Gzip.arrayBufferToString(respBuffer);
           return text;
         })
         .then(function(text) {
@@ -428,6 +394,15 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
         thirdPartyCookieMetadataEnabled: true,
         thirdPartyCookieHeuristicsEnabled: true,
         managedBlockThirdPartyCookies: 'Unset',
+      },
+      devToolsIpProtectionPanelInDevTools: {
+        enabled: false,
+      },
+      devToolsFlexibleLayout: {
+        verticalDrawerEnabled: true,
+      },
+      devToolsStartingStyleDebugging: {
+        enabled: false,
       },
     };
     if ('hostConfigForTesting' in globalThis) {
@@ -511,6 +486,26 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
     throw new Error('Soft context menu should be used');
   }
 
+  /**
+   * Think of **Hosted mode** as "non-embedded" mode; you can see a devtools frontend URL as the tab's URL. It's an atypical way that DevTools is run.
+   * Whereas in **Non-hosted** (aka "embedded"), DevTools is embedded and fully dockable. It's the common way DevTools is run.
+   *
+   * **Hosted mode** == we're using the `InspectorFrontendHostStub`. impl. (@see `InspectorFrontendHostStub` class comment)
+   * Whereas with **non-hosted** mode, native `DevToolsEmbedderMessageDispatcher` is used for CDP and more.
+   *
+   * Relationships to other signals:
+   * - Hosted-ness does not indicate whether the frontend is _connected to a valid CDP target_.
+   * - Being _"dockable"_ (aka `canDock`) is typically aligned but technically orthogonal.
+   * - It's unrelated to the _tab's (main frame's) URL_. Though in non-hosted, the devtools frame origin will always be `devtools://devtools`.
+   *
+   *  | Example case                                         | Mode           | Example devtools                                                                   |
+   *  | :--------------------------------------------------- | :------------- | :---------------------------------------------------------------------------- |
+   *  | tab URL: anything. embedded DevTools w/ native CDP bindings    | **NOT Hosted** | `devtools://devtools/bundled/devtools_app.html?targetType=tab&...`            |
+   *  | tab URL: `devtools://…?ws=…`                | **Hosted**     | `devtools://devtools/bundled/devtools_app.html?ws=localhost:9228/...`         |
+   *  | tab URL: `devtools://…` but no connection   | **Hosted**     | `devtools://devtools/bundled/devtools_app.html`                               |
+   *  | tab URL: `https://…` but no connection      | **Hosted**     | `https://chrome-devtools-frontend.appspot.com/serve_rev/@.../worker_app.html` |
+   *  | tab URL: `http://…?ws=` (connected)         | **Hosted**     | `http://localhost:9222/devtools/inspector.html?ws=localhost:9222/...`         |
+   */
   isHostedMode(): boolean {
     return true;
   }
@@ -533,6 +528,17 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
     callback({
       error: 'Not implemented',
     });
+  }
+
+  aidaCodeComplete(_request: string, callback: (result: AidaCodeCompleteResult) => void): void {
+    callback({
+      error: 'Not implemented',
+    });
+  }
+
+  dispatchHttpRequest(_request: DispatchHttpRequestRequest, callback: (result: DispatchHttpRequestResult) => void):
+      void {
+    callback({error: 'Not implemented'});
   }
 
   recordImpression(_event: ImpressionEvent): void {
@@ -598,19 +604,15 @@ class InspectorFrontendAPIImpl {
 (function(): void {
 
 function initializeInspectorFrontendHost(): void {
-  let proto;
   if (!InspectorFrontendHostInstance) {
     // Instantiate stub for web-hosted mode if necessary.
     // @ts-expect-error Global injected by devtools_compatibility.js
     globalThis.InspectorFrontendHost = InspectorFrontendHostInstance = new InspectorFrontendHostStub();
   } else {
     // Otherwise add stubs for missing methods that are declared in the interface.
-    proto = InspectorFrontendHostStub.prototype;
-    for (const name of Object.getOwnPropertyNames(proto)) {
-      // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-      // @ts-expect-error
+    const proto = InspectorFrontendHostStub.prototype;
+    for (const name of (Object.getOwnPropertyNames(proto) as Array<keyof InspectorFrontendHostAPI>)) {
       const stub = proto[name];
-      // @ts-expect-error Global injected by devtools_compatibility.js
       if (typeof stub !== 'function' || InspectorFrontendHostInstance[name]) {
         continue;
       }

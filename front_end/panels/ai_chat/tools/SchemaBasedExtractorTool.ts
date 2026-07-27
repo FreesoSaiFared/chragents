@@ -2,17 +2,53 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as SDK from '../../../core/sdk/sdk.js';
 import * as Protocol from '../../../generated/protocol.js';
-import * as Utils from '../common/utils.js';
-import { AgentService } from '../core/AgentService.js';
+import * as UtilsUniversal from '../common/utils-universal.js';
 import { createLogger } from '../core/Logger.js';
-import { LLMClient } from '../LLM/LLMClient.js';
-import { AIChatPanel } from '../ui/AIChatPanel.js';
+import type { LLMContext, Tool } from './Tools.js';
+import { callLLMWithTracing } from './LLMTracingWrapper.js';
+import { LLMResponseParser } from '../LLM/LLMResponseParser.js';
+import { getAdapter } from '../cdp/getAdapter.js';
+import type { CDPSessionAdapter } from '../cdp/CDPSessionAdapter.js';
 
-import { NodeIDsToURLsTool, type Tool } from './Tools.js';
+// Detect if we're in a Node.js environment (eval runner, tests)
+const isNodeEnvironment = typeof window === 'undefined' || typeof document === 'undefined';
+
+// Lazy-loaded browser-only dependencies for API key fallback
+let AgentService: typeof import('../core/AgentService.js').AgentService | null = null;
+let agentServiceLoaded = false;
+
+async function ensureAgentService(): Promise<boolean> {
+  if (isNodeEnvironment) return false;
+  if (!agentServiceLoaded) {
+    agentServiceLoaded = true;
+    try {
+      const agentServiceModule = await import('../core/AgentService.js');
+      AgentService = agentServiceModule.AgentService;
+    } catch { return false; }
+  }
+  return AgentService !== null;
+}
 
 const logger = createLogger('Tool:SchemaBasedExtractor');
+
+// Chunking interfaces
+interface ContentChunk {
+  id: number;
+  content: string;
+  tokenCount: number;
+  sectionInfo?: {
+    heading?: string;
+    level?: number;
+    startNodeId?: string;
+  };
+}
+
+interface ChunkExtractionResult {
+  chunkId: number;
+  data: any;
+  itemCount: number;
+}
 
 // Define the structure for the metadata LLM call's expected response
 interface ExtractionMetadata {
@@ -35,7 +71,12 @@ export interface SchemaExtractionResult {
  * Tool for extracting structured data from DOM based on schema definitions
  */
 export class SchemaBasedExtractorTool implements Tool<SchemaExtractionArgs, SchemaExtractionResult> {
-  name = 'extract_schema_data';
+  // Chunking configuration
+  private readonly CHUNK_TOKEN_LIMIT = 40000; // ~160k characters per chunk
+  private readonly CHARS_PER_TOKEN = 4; // Conservative estimate
+  private readonly TOKEN_LIMIT_FOR_CHUNKING = 65000; // Auto-chunk if tree exceeds this
+
+  name = 'extract_data';
   description = `Extracts structured data from a web page's DOM using a user-provided JSON schema and natural language instruction.
   - The schema defines the exact structure and types of data to extract (e.g., text, numbers, URLs).
   - For fields representing URLs, specify them in the schema as: { type: 'string', format: 'url' }.
@@ -73,48 +114,28 @@ Schema Examples:
   /**
    * Execute the schema-based extraction
    */
-  /**
-   * Helper function to create tracing observation for tool execution
-   */
-  private async createToolTracingObservation(toolName: string, args: any): Promise<void> {
-    try {
-      const { getCurrentTracingContext, createTracingProvider } = await import('../tracing/TracingConfig.js');
-      const context = getCurrentTracingContext();
-      if (context) {
-        const tracingProvider = createTracingProvider();
-        await tracingProvider.createObservation({
-          id: `event-tool-execute-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          name: `Tool Execute: ${toolName}`,
-          type: 'event',
-          startTime: new Date(),
-          input: { 
-            toolName, 
-            toolArgs: args,
-            contextInfo: `Direct tool execution in ${toolName}`
-          },
-          metadata: {
-            executionPath: 'direct-tool',
-            toolName
-          }
-        }, context.traceId);
-      }
-    } catch (tracingError) {
-      // Don't fail tool execution due to tracing errors
-      console.error(`[TRACING ERROR in ${toolName}]`, tracingError);
-    }
-  }
 
-  async execute(args: SchemaExtractionArgs): Promise<SchemaExtractionResult> {
+  async execute(args: SchemaExtractionArgs, ctx?: LLMContext): Promise<SchemaExtractionResult> {
     logger.debug('Executing with args', args);
-    
-    // Add tracing observation
-    await this.createToolTracingObservation(this.name, args);
-    
-    const { schema, instruction, reasoning } = args;
-    const agentService = AgentService.getInstance();
-    const apiKey = agentService.getApiKey();
 
-    if (!apiKey) {
+    const { schema, instruction, reasoning } = args;
+
+    // Get API key from context first, fallback to AgentService in browser
+    let apiKey = ctx?.apiKey;
+    if (!apiKey && !isNodeEnvironment) {
+      await ensureAgentService();
+      if (AgentService) {
+        apiKey = AgentService.getInstance().getApiKey() ?? undefined;
+      }
+    }
+
+    // Get provider from context
+    const provider = ctx?.provider;
+
+    // LiteLLM and BrowserOperator have optional API keys
+    const requiresApiKey = provider !== 'litellm' && provider !== 'browseroperator';
+
+    if (requiresApiKey && !apiKey) {
       return {
         success: false,
         data: null,
@@ -132,55 +153,24 @@ Schema Examples:
     }
 
     try {
-      // 1. Get primary target and wait for page load
-      const target = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
-      if (!target) {
+      // 1. Get CDP adapter (works in both DevTools and eval runner)
+      const adapter = await getAdapter(ctx);
+      if (!adapter) {
         return {
           success: false,
-          error: 'No page target available',
+          error: 'No browser connection available',
           data: null
         };
       }
-
-      // const READINESS_TIMEOUT_MS = 15000; // 15 seconds timeout for page readiness
-      // try {
-      //   logger.info('Checking page readiness (Timeout: ${READINESS_TIMEOUT_MS}ms)...');
-      //   await waitForPageLoad(target, READINESS_TIMEOUT_MS);
-      //   logger.info('Page is ready or timeout reached.');
-      // } catch (readinessError: any) {
-      //    logger.error(`Page readiness check failed: ${readinessError.message}`);
-      //    return {
-      //       success: false,
-      //       data: null,
-      //       error: `Page did not become ready: ${readinessError.message}`
-      //    };
-      // }
-
-      const rootBackendNodeId: Protocol.DOM.BackendNodeId | undefined = undefined;
-      const rootNodeId: Protocol.DOM.NodeId | undefined = undefined;
 
       // 2. Transform schema to replace URL fields with numeric AX Node IDs (strings)
       const [transformedSchema, urlPaths] = this.transformUrlFieldsToIds(schema);
       logger.debug('Transformed Schema:', JSON.stringify(transformedSchema, null, 2));
       logger.debug('URL Paths:', urlPaths);
 
-      // 3. Get raw accessibility tree nodes for the target scope to build URL mapping
-      const accessibilityAgent = target.accessibilityAgent();
-      const axTreeParams: Protocol.Accessibility.GetFullAXTreeRequest = {};
-
-      // We can optionally use NodeId or BackendNodeId for scoping if needed in the future
-      // Both are currently undefined since we're working with the full tree
-      if (rootNodeId) {
-        // NOTE: Depending on CDP version/implementation, scoping by NodeId might be preferred
-        // if backendNodeId scoping doesn't work as expected.
-        // Cast to 'any' if the specific property (nodeId or backendNodeId) isn't strictly typed.
-        (axTreeParams as any).nodeId = rootNodeId;
-      } else if (rootBackendNodeId) {
-        // Fallback to backendNodeId if NodeId wasn't obtained or isn't supported for scoping
-        (axTreeParams as any).backendNodeId = rootBackendNodeId;
-      }
-
-      const rawAxTree = await accessibilityAgent.invoke_getFullAXTree(axTreeParams);
+      // 3. Get raw accessibility tree nodes to build URL mapping
+      const accessibilityAgent = adapter.accessibilityAgent();
+      const rawAxTree = await accessibilityAgent.invoke<{nodes: any[]}>('getFullAXTree', {});
       if (!rawAxTree?.nodes) {
         throw new Error('Failed to get raw accessibility tree nodes');
       }
@@ -188,98 +178,208 @@ Schema Examples:
       const idToUrlMapping = this.buildUrlMapping(rawAxTree.nodes);
       logger.debug(`Built URL mapping with ${Object.keys(idToUrlMapping).length} entries.`);
 
-      // 4. Get the processed accessibility tree text using Utils
-      // NOTE: Utils.getAccessibilityTree currently gets the *full* tree.
-      // If scoping is critical, this might need adjustment or filtering based on the selector.
-      // For now, we use the full tree text for the LLM context.
-      const processedTreeResult = await Utils.getAccessibilityTree(target);
+      // 4. Get the processed accessibility tree text
+      const processedTreeResult = await UtilsUniversal.getAccessibilityTree(adapter);
       const treeText = processedTreeResult.simplified;
       logger.debug('Processed Accessibility Tree Text (length):', treeText.length);
       // logger.debug('[SchemaBasedExtractorTool] Tree Text:', treeText); // Uncomment for full tree text
 
-      // ---- Start Multi-step LLM Process ----
+      // Auto-detection: Check if we need to chunk
+      const estimatedTokens = this.estimateTokenCount(treeText);
+      logger.info(`Tree token count: ${estimatedTokens} (threshold: ${this.TOKEN_LIMIT_FOR_CHUNKING})`);
 
-      // 5. Initial Extract Call
-      logger.debug('Starting initial LLM extraction...');
-      const initialExtraction = await this.callExtractionLLM({
-        instruction: instruction || 'Extract data according to schema',
-        domContent: treeText,
-        schema: transformedSchema,
-        apiKey,
-      });
+      let finalData: any;
 
-      logger.debug('Initial extraction result:', initialExtraction);
-      if (!initialExtraction) { // Check if initial extraction failed
-        return {
-          success: false,
-          error: 'Initial data extraction failed',
-          data: null,
-        };
+      if (estimatedTokens > this.TOKEN_LIMIT_FOR_CHUNKING) {
+        // ---- Chunked Extraction Flow ----
+        logger.info('Tree exceeds token limit, using chunked extraction');
+
+        // Create chunks (tries sections first, falls back to tokens)
+        const chunks = this.chunkBySections(treeText);
+        logger.info(`Created ${chunks.length} chunks`, chunks.map(c => ({
+          id: c.id,
+          tokens: c.tokenCount,
+          heading: c.sectionInfo?.heading
+        })));
+
+        // Extract from each chunk in parallel (4 at a time)
+        // Optimized based on Mind2Web validation results (EXTENDED_VALIDATION_RESULTS.md)
+        const chunkResults: any[] = new Array(chunks.length);
+        const BATCH_SIZE = 4; // Process 4 chunks concurrently
+
+        for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+          const batchPromises: Promise<void>[] = [];
+
+          // Create batch of up to 4 promises
+          for (let j = 0; j < BATCH_SIZE && i + j < chunks.length; j++) {
+            const chunkIndex = i + j;
+            const chunk = chunks[chunkIndex];
+
+            logger.info(`Processing chunk ${chunk.id + 1}/${chunks.length} in parallel batch`, {
+              batchStart: i + 1,
+              batchEnd: Math.min(i + BATCH_SIZE, chunks.length)
+            });
+
+            // Create promise and handle errors per chunk
+            const promise = this.extractFromChunk(
+              chunk,
+              transformedSchema,
+              instruction || 'Extract data according to schema',
+              apiKey || '',
+              ctx
+            ).then(extractedData => {
+              // Store result at correct index to maintain order
+              chunkResults[chunkIndex] = extractedData;
+              logger.info(`Chunk ${chunk.id + 1} extraction complete`);
+            }).catch(error => {
+              logger.error(`Error extracting from chunk ${chunk.id}:`, error);
+              // Store null on error to maintain order, will be filtered during merge
+              chunkResults[chunkIndex] = null;
+            });
+
+            batchPromises.push(promise);
+          }
+
+          // Wait for current batch to complete before starting next batch
+          logger.info(`Waiting for batch to complete`, {
+            batchStart: i + 1,
+            batchSize: batchPromises.length
+          });
+          await Promise.all(batchPromises);
+          logger.info(`Batch completed`, {
+            batchStart: i + 1,
+            completedChunks: i + batchPromises.length
+          });
+        }
+
+        // Filter out null results from failed chunks
+        const validChunkResults = chunkResults.filter(result => result !== null);
+
+        // Merge results using LLM
+        logger.info('Merging chunk results with LLM...', {
+          totalChunks: chunks.length,
+          validChunks: validChunkResults.length,
+          failedChunks: chunks.length - validChunkResults.length
+        });
+        const mergedData = await this.callMergeLLM({
+          chunkResults: validChunkResults,
+          schema: transformedSchema,
+          instruction: instruction || 'Extract data according to schema',
+          apiKey: apiKey || '',
+          ctx
+        });
+
+        if (!mergedData) {
+          return {
+            success: false,
+            error: 'Failed to merge chunk results',
+            data: null
+          };
+        }
+
+        finalData = mergedData;
+        logger.info('Chunk merging complete');
+
+      } else {
+        // ---- Standard Single-Pass Extraction Flow ----
+        logger.info('Using standard single-pass extraction');
+
+        // 5. Initial Extract Call
+        logger.debug('Starting initial LLM extraction...');
+        const initialExtraction = await this.callExtractionLLM({
+          instruction: instruction || 'Extract data according to schema',
+          domContent: treeText,
+          schema: transformedSchema,
+          apiKey: apiKey || '',  // Use empty string for BrowserOperator
+          ctx,
+        });
+
+        logger.debug('Initial extraction result:', initialExtraction);
+        if (!initialExtraction) { // Check if initial extraction failed
+          return {
+            success: false,
+            error: 'Initial data extraction failed',
+            data: null,
+          };
+        }
+        // Check if extraction returned a parsing error
+        if (initialExtraction.__parsing_failed__) {
+          return {
+            success: false,
+            error: initialExtraction.__error__ || 'JSON parsing failed during extraction',
+            data: null,
+          };
+        }
+
+        // 6. Refine Call
+        const refinedData = await this.callRefinementLLM({
+          instruction: instruction || 'Refine the extracted data based on the original request',
+          schema: transformedSchema, // Use the same transformed schema
+          initialData: initialExtraction,
+          apiKey: apiKey || '',  // Use empty string for BrowserOperator
+          ctx,
+        });
+
+        logger.debug('Refinement result:', refinedData);
+        if (!refinedData) { // Check if refinement failed
+          return {
+            success: false,
+            error: 'Data refinement step failed',
+            data: null,
+          };
+        }
+        // Check if refinement returned a parsing error
+        if (refinedData.__parsing_failed__) {
+          return {
+            success: false,
+            error: refinedData.__error__ || 'JSON parsing failed during refinement',
+            data: null,
+          };
+        }
+
+        finalData = refinedData;
       }
 
-      // 6. Refine Call
-      const refinedData = await this.callRefinementLLM({
-        instruction: instruction || 'Refine the extracted data based on the original request',
-        schema: transformedSchema, // Use the same transformed schema
-        initialData: initialExtraction,
-        apiKey,
-      });
-
-      logger.debug('Refinement result:', refinedData);
-      if (!refinedData) { // Check if refinement failed
-        return {
-          success: false,
-          error: 'Data refinement step failed',
-          data: null,
-        };
-      }
-
-      // 7. LLM + Tool Call for URL Resolution - New approach
-      const finalData = await this.resolveUrlsWithLLM({
-        data: refinedData,
-        apiKey,
+      // ---- URL Resolution (common for both flows) ----
+      logger.debug('Resolving URLs...');
+      const dataWithUrls = await this.resolveUrlsWithLLM({
+        data: finalData,
+        apiKey: apiKey || '',  // Use empty string for BrowserOperator
         schema, // Original schema to understand what fields are URLs
+        idToUrlMapping, // Pre-built accessibility node ID → URL mapping
       });
 
       logger.debug('Data after URL resolution:',
-        JSON.stringify(Array.isArray(finalData) ? finalData.slice(0, 2) : finalData, null, 2).substring(0, 500));
+        JSON.stringify(Array.isArray(dataWithUrls) ? dataWithUrls.slice(0, 2) : dataWithUrls, null, 2).substring(0, 500));
 
-      // 7a. Check if any URL fields still contain numeric node IDs
+      // Check if any URL fields still contain numeric node IDs
       let urlResolutionWarning: string | undefined;
-      const dataString = JSON.stringify(finalData);
+      const dataString = JSON.stringify(dataWithUrls);
       // Simple heuristic: if we have numbers where URLs are expected in common URL field names
       if (dataString.match(/"(url|link|href|website|webpage)"\s*:\s*\d+/i)) {
         urlResolutionWarning = 'Note: Some URL fields may contain unresolved node IDs instead of actual URLs.';
         logger.warn('Detected potential unresolved node IDs in URL fields');
       }
 
-      // 8. Metadata Call
+      // ---- Metadata Call (common for both flows) ----
       const metadata = await this.callMetadataLLM({
         instruction: instruction || 'Assess extraction completion',
-        extractedData: finalData, // Use the final data with URLs for assessment
-        domContent: treeText, // Pass the DOM content for context
+        extractedData: dataWithUrls, // Use the final data with URLs for assessment
+        domContent: treeText.substring(0, 3000), // Truncate for metadata call
         schema, // Pass the schema to understand what was requested
-        apiKey,
+        apiKey: apiKey || '',  // Use empty string for BrowserOperator
+        ctx,
       });
 
       logger.debug('Metadata result:', metadata);
       if (!metadata) { // Check if metadata call failed
-        // Decide if this should be a hard failure or just return without metadata
         logger.warn('Metadata extraction step failed, proceeding without metadata.');
-        // If metadata is critical, return failure:
-        // return {
-        //   success: false,
-        //   error: 'Metadata extraction step failed',
-        //   data: null,
-        // };
       }
-
-      // ---- End Multi-step LLM Process ----
 
       // Prepare the result
       const result: SchemaExtractionResult = {
         success: true,
-        data: finalData,
+        data: dataWithUrls,
         metadata: metadata || undefined, // Include metadata if successful, otherwise undefined
       };
 
@@ -432,6 +532,7 @@ Schema Examples:
     domContent: string,
     schema: SchemaDefinition,
     apiKey: string,
+    ctx?: LLMContext,
   }): Promise<any> {
     const { instruction, domContent, schema, apiKey } = options;
     logger.debug('Calling Extraction LLM...');
@@ -480,21 +581,53 @@ CRITICAL:
 Only output the JSON object with real data from the accessibility tree.`;
 
     try {
-      const { model, provider } = AIChatPanel.getNanoModelWithProvider();
-      const llm = LLMClient.getInstance();
-      const llmResponse = await llm.call({
-        provider,
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: extractionPrompt }
-        ],
-        systemPrompt: systemPrompt,
-        temperature: 0.1
-      });
-      const response = llmResponse.text;
-      if (!response) { throw new Error('No text response from extraction LLM'); }
-      return this.parseJsonResponse(response);
+      if (!options.ctx?.provider || !(options.ctx.nanoModel)) {
+        throw new Error('Missing LLM context (provider/nano model) for extraction');
+      }
+      const provider = options.ctx.provider;
+      const model = options.ctx.nanoModel;
+      const llmResponse = await callLLMWithTracing(
+        {
+          provider,
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: extractionPrompt }
+          ],
+          systemPrompt: systemPrompt,
+          temperature: 0.1,
+          options: { retryConfig: { maxRetries: 3, baseDelayMs: 1500 } }
+        },
+        {
+          toolName: this.name,
+          operationName: 'extract_data',
+          context: 'schema_extraction',
+          additionalMetadata: {
+            instructionLength: instruction.length,
+            domContentLength: domContent.length,
+            schemaFields: Object.keys(schema.properties || {}).length
+          }
+        }
+      );
+      const response = llmResponse.text || '';
+      try {
+        return LLMResponseParser.parseStrictJSON(response);
+      } catch {
+        try {
+          return LLMResponseParser.parseJSONWithFallbacks(response);
+        } catch (e) {
+          const errorMsg = e instanceof Error ? e.message : String(e);
+          logger.error('Failed to parse extraction JSON:', e);
+          logger.warn('Raw LLM response:', response.substring(0, 500));
+          // Return error object with embedded raw response
+          return {
+            __parsing_failed__: true,
+            __error__: `JSON parsing failed during extraction: ${errorMsg}\n\nRaw LLM Response:\n${response}`,
+            __raw_response__: response,
+            __step__: 'extraction'
+          };
+        }
+      }
     } catch (error) {
       logger.error('Error in callExtractionLLM:', error);
       return null; // Indicate failure
@@ -509,6 +642,7 @@ Only output the JSON object with real data from the accessibility tree.`;
     schema: SchemaDefinition,
     initialData: any,
     apiKey: string,
+    ctx?: LLMContext,
   }): Promise<any> {
     const { instruction, schema, initialData, apiKey } = options;
     logger.debug('Calling Refinement LLM...');
@@ -548,21 +682,52 @@ Return only the refined JSON object.
 Do not add any conversational text or explanations or thinking tags.`;
 
     try {
-      const { model, provider } = AIChatPanel.getNanoModelWithProvider();
-      const llm = LLMClient.getInstance();
-      const llmResponse = await llm.call({
-        provider,
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: refinePrompt }
-        ],
-        systemPrompt: systemPrompt,
-        temperature: 0.1
-      });
-      const response = llmResponse.text;
-      if (!response) { throw new Error('No text response from refinement LLM'); }
-      return this.parseJsonResponse(response);
+      if (!options.ctx?.provider || !(options.ctx.nanoModel || options.ctx.model)) {
+        throw new Error('Missing LLM context (provider/model) for refinement');
+      }
+      const provider = options.ctx.provider;
+      const model = options.ctx.nanoModel || options.ctx.model;
+      const llmResponse = await callLLMWithTracing(
+        {
+          provider,
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: refinePrompt }
+          ],
+          systemPrompt: systemPrompt,
+          temperature: 0.1,
+          options: { retryConfig: { maxRetries: 3, baseDelayMs: 1500 } }
+        },
+        {
+          toolName: this.name,
+          operationName: 'refine_data',
+          context: 'data_refinement',
+          additionalMetadata: {
+            instructionLength: instruction.length,
+            initialDataFields: Object.keys(initialData || {}).length
+          }
+        }
+      );
+      const response = llmResponse.text || '';
+      try {
+        return LLMResponseParser.parseStrictJSON(response);
+      } catch {
+        try {
+          return LLMResponseParser.parseJSONWithFallbacks(response);
+        } catch (e) {
+          const errorMsg = e instanceof Error ? e.message : String(e);
+          logger.error('Failed to parse refinement JSON:', e);
+          logger.warn('Raw LLM response:', response.substring(0, 500));
+          // Return error object with embedded raw response
+          return {
+            __parsing_failed__: true,
+            __error__: `JSON parsing failed during refinement: ${errorMsg}\n\nRaw LLM Response:\n${response}`,
+            __raw_response__: response,
+            __step__: 'refinement'
+          };
+        }
+      }
     } catch (error) {
       logger.error('Error in callRefinementLLM:', error);
       return null; // Indicate failure
@@ -578,6 +743,7 @@ Do not add any conversational text or explanations or thinking tags.`;
     domContent: string,
     schema: SchemaDefinition,
     apiKey: string,
+    ctx?: LLMContext,
   }): Promise<ExtractionMetadata | null> {
     const { instruction, extractedData, domContent, schema, apiKey } = options;
     logger.debug('Calling Metadata LLM...');
@@ -644,21 +810,46 @@ Describe the type of page/content that was analyzed.
 Return ONLY a valid JSON object conforming to the required metadata schema.`;
 
     try {
-      const { model, provider } = AIChatPanel.getNanoModelWithProvider();
-      const llm = LLMClient.getInstance();
-      const llmResponse = await llm.call({
-        provider,
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: metadataPrompt }
-        ],
-        systemPrompt: systemPrompt,
-        temperature: 0.0 // Use low temp for objective assessment
-      });
-      const response = llmResponse.text;
-      if (!response) { throw new Error('No text response from metadata LLM'); }
-      const parsedMetadata = this.parseJsonResponse(response);
+      if (!options.ctx?.provider || !(options.ctx.nanoModel || options.ctx.model)) {
+        throw new Error('Missing LLM context (provider/model) for metadata');
+      }
+      const provider = options.ctx.provider;
+      const model = options.ctx.nanoModel || options.ctx.model;
+      const llmResponse = await callLLMWithTracing(
+        {
+          provider,
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: metadataPrompt }
+          ],
+          systemPrompt: systemPrompt,
+          temperature: 0.0, // Use low temp for objective assessment
+          options: { retryConfig: { maxRetries: 3, baseDelayMs: 1500 } }
+        },
+        {
+          toolName: this.name,
+          operationName: 'assess_metadata',
+          context: 'extraction_assessment',
+          additionalMetadata: {
+            instructionLength: instruction.length,
+            hasExtractedData: !!extractedData,
+            domContentLength: domContent.length
+          }
+        }
+      );
+      const response = llmResponse.text || '';
+      let parsedMetadata: any = null;
+      try {
+        parsedMetadata = LLMResponseParser.parseStrictJSON(response);
+      } catch {
+        try {
+          parsedMetadata = LLMResponseParser.parseJSONWithFallbacks(response);
+        } catch (e) {
+          logger.error('Failed to parse metadata JSON:', e);
+          parsedMetadata = null;
+        }
+      }
       // Basic validation
       if (typeof parsedMetadata?.progress === 'string' && typeof parsedMetadata?.completed === 'boolean') {
         return parsedMetadata as ExtractionMetadata;
@@ -673,207 +864,383 @@ Return ONLY a valid JSON object conforming to the required metadata schema.`;
     }
   }
 
+
   /**
-   * Helper to parse JSON, potentially extracting it from surrounding text.
+   * Recursively find and replace node IDs with URLs in a data structure
+   * Handles both numeric IDs (from LLM) and string IDs (from accessibility tree)
    */
-  private parseJsonResponse(responseText: string): any | null {
-    try {
-      // First, try parsing the whole string directly
-      return JSON.parse(responseText);
-    } catch (e) {
-      // If direct parsing fails, remove all think tags and their content
-      logger.debug('Removing think tags before parsing JSON');
-
-      // Remove <think>...</think> tags and everything inside them (handles multiple think tags)
-      let cleanedText = responseText.replace(/<think>[\s\S]*?<\/think>/g, '');
-
-      // Remove any incomplete <think> tags without closing tags
-      cleanedText = cleanedText.replace(/<think>[\s\S]*/g, '');
-
-      // If after removing think tags, the text is empty or whitespace, give up
-      if (!cleanedText.trim()) {
-        logger.error('No content left after removing think tags');
-        return null;
-      }
-
-      // First, look for JSON code blocks in the cleaned text
-      const codeBlockMatch = cleanedText.match(/```json\s*([\s\S]*?)\s*```/);
-      if (codeBlockMatch && codeBlockMatch[1]) {
-        try {
-          return JSON.parse(codeBlockMatch[1]);
-        } catch (codeBlockError) {
-          logger.error('Failed to parse JSON from code block:', codeBlockError);
-        }
-      }
-
-      // Next, try to find a complete JSON object or array in the cleaned text
-      // Find the last valid JSON in the text (in case there are multiple)
-      let potentialJsons: string[] = [];
-      const jsonMatches = cleanedText.match(/(\{[\s\S]*?\}|\[[\s\S]*?\])/g);
-      if (jsonMatches) {
-        potentialJsons = jsonMatches;
-      }
-
-      // Try parsing each potential JSON, starting with the longest one
-      // (longer matches are more likely to be complete)
-      potentialJsons.sort((a, b) => b.length - a.length);
-
-      for (const json of potentialJsons) {
-        try {
-          return JSON.parse(json);
-        } catch (jsonError) {
-          // Continue to the next potential JSON
-        }
-      }
-
-      // If no valid JSON found yet, try a more aggressive approach
-      const jsonObjectMatch = cleanedText.match(/\{[\s\S]*\}/);
-      if (jsonObjectMatch) {
-        try {
-          return JSON.parse(jsonObjectMatch[0]);
-        } catch (objectError) {
-          logger.error('Failed to parse JSON object:', objectError);
-        }
-      }
-
-      const jsonArrayMatch = cleanedText.match(/\[[\s\S]*\]/);
-      if (jsonArrayMatch) {
-        try {
-          return JSON.parse(jsonArrayMatch[0]);
-        } catch (arrayError) {
-          logger.error('Failed to parse JSON array:', arrayError);
-        }
-      }
-
-      logger.error('Failed to parse and no valid JSON found in response after removing think tags');
-      return null;
+  private findAndReplaceNodeIds(data: any, nodeIdToUrlMap: Record<string, string>): any {
+    // Handle null/undefined
+    if (data === null || data === undefined) {
+      return data;
     }
+
+    // Check if it's a node ID (number or string) that matches a key in the URL map
+    // LLM returns numbers like 19951, accessibility tree uses strings like "19951"
+    if (typeof data === 'number' || typeof data === 'string') {
+      const nodeIdKey = String(data);
+      if (nodeIdToUrlMap[nodeIdKey]) {
+        return nodeIdToUrlMap[nodeIdKey];
+      }
+    }
+
+    // Recursively process arrays
+    if (Array.isArray(data)) {
+      return data.map(item => this.findAndReplaceNodeIds(item, nodeIdToUrlMap));
+    }
+
+    // Recursively process objects
+    if (typeof data === 'object' && data !== null) {
+      const result: any = {};
+      for (const [key, value] of Object.entries(data)) {
+        result[key] = this.findAndReplaceNodeIds(value, nodeIdToUrlMap);
+      }
+      return result;
+    }
+
+    // Return data unchanged for other types
+    return data;
   }
 
   /**
-   * Resolve URLs in the data using LLM without function calls
+   * Resolve URLs in the data using the pre-built URL mapping
+   * Uses the accessibility node ID → URL mapping built from the raw AX tree
    */
   private async resolveUrlsWithLLM(options: {
     data: any,
     apiKey: string,
     schema: SchemaDefinition,
+    idToUrlMapping: Record<string, string>,
   }): Promise<any> {
-    const { data, apiKey, schema } = options;
-    logger.debug('Starting URL resolution with LLM...');
-
-    // 1. First LLM call to identify nodeIDs
-    const nodeIdExtractionPrompt = `
-Extract all numeric values that appear to be accessibility node IDs from fields like "link", "url", or "href" in the data.
-
-ORIGINAL SCHEMA:
-\`\`\`json
-${JSON.stringify(schema, null, 2)}
-\`\`\`
-
-EXTRACTED DATA (containing nodeIDs instead of URLs):
-\`\`\`json
-${JSON.stringify(data, null, 2)}
-\`\`\`
-
-TASK: Return ONLY a JSON array of the numeric node IDs found. Example: [12345, 67890].
-Do not add any conversational text or explanations or thinking tags.
-`;
+    const { data, idToUrlMapping } = options;
+    logger.debug('Starting URL resolution using pre-built mapping...');
 
     try {
-      const { model, provider } = AIChatPanel.getNanoModelWithProvider();
-      const llmClient = LLMClient.getInstance();
-      
-      const llmResponse = await llmClient.call({
-        provider,
-        model,
-        messages: [
-          { role: 'system', content: 'You are a JSON processor that extracts numeric node IDs.' },
-          { role: 'user', content: nodeIdExtractionPrompt }
-        ],
-        systemPrompt: 'You are a JSON processor that extracts numeric node IDs.',
-        temperature: 0
-      });
-      const response = llmResponse.text || '';
-
-      logger.debug('Node ID extraction response:', response);
-
-      // Parse the array of nodeIds
-      const nodeIds = this.parseJsonResponse(response);
-      if (!Array.isArray(nodeIds) || nodeIds.length === 0) {
-        logger.debug('No nodeIDs found for URL conversion');
-        return data; // Return original data if no nodeIds found
+      if (Object.keys(idToUrlMapping).length === 0) {
+        logger.debug('No URL mappings available, returning original data');
+        return data;
       }
 
-      logger.debug(`Found ${nodeIds.length} nodeIDs to convert:`, nodeIds);
+      logger.debug(`Using pre-built URL mapping with ${Object.keys(idToUrlMapping).length} entries`);
 
-      // 2. Execute the NodeIDsToURLsTool with the found nodeIds
-      const urlTool = new NodeIDsToURLsTool();
-      const urlResult = await urlTool.execute({ nodeIds });
-
-      if ('error' in urlResult) {
-        logger.error('Error from NodeIDsToURLsTool:', urlResult.error);
-        return data; // Return original data if tool execution fails
-      }
-
-      // 3. Create a mapping for easy lookup
-      const nodeIdToUrlMap: Record<number, string> = {};
-      for (const item of urlResult.urls) {
-        if (item.url) {
-          nodeIdToUrlMap[item.nodeId] = item.url;
-        }
-      }
-
-      logger.debug(`Created nodeId to URL mapping with ${Object.keys(nodeIdToUrlMap).length} entries`);
-
-      // 4. Second LLM call to replace nodeIDs with URLs
-      const urlReplacementPrompt = `
-Replace numeric accessibility node IDs with their corresponding URLs in the data structure.
-
-ORIGINAL DATA (with numeric nodeIDs):
-\`\`\`json
-${JSON.stringify(data, null, 2)}
-\`\`\`
-
-NODE ID TO URL MAPPING:
-\`\`\`json
-${JSON.stringify(nodeIdToUrlMap, null, 2)}
-\`\`\`
-
-TASK: Replace all numeric nodeIDs in the data with their corresponding URLs from the mapping.
-Return the full updated data structure with the URLs replaced. 
-Do not add any conversational text or explanations or thinking tags.
-`;
-
-      const llmClient2 = LLMClient.getInstance();
-      const llmUrlResponse = await llmClient2.call({
-        provider,
-        model,
-        messages: [
-          { role: 'system', content: 'You are an expert data transformation assistant.' },
-          { role: 'user', content: urlReplacementPrompt }
-        ],
-        systemPrompt: 'You are an expert data transformation assistant.',
-        temperature: 0
-      });
-      const urlReplacementResponse = llmUrlResponse.text;
-
-      if (!urlReplacementResponse) {
-        logger.error('No response from URL replacement LLM');
-        return data; // Return original data if we can't get a response
-      }
-
-      // Parse the response
-      const updatedData = this.parseJsonResponse(urlReplacementResponse);
-      if (!updatedData) {
-        logger.error('[SchemaBasedExtractorTool] Failed to parse updated data from LLM response');
-        return data; // Return original data if parsing fails
-      }
+      // Replace node IDs with URLs in the data
+      // findAndReplaceNodeIds handles both numeric (from LLM) and string (accessibility) IDs
+      const updatedData = this.findAndReplaceNodeIds(data, idToUrlMapping);
 
       logger.debug('Successfully replaced nodeIDs with URLs');
       return updatedData;
     } catch (error) {
-      logger.error('[SchemaBasedExtractorTool] Error in URL resolution with LLM:', error);
+      logger.error('[SchemaBasedExtractorTool] Error in URL resolution:', error);
       return data; // Return original data on error
+    }
+  }
+
+  /**
+   * Estimates token count from text
+   */
+  private estimateTokenCount(text: string): number {
+    return Math.ceil(text.length / this.CHARS_PER_TOKEN);
+  }
+
+  /**
+   * Chunks content by detecting sections (headings in accessibility tree)
+   */
+  private chunkBySections(treeText: string): ContentChunk[] {
+    const chunks: ContentChunk[] = [];
+
+    // Split by heading patterns in accessibility tree
+    // Format: [nodeId] heading: Heading Text
+    const lines = treeText.split('\n');
+    const sectionStarts: Array<{ index: number, heading: string, nodeId: string, level: number }> = [];
+
+    // Find all headings
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Match patterns like: [123] heading: Some Heading Text
+      const headingMatch = line.match(/\[(\d+)\]\s+heading(?:\s+level (\d+))?:\s*(.+)/i);
+      if (headingMatch) {
+        const nodeId = headingMatch[1];
+        const level = headingMatch[2] ? parseInt(headingMatch[2]) : 2; // Default to level 2
+        const heading = headingMatch[3].trim();
+        sectionStarts.push({ index: i, heading, nodeId, level });
+      }
+    }
+
+    logger.debug(`Found ${sectionStarts.length} section headings`);
+
+    // If no headings found, fall back to token-based chunking
+    if (sectionStarts.length === 0) {
+      logger.warn('No section headings found, falling back to token-based chunking');
+      return this.chunkByTokens(treeText);
+    }
+
+    // Create chunks from sections
+    let chunkId = 0;
+    let currentChunkLines: string[] = [];
+    let currentChunkStart = 0;
+
+    for (let i = 0; i < sectionStarts.length; i++) {
+      const section = sectionStarts[i];
+      const nextSection = sectionStarts[i + 1];
+
+      // Extract lines for this section
+      const sectionEnd = nextSection ? nextSection.index : lines.length;
+      const sectionLines = lines.slice(section.index, sectionEnd);
+
+      // Check if adding this section would exceed limit
+      const combinedLines = [...currentChunkLines, ...sectionLines];
+      const combinedText = combinedLines.join('\n');
+      const combinedTokens = this.estimateTokenCount(combinedText);
+
+      if (combinedTokens > this.CHUNK_TOKEN_LIMIT && currentChunkLines.length > 0) {
+        // Create chunk from accumulated content
+        const chunkText = currentChunkLines.join('\n');
+        chunks.push({
+          id: chunkId++,
+          content: chunkText,
+          tokenCount: this.estimateTokenCount(chunkText),
+          sectionInfo: {
+            heading: sectionStarts[currentChunkStart]?.heading,
+            level: sectionStarts[currentChunkStart]?.level,
+            startNodeId: sectionStarts[currentChunkStart]?.nodeId
+          }
+        });
+
+        // Start new chunk with current section
+        currentChunkLines = sectionLines;
+        currentChunkStart = i;
+      } else {
+        // Add section to current chunk
+        currentChunkLines.push(...sectionLines);
+      }
+    }
+
+    // Add final chunk if there's content
+    if (currentChunkLines.length > 0) {
+      const chunkText = currentChunkLines.join('\n');
+      chunks.push({
+        id: chunkId++,
+        content: chunkText,
+        tokenCount: this.estimateTokenCount(chunkText),
+        sectionInfo: {
+          heading: sectionStarts[currentChunkStart]?.heading,
+          level: sectionStarts[currentChunkStart]?.level,
+          startNodeId: sectionStarts[currentChunkStart]?.nodeId
+        }
+      });
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Chunks content by token count (fallback when no sections detected)
+   */
+  private chunkByTokens(treeText: string): ContentChunk[] {
+    const chunks: ContentChunk[] = [];
+    const lines = treeText.split('\n');
+
+    let chunkId = 0;
+    let currentChunkLines: string[] = [];
+    let currentTokens = 0;
+
+    for (const line of lines) {
+      const lineTokens = this.estimateTokenCount(line);
+
+      if (currentTokens + lineTokens > this.CHUNK_TOKEN_LIMIT && currentChunkLines.length > 0) {
+        // Create chunk
+        const chunkText = currentChunkLines.join('\n');
+        chunks.push({
+          id: chunkId++,
+          content: chunkText,
+          tokenCount: currentTokens
+        });
+
+        // Start new chunk
+        currentChunkLines = [line];
+        currentTokens = lineTokens;
+      } else {
+        currentChunkLines.push(line);
+        currentTokens += lineTokens;
+      }
+    }
+
+    // Add final chunk
+    if (currentChunkLines.length > 0) {
+      chunks.push({
+        id: chunkId++,
+        content: currentChunkLines.join('\n'),
+        tokenCount: currentTokens
+      });
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Extract data from a single chunk using LLM
+   */
+  private async extractFromChunk(
+    chunk: ContentChunk,
+    schema: SchemaDefinition,
+    instruction: string,
+    apiKey: string,
+    ctx?: LLMContext
+  ): Promise<any> {
+    const systemPrompt = `You are a structured data extraction agent.
+Your task is to extract data from a CHUNK of a larger document based on a given schema.
+This chunk is part ${chunk.id + 1} of a larger page.
+${chunk.sectionInfo?.heading ? `This chunk covers the section: "${chunk.sectionInfo.heading}"` : ''}
+
+CRITICAL RULES:
+1. ONLY extract data that exists in THIS chunk - do not hallucinate
+2. If no relevant data exists in this chunk, return an empty result
+3. For URL fields, extract the numeric accessibility node ID (not the URL string)
+4. Return ONLY valid JSON matching the schema
+
+Focus on extracting any relevant data from this chunk. The results will be merged with other chunks.`;
+
+    const extractionPrompt = `
+INSTRUCTION: ${instruction}
+
+SCHEMA:
+\`\`\`json
+${JSON.stringify(schema, null, 2)}
+\`\`\`
+
+CHUNK CONTENT (Part ${chunk.id + 1}):
+\`\`\`
+${chunk.content}
+\`\`\`
+
+Extract structured data from this chunk according to the schema.
+Return ONLY the JSON object.`;
+
+    try {
+      if (!ctx?.provider || !ctx.nanoModel) {
+        throw new Error('Missing LLM context for extraction');
+      }
+
+      const llmResponse = await callLLMWithTracing(
+        {
+          provider: ctx.provider,
+          model: ctx.nanoModel || ctx.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: extractionPrompt }
+          ],
+          systemPrompt,
+          temperature: 0.1,
+          options: { retryConfig: { maxRetries: 2, baseDelayMs: 1000 } }
+        },
+        {
+          toolName: this.name,
+          operationName: 'extract_chunk',
+          context: `chunk_${chunk.id}`,
+          additionalMetadata: {
+            chunkId: chunk.id,
+            chunkTokens: chunk.tokenCount,
+            section: chunk.sectionInfo?.heading
+          }
+        }
+      );
+
+      const response = llmResponse.text || '';
+      return LLMResponseParser.parseJSONWithFallbacks(response);
+    } catch (error) {
+      logger.error(`Error extracting from chunk ${chunk.id}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * LLM call to merge chunk results into final data
+   */
+  private async callMergeLLM(options: {
+    chunkResults: any[],
+    schema: SchemaDefinition,
+    instruction: string,
+    apiKey: string,
+    ctx?: LLMContext,
+  }): Promise<any> {
+    const { chunkResults, schema, instruction, apiKey } = options;
+    logger.debug('Calling Merge LLM to combine chunk results...');
+
+    const systemPrompt = `You are a data merging agent in a multi-agent system.
+Your task is to intelligently merge multiple JSON extraction results from different chunks of the same page.
+
+CRITICAL RULES:
+1. Merge all data into a single result conforming to the schema
+2. Remove duplicates (same items appearing in multiple chunks)
+3. Maintain numeric node IDs for URL fields - DO NOT convert to URLs
+4. If the schema expects an array, combine all arrays and deduplicate
+5. If the schema expects an object with arrays, merge each array property separately
+6. Return ONLY valid JSON matching the schema
+
+Focus on creating a complete, deduplicated result from all chunks.`;
+
+    const mergePrompt = `
+ORIGINAL INSTRUCTION: ${instruction}
+
+SCHEMA:
+\`\`\`json
+${JSON.stringify(schema, null, 2)}
+\`\`\`
+
+CHUNK RESULTS (${chunkResults.length} chunks):
+\`\`\`json
+${JSON.stringify(chunkResults, null, 2)}
+\`\`\`
+
+TASK: Merge all chunk results into a single result that conforms to the schema.
+- Remove duplicate items (compare by content, not just IDs)
+- Combine all arrays
+- Keep numeric node IDs in URL fields
+Return ONLY the merged JSON object.`;
+
+    try {
+      if (!options.ctx?.provider || !(options.ctx.nanoModel || options.ctx.model)) {
+        throw new Error('Missing LLM context for merging');
+      }
+      const provider = options.ctx.provider;
+      const model = options.ctx.nanoModel || options.ctx.model;
+      const llmResponse = await callLLMWithTracing(
+        {
+          provider,
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: mergePrompt }
+          ],
+          systemPrompt,
+          temperature: 0.1,
+          options: { retryConfig: { maxRetries: 3, baseDelayMs: 1500 } }
+        },
+        {
+          toolName: this.name,
+          operationName: 'merge_chunks',
+          context: 'chunk_merging',
+          additionalMetadata: {
+            chunkCount: chunkResults.length,
+            instructionLength: instruction.length
+          }
+        }
+      );
+      const response = llmResponse.text || '';
+      try {
+        return LLMResponseParser.parseStrictJSON(response);
+      } catch {
+        try {
+          return LLMResponseParser.parseJSONWithFallbacks(response);
+        } catch (e) {
+          logger.error('Failed to parse merge JSON:', e);
+          logger.warn('Raw LLM response:', response.substring(0, 500));
+          return null;
+        }
+      }
+    } catch (error) {
+      logger.error('Error in callMergeLLM:', error);
+      return null;
     }
   }
 }

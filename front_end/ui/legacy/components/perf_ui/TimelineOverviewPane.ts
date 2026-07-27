@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2013 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2013 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../../../core/common/common.js';
@@ -56,6 +30,7 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
   private windowStartTime = Trace.Types.Timing.Milli(0);
   private windowEndTime = Trace.Types.Timing.Milli(Infinity);
   private muteOnWindowChanged = false;
+  private hasPointer = false;
   #dimHighlightSVG: Element;
   readonly #boundOnThemeChanged = this.#onThemeChanged.bind(this);
 
@@ -70,8 +45,11 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
     this.element.appendChild(this.overviewGrid.element);
     this.cursorArea = this.overviewGrid.element.createChild('div', 'overview-grid-cursor-area');
     this.cursorElement = this.overviewGrid.element.createChild('div', 'overview-grid-cursor-position');
-    this.cursorArea.addEventListener('mousemove', this.onMouseMove.bind(this), true);
-    this.cursorArea.addEventListener('mouseleave', this.hideCursor.bind(this), true);
+    this.cursorArea.addEventListener('pointerdown', this.onMouseDown.bind(this), true);
+    this.cursorArea.addEventListener('pointerup', this.onMouseCancel.bind(this), true);
+    this.cursorArea.addEventListener('pointercancel', this.onMouseCancel.bind(this), true);
+    this.cursorArea.addEventListener('pointermove', this.onMouseMove.bind(this), true);
+    this.cursorArea.addEventListener('pointerleave', this.hideCursor.bind(this), true);
 
     this.overviewGrid.setResizeEnabled(false);
     this.overviewGrid.addEventListener(OverviewGridEvents.WINDOW_CHANGED_WITH_POSITION, this.onWindowChanged, this);
@@ -86,15 +64,38 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
 
   enableCreateBreadcrumbsButton(): void {
     const breadcrumbsElement = this.overviewGrid.enableCreateBreadcrumbsButton();
-    breadcrumbsElement.addEventListener('mousemove', this.onMouseMove.bind(this), true);
-    breadcrumbsElement.addEventListener('mouseleave', this.hideCursor.bind(this), true);
+    breadcrumbsElement.addEventListener('pointerdown', this.onMouseDown.bind(this), true);
+    breadcrumbsElement.addEventListener('pointerup', this.onMouseCancel.bind(this), true);
+    breadcrumbsElement.addEventListener('pointercancel', this.onMouseCancel.bind(this), true);
+    breadcrumbsElement.addEventListener('pointermove', this.onMouseMove.bind(this), true);
+    breadcrumbsElement.addEventListener('pointerleave', this.hideCursor.bind(this), true);
   }
 
-  private onMouseMove(event: Event): void {
+  private onMouseDown(event: PointerEvent): void {
+    if (!(event.target instanceof HTMLElement)) {
+      return;
+    }
+
+    event.target.setPointerCapture(event.pointerId);
+    this.overviewInfo.hide();
+    this.hasPointer = true;
+  }
+
+  private onMouseCancel(event: PointerEvent): void {
+    if (!(event.target instanceof HTMLElement)) {
+      return;
+    }
+
+    event.target.releasePointerCapture(event.pointerId);
+    this.overviewInfo.show();
+    this.hasPointer = false;
+  }
+
+  private onMouseMove(event: MouseEvent): void {
     if (!this.cursorEnabled) {
       return;
     }
-    const mouseEvent = (event as MouseEvent);
+    const mouseEvent = event;
     const target = (event.target as HTMLElement);
     const offsetLeftRelativeToCursorArea =
         target.getBoundingClientRect().left - this.cursorArea.getBoundingClientRect().left;
@@ -114,7 +115,9 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
       this.dispatchEventToListeners(Events.OVERVIEW_PANE_MOUSE_LEAVE);
     }
 
-    void this.overviewInfo.setContent(this.buildOverviewInfo());
+    if (!this.hasPointer) {
+      void this.overviewInfo.setContent(this.buildOverviewInfo());
+    }
   }
 
   private async buildOverviewInfo(): Promise<DocumentFragment> {
@@ -463,15 +466,15 @@ export interface TimelineOverview {
 }
 
 export class TimelineOverviewBase extends UI.Widget.VBox implements TimelineOverview {
-  private calculatorInternal: TimelineOverviewCalculator|null;
+  #calculator: TimelineOverviewCalculator|null;
   private canvas: HTMLCanvasElement;
-  private contextInternal: CanvasRenderingContext2D|null;
+  #context: CanvasRenderingContext2D|null;
 
   constructor() {
     super();
-    this.calculatorInternal = null;
+    this.#calculator = null;
     this.canvas = this.element.createChild('canvas', 'fill');
-    this.contextInternal = this.canvas.getContext('2d');
+    this.#context = this.canvas.getContext('2d');
   }
 
   width(): number {
@@ -483,14 +486,14 @@ export class TimelineOverviewBase extends UI.Widget.VBox implements TimelineOver
   }
 
   context(): CanvasRenderingContext2D {
-    if (!this.contextInternal) {
+    if (!this.#context) {
       throw new Error('Unable to retrieve canvas context');
     }
-    return this.contextInternal;
+    return this.#context;
   }
 
   calculator(): TimelineOverviewCalculator|null {
-    return this.calculatorInternal;
+    return this.#calculator;
   }
 
   update(): void {
@@ -509,7 +512,7 @@ export class TimelineOverviewBase extends UI.Widget.VBox implements TimelineOver
   }
 
   setCalculator(calculator: TimelineOverviewCalculator): void {
-    this.calculatorInternal = calculator;
+    this.#calculator = calculator;
   }
 
   onClick(_event: Event): boolean {
@@ -563,5 +566,10 @@ export class OverviewInfo {
   hide(): void {
     this.visible = false;
     this.glassPane.hide();
+  }
+
+  show(): void {
+    this.visible = true;
+    this.glassPane.show(window.document);
   }
 }

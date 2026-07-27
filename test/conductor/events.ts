@@ -1,9 +1,9 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 /**
- * @fileoverview Functions and state to tie error reporting and console output of
+ * @file Functions and state to tie error reporting and console output of
  * the browser process and frontend pages together.
  */
 
@@ -31,7 +31,7 @@ const ALLOWED_ASSERTION_FAILURES = [
   // See: https://crbug.com/1192052
   'Request Runtime.evaluate failed. {"code":-32602,"message":"uniqueContextId not found"}',
   'uniqueContextId not found',
-  'Request Storage.getStorageKeyForFrame failed. {"code":-32602,"message":"Frame tree node for given frame not found"}',
+  'Request Storage.getStorageKey failed. {"code":-32602,"message":"Frame tree node for given frame not found"}',
   // Some left-over a11y calls show up in the logs.
   'Request Accessibility.getChildAXNodes failed. {"code":-32602,"message":"Invalid ID"}',
   'Unable to create texture',
@@ -39,7 +39,9 @@ const ALLOWED_ASSERTION_FAILURES = [
   // neterror.js started serving sourcemaps and we're requesting it unnecessarily.
   'Request Network.loadNetworkResource failed. {"code":-32602,"message":"Unsupported URL scheme"}',
   'Fetch API cannot load chrome-error://chromewebdata/neterror.rollup.js.map. URL scheme "chrome-error" is not supported.',
-  'Request Storage.getAffectedUrlsForThirdPartyCookieMetadata failed. {"code":-32603,"message":"Internal error"}',
+  'Request Storage.getAffectedUrlsForThirdPartyCookieMetadata failed.',
+  'Cannot find registered action with ID \'sources.add-folder-to-workspace\'',
+  'Hash of blocked script',
 ];
 
 const logLevels = {
@@ -97,6 +99,14 @@ export function installPageErrorHandlers(page: puppeteer.Page): void {
     if (error.message.includes(path.join('ui', 'components', 'docs'))) {
       uiComponentDocErrors.push(error);
     }
+    const message = error.stack ?? error.message;
+    if (isExpectedError(error)) {
+      expectedErrors.push(message);
+      console.log('(expected) ' + message);
+    } else {
+      fatalErrors.push(message);
+      console.error(message);
+    }
     throw new Error(`Page error in Frontend: ${error}`);
   });
 
@@ -131,8 +141,9 @@ export function installPageErrorHandlers(page: puppeteer.Page): void {
   });
 }
 
-function isExpectedError(consoleMessage: puppeteer.ConsoleMessage) {
-  if (ALLOWED_ASSERTION_FAILURES.some(f => consoleMessage.text().includes(f))) {
+function isExpectedError(consoleMessage: puppeteer.ConsoleMessage|Error) {
+  if (ALLOWED_ASSERTION_FAILURES.some(
+          f => (consoleMessage instanceof Error ? consoleMessage.message : consoleMessage.text()).includes(f))) {
     return true;
   }
   for (const expectation of pendingErrorExpectations) {
@@ -145,7 +156,7 @@ function isExpectedError(consoleMessage: puppeteer.ConsoleMessage) {
 }
 
 export class ErrorExpectation {
-  #caught: puppeteer.ConsoleMessage|undefined;
+  #caught: puppeteer.ConsoleMessage|Error|undefined;
   readonly #msg: string|RegExp;
   constructor(msg: string|RegExp) {
     this.#msg = msg;
@@ -161,8 +172,8 @@ export class ErrorExpectation {
     return this.#caught;
   }
 
-  check(consoleMessage: puppeteer.ConsoleMessage) {
-    const text = consoleMessage.text();
+  check(consoleMessage: puppeteer.ConsoleMessage|Error) {
+    const text = consoleMessage instanceof Error ? consoleMessage.message : consoleMessage.text();
     const match = (this.#msg instanceof RegExp) ? Boolean(text.match(this.#msg)) : text.includes(this.#msg);
     if (match) {
       this.#caught = consoleMessage;
@@ -208,7 +219,9 @@ export function dumpCollectedErrors(): void {
 const pendingErrorExpectations = new Set<ErrorExpectation>();
 export let fatalErrors: string[] = [];
 export let expectedErrors: string[] = [];
-// Gathered separately so we can surface them during screenshot tests to help
-// give an idea of failures, rather than having to guess purely based on the
-// screenshot.
+/**
+ * Gathered separately so we can surface them during screenshot tests to help
+ * give an idea of failures, rather than having to guess purely based on the
+ * screenshot.
+ **/
 export const uiComponentDocErrors: Error[] = [];

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,6 +98,7 @@ describeWithMockConnection('WebAuthn pane', () => {
       const options = addAuthenticator.firstCall.firstArg;
       assert.isTrue(options.hasLargeBlob);
       assert.isTrue(options.hasResidentKey);
+      assert.strictEqual(options.ctap2Version, Protocol.WebAuthn.Ctap2Version.Ctap2_1);
     });
 
     it('adds an authenticator without the large blob option', async () => {
@@ -141,15 +142,12 @@ describeWithMockConnection('WebAuthn pane', () => {
       await expectCalled(addAuthenticator);
 
       // Verify a data grid appeared with a single row to show there is no data.
-      const dataGrid = panel.dataGrids.get(authenticatorId);
+      const dataGrid = panel.contentElement.querySelector('devtools-data-grid tbody');
       if (!dataGrid) {
         assert.fail('Expected dataGrid to be truthy');
         return;
       }
-      assert.lengthOf(dataGrid.rootNode().children, 1);
-      let emptyNode = dataGrid.rootNode().children[0];
-      assert.isOk(emptyNode);
-      assert.deepEqual(emptyNode.data, {});
+      assert.include(dataGrid.deepInnerText(), 'No credentials');
 
       // Add a credential.
       const credential = {
@@ -164,20 +162,14 @@ describeWithMockConnection('WebAuthn pane', () => {
         authenticatorId,
         credential,
       });
+      await panel.updateComplete;
 
       // Verify the credential appeared and the empty row was removed.
-      assert.lengthOf(dataGrid.rootNode().children, 1);
-      const credentialNode = dataGrid.rootNode().children[0];
-      assert.isOk(credentialNode);
-      assert.strictEqual(credentialNode.data, credential);
+      assert.include(dataGrid.deepInnerText(), Object.values(credential).join('\n'));
 
       // Remove the credential.
       const removeCredential = sinon.stub(model, 'removeCredential').resolves();
-      dataGrid.element.querySelectorAll('devtools-button')[1].click();
-      assert.lengthOf(dataGrid.rootNode().children, 1);
-      emptyNode = dataGrid.rootNode().children[0];
-      assert.isOk(emptyNode);
-      assert.deepEqual(emptyNode.data, {});
+      dataGrid.querySelectorAll('devtools-button')[1].click();
       await panel.updateComplete;
       await expectCalled(removeCredential);
 
@@ -210,17 +202,15 @@ describeWithMockConnection('WebAuthn pane', () => {
         authenticatorId,
         credential,
       });
+      await panel.updateComplete;
 
       // Verify the credential appeared.
-      const dataGrid = panel.dataGrids.get(authenticatorId);
+      const dataGrid = panel.contentElement.querySelector('devtools-data-grid tbody');
       if (!dataGrid) {
         assert.fail('Expected dataGrid to be truthy');
         return;
       }
-      assert.lengthOf(dataGrid.rootNode().children, 1);
-      const credentialNode = dataGrid.rootNode().children[0];
-      assert.isOk(credentialNode);
-      assert.strictEqual(credentialNode.data, credential);
+      assert.include(dataGrid.deepInnerText(), Object.values(credential).join('\n'));
 
       // Update the credential.
       const updatedCredential1 = {
@@ -235,10 +225,10 @@ describeWithMockConnection('WebAuthn pane', () => {
         authenticatorId,
         credential: updatedCredential1,
       });
+      await panel.updateComplete;
 
       // Verify the credential was updated.
-      assert.lengthOf(dataGrid.rootNode().children, 1);
-      assert.strictEqual(credentialNode.data, updatedCredential1);
+      assert.include(dataGrid.deepInnerText(), Object.values(updatedCredential1).join('\n'));
 
       // The credential can also be updated through the CREDENTIAL_UPDATED
       // event.
@@ -254,10 +244,10 @@ describeWithMockConnection('WebAuthn pane', () => {
         authenticatorId,
         credential: updatedCredential2,
       });
+      await panel.updateComplete;
 
       // Verify the credential was updated.
-      assert.lengthOf(dataGrid.rootNode().children, 1);
-      assert.strictEqual(credentialNode.data, updatedCredential2);
+      assert.include(dataGrid.deepInnerText(), Object.values(updatedCredential2).join('\n'));
 
       // Updating a different credential should not affect the existing one.
       const anotherCredential = {
@@ -272,10 +262,10 @@ describeWithMockConnection('WebAuthn pane', () => {
         authenticatorId,
         credential: anotherCredential,
       });
+      await panel.updateComplete;
 
       // Verify the credential was unchanged.
-      assert.lengthOf(dataGrid.rootNode().children, 1);
-      assert.strictEqual(credentialNode.data, updatedCredential2);
+      assert.include(dataGrid.deepInnerText(), Object.values(updatedCredential2).join('\n'));
     });
 
     it('removes credentials that were deleted', async () => {
@@ -303,40 +293,38 @@ describeWithMockConnection('WebAuthn pane', () => {
         authenticatorId,
         credential,
       });
+      await panel.updateComplete;
 
       // Verify the credential appeared.
-      const dataGrid = panel.dataGrids.get(authenticatorId);
+      const dataGrid = panel.contentElement.querySelector('devtools-data-grid tbody');
       if (!dataGrid) {
         assert.fail('Expected dataGrid to be truthy');
         return;
       }
-      assert.lengthOf(dataGrid.rootNode().children, 1);
-      const credentialNode = dataGrid.rootNode().children[0];
-      assert.isOk(credentialNode);
-      assert.strictEqual(credentialNode.data, credential);
+      assert.include(dataGrid.deepInnerText(), Object.values(credential).join('\n'));
 
       // Delete a credential with a different ID. This should be ignored.
       model.dispatchEventToListeners(SDK.WebAuthnModel.Events.CREDENTIAL_DELETED, {
         authenticatorId,
         credentialId: 'another credential',
       });
-      assert.lengthOf(dataGrid.rootNode().children, 1);
+      await panel.updateComplete;
+      assert.include(dataGrid.deepInnerText(), Object.values(credential).join('\n'));
 
       // Delete the credential. It should be removed from the list.
       model.dispatchEventToListeners(SDK.WebAuthnModel.Events.CREDENTIAL_DELETED, {
         authenticatorId,
         credentialId: credential.credentialId,
       });
-      assert.lengthOf(dataGrid.rootNode().children, 0);
+      await panel.updateComplete;
+      assert.include(dataGrid.deepInnerText(), 'No credentials');
     });
 
     it('disables "internal" if an internal authenticator exists', async () => {
       const authenticatorId = 'authenticator-1' as Protocol.WebAuthn.AuthenticatorId;
       let panel = new Webauthn.WebauthnPane.WebauthnPaneImpl();
       let transport = panel.contentElement.querySelector<HTMLSelectElement>('#transport');
-      if (!transport) {
-        assert.fail('Transport select is not present');
-      }
+      assert.isOk(transport, 'Transport select is not present');
       let internalTransportIndex = -1;
       for (let i = 0; i < transport.options.length; ++i) {
         if (transport.options[i].value === Protocol.WebAuthn.AuthenticatorTransport.Internal) {
@@ -365,9 +353,7 @@ describeWithMockConnection('WebAuthn pane', () => {
       // Restoring the authenticator when loading the panel again should also cause "internal" to be disabled.
       panel = new Webauthn.WebauthnPane.WebauthnPaneImpl();
       transport = panel.contentElement.querySelector<HTMLSelectElement>('#transport');
-      if (!transport) {
-        assert.fail('Transport select is not present');
-      }
+      assert.isOk(transport, 'Transport select is not present');
       assert.isTrue(transport.options[internalTransportIndex].disabled);
 
       // Removing the internal authenticator should re-enable the option.

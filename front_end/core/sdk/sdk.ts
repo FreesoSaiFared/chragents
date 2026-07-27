@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,6 +35,7 @@ import * as CSSPropertyParserMatchers from './CSSPropertyParserMatchers.js';
 import * as CSSQuery from './CSSQuery.js';
 import * as CSSRule from './CSSRule.js';
 import * as CSSScope from './CSSScope.js';
+import * as CSSStartingStyle from './CSSStartingStyle.js';
 import * as CSSStyleDeclaration from './CSSStyleDeclaration.js';
 import * as CSSStyleSheetHeader from './CSSStyleSheetHeader.js';
 import * as CSSSupports from './CSSSupports.js';
@@ -62,10 +63,12 @@ import * as PageResourceLoader from './PageResourceLoader.js';
 import * as PaintProfiler from './PaintProfiler.js';
 import * as PerformanceMetricsModel from './PerformanceMetricsModel.js';
 import * as PreloadingModel from './PreloadingModel.js';
+import * as RehydratingConnection from './RehydratingConnection.js';
 import * as RemoteObject from './RemoteObject.js';
 import * as Resource from './Resource.js';
 import * as ResourceTreeModel from './ResourceTreeModel.js';
 import * as RuntimeModel from './RuntimeModel.js';
+import * as ScopeTreeCache from './ScopeTreeCache.js';
 import * as ScreenCaptureModel from './ScreenCaptureModel.js';
 import * as Script from './Script.js';
 import * as SDKModel from './SDKModel.js';
@@ -75,10 +78,10 @@ import * as ServerTiming from './ServerTiming.js';
 import * as ServiceWorkerCacheModel from './ServiceWorkerCacheModel.js';
 import * as ServiceWorkerManager from './ServiceWorkerManager.js';
 import * as SourceMap from './SourceMap.js';
+import * as SourceMapCache from './SourceMapCache.js';
 import * as SourceMapFunctionRanges from './SourceMapFunctionRanges.js';
 import * as SourceMapManager from './SourceMapManager.js';
 import * as SourceMapScopeChainEntry from './SourceMapScopeChainEntry.js';
-import * as SourceMapScopes from './SourceMapScopes.js';
 import * as SourceMapScopesInfo from './SourceMapScopesInfo.js';
 import * as StorageBucketsModel from './StorageBucketsModel.js';
 import * as StorageKeyManager from './StorageKeyManager.js';
@@ -114,6 +117,7 @@ export {
   CSSQuery,
   CSSRule,
   CSSScope,
+  CSSStartingStyle,
   CSSStyleDeclaration,
   CSSStyleSheetHeader,
   CSSSupports,
@@ -141,10 +145,12 @@ export {
   PaintProfiler,
   PerformanceMetricsModel,
   PreloadingModel,
+  RehydratingConnection,  // TODO(crbug.com/444191656): Exported for tests.
   RemoteObject,
   Resource,
   ResourceTreeModel,
   RuntimeModel,
+  ScopeTreeCache,
   ScreenCaptureModel,
   Script,
   SDKModel,
@@ -154,10 +160,10 @@ export {
   ServiceWorkerCacheModel,
   ServiceWorkerManager,
   SourceMap,
+  SourceMapCache,
   SourceMapFunctionRanges,
   SourceMapManager,
   SourceMapScopeChainEntry,
-  SourceMapScopes,
   SourceMapScopesInfo,
   StorageBucketsModel,
   StorageKeyManager,

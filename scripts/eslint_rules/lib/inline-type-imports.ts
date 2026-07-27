@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,8 +36,10 @@ export default createRule({
     // The key is the literal import path ("../foo.js");
     const valueImports = new Map<string, ImportDeclaration>();
 
-    // Takes the node that represents an import ("Foo", "Foo as Bar") and
-    // return the literal text.
+    /**
+     * Takes the node that represents an import ("Foo", "Foo as Bar") and
+     * return the literal text.
+     **/
     function getTextForImportSpecifier(specifier: ImportSpecifier): string {
       // => import {Foo as Bar} from 'foo';
       // Foo = imported name
@@ -83,7 +85,7 @@ export default createRule({
       }
       const importStart = valueImportNode.range[0];
       // Find the 'type' keyword after 'import'. It should be the first token after 'import'.
-      const sourceCode = context.sourceCode ?? context.getSourceCode();
+      const sourceCode = context.sourceCode;
       const importToken = sourceCode.getFirstToken(valueImportNode);
       const typeToken = importToken ? sourceCode.getTokenAfter(importToken) : null;
 

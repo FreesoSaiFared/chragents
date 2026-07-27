@@ -80,6 +80,7 @@ export abstract class BrowserLauncher {
       handleSIGTERM = true,
       handleSIGHUP = true,
       acceptInsecureCerts = false,
+      networkEnabled = true,
       defaultViewport = DEFAULT_VIEWPORT,
       downloadBehavior,
       slowMo = 0,
@@ -153,7 +154,7 @@ export abstract class BrowserLauncher {
     };
 
     try {
-      if (this.#browser === 'firefox' && protocol === 'webDriverBiDi') {
+      if (this.#browser === 'firefox') {
         browser = await this.createBiDiBrowser(
           browserProcess,
           browserCloseCallback,
@@ -163,6 +164,7 @@ export abstract class BrowserLauncher {
             slowMo,
             defaultViewport,
             acceptInsecureCerts,
+            networkEnabled,
           },
         );
       } else {
@@ -179,6 +181,7 @@ export abstract class BrowserLauncher {
             slowMo,
           });
         }
+
         if (protocol === 'webDriverBiDi') {
           browser = await this.createBiDiOverCdpBrowser(
             browserProcess,
@@ -187,6 +190,7 @@ export abstract class BrowserLauncher {
             {
               defaultViewport,
               acceptInsecureCerts,
+              networkEnabled,
             },
           );
         } else {
@@ -199,11 +203,25 @@ export abstract class BrowserLauncher {
             browserProcess.nodeProcess,
             browserCloseCallback,
             options.targetFilter,
+            undefined,
+            undefined,
+            networkEnabled,
           );
         }
       }
     } catch (error) {
       void browserCloseCallback();
+      if (
+        browserProcess.getRecentLogs().some(line => {
+          return line.includes(
+            'Failed to create a ProcessSingleton for your profile directory',
+          );
+        })
+      ) {
+        throw new Error(
+          `The browser is already running for ${launchArgs.userDataDir}. Use a different \`userDataDir\` or stop the running browser first.`,
+        );
+      }
       if (error instanceof BrowsersTimeoutError) {
         throw new TimeoutError(error.message);
       }
@@ -354,22 +372,27 @@ export abstract class BrowserLauncher {
    */
   protected async createBiDiOverCdpBrowser(
     browserProcess: ReturnType<typeof launch>,
-    connection: Connection,
+    cdpConnection: Connection,
     closeCallback: BrowserCloseCallback,
     opts: {
       defaultViewport: Viewport | null;
       acceptInsecureCerts?: boolean;
+      networkEnabled: boolean;
     },
   ): Promise<Browser> {
+    const bidiOnly = process.env['PUPPETEER_WEBDRIVER_BIDI_ONLY'] === 'true';
     const BiDi = await import(/* webpackIgnore: true */ '../bidi/bidi.js');
-    const bidiConnection = await BiDi.connectBidiOverCdp(connection);
+    const bidiConnection = await BiDi.connectBidiOverCdp(cdpConnection);
     return await BiDi.BidiBrowser.create({
       connection: bidiConnection,
-      cdpConnection: connection,
+      // Do not provide CDP connection to Browser, if BiDi-only mode is enabled. This
+      // would restrict Browser to use only BiDi endpoint.
+      cdpConnection: bidiOnly ? undefined : cdpConnection,
       closeCallback,
       process: browserProcess.nodeProcess,
       defaultViewport: opts.defaultViewport,
       acceptInsecureCerts: opts.acceptInsecureCerts,
+      networkEnabled: opts.networkEnabled,
     });
   }
 
@@ -385,6 +408,7 @@ export abstract class BrowserLauncher {
       slowMo: number;
       defaultViewport: Viewport | null;
       acceptInsecureCerts?: boolean;
+      networkEnabled?: boolean;
     },
   ): Promise<Browser> {
     const browserWSEndpoint =
@@ -406,6 +430,7 @@ export abstract class BrowserLauncher {
       process: browserProcess.nodeProcess,
       defaultViewport: opts.defaultViewport,
       acceptInsecureCerts: opts.acceptInsecureCerts,
+      networkEnabled: opts.networkEnabled ?? true,
     });
   }
 

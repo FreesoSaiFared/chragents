@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -11,7 +11,6 @@ devtools_module("source_map_scopes") {
   sources = [
     "NamesResolver.ts",
     "ScopeChainModel.ts",
-    "ScopeTreeCache.ts",
   ]
 
   deps = [
@@ -37,6 +36,7 @@ devtools_entrypoint("bundle") {
     "../../ui/components/text_editor/*",
     "../../ui/legacy/components/object_ui/*",
     "../breakpoints/*",
+    "../trace_source_maps_resolver/*",
   ]
 
   visibility += devtools_models_visibility
@@ -47,7 +47,6 @@ ts_library("unittests") {
   sources = [
     "NamesResolver.test.ts",
     "ScopeChainModel.test.ts",
-    "ScopeTreeCache.test.ts",
   ]
 
   deps = [

@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -12,7 +12,6 @@ import type * as Platform from '../../../core/platform/platform.js';
 import * as Root from '../../../core/root/root.js';
 import * as Marked from '../../../third_party/marked/marked.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
-import type * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as Input from '../../../ui/components/input/input.js';
 import * as MarkdownView from '../../../ui/components/markdown_view/markdown_view.js';
 import * as UI from '../../../ui/legacy/legacy.js';
@@ -146,7 +145,7 @@ const UIStrings = {
    */
   timedOut: 'Generating a response took too long. Please try again.',
   /**
-   *@description Text informing the user that AI assistance is not available in Incognito mode or Guest mode.
+   * @description Text informing the user that AI assistance is not available in Incognito mode or Guest mode.
    */
   notAvailableInIncognitoMode: 'AI assistance is not available in Incognito mode or Guest mode',
 } as const;
@@ -165,7 +164,7 @@ export class CloseEvent extends Event {
 }
 
 type PublicPromptBuilder = Pick<PromptBuilder, 'buildPrompt'|'getSearchQuery'>;
-type PublicAidaClient = Pick<Host.AidaClient.AidaClient, 'fetch'|'registerClientEvent'>;
+type PublicAidaClient = Pick<Host.AidaClient.AidaClient, 'doConversation'|'registerClientEvent'>;
 
 function localizeType(sourceType: SourceType): string {
   switch (sourceType) {
@@ -211,7 +210,7 @@ type StateData = {
   completed: boolean,
   directCitationUrls: string[],
   timedOut?: boolean,
-}&Host.AidaClient.AidaResponse|{
+}&Host.AidaClient.DoConversationResponse|{
   type: State.ERROR,
   error: string,
 }|{
@@ -527,7 +526,7 @@ export class ConsoleInsight extends HTMLElement {
     await this.#generateInsight();
   }
 
-  #insertCitations(explanation: string, metadata: Host.AidaClient.AidaResponseMetadata):
+  #insertCitations(explanation: string, metadata: Host.AidaClient.ResponseMetadata):
       {explanationWithCitations: string, directCitationUrls: string[]} {
     const directCitationUrls: string[] = [];
     if (!this.#isSearchRagResponse(metadata) || !metadata.attributionMetadata) {
@@ -632,11 +631,11 @@ export class ConsoleInsight extends HTMLElement {
 
   async *
       #getInsight(): AsyncGenerator<
-          {sources: Source[], isPageReloadRecommended: boolean}&Host.AidaClient.AidaResponse, void, void> {
+          {sources: Source[], isPageReloadRecommended: boolean}&Host.AidaClient.DoConversationResponse, void, void> {
     const {prompt, sources, isPageReloadRecommended} = await this.#promptBuilder.buildPrompt();
     try {
-      for await (
-          const response of this.#aidaClient.fetch(Host.AidaClient.AidaClient.buildConsoleInsightsRequest(prompt))) {
+      for await (const response of this.#aidaClient.doConversation(
+          Host.AidaClient.AidaClient.buildConsoleInsightsRequest(prompt))) {
         yield {sources, isPageReloadRecommended, ...response};
       }
     } catch (err) {
@@ -761,7 +760,7 @@ export class ConsoleInsight extends HTMLElement {
     // clang-format on
   }
 
-  #isSearchRagResponse(metadata: Host.AidaClient.AidaResponseMetadata): boolean {
+  #isSearchRagResponse(metadata: Host.AidaClient.ResponseMetadata): boolean {
     return Boolean(metadata.factualityMetadata?.facts.length);
   }
 
@@ -826,11 +825,7 @@ export class ConsoleInsight extends HTMLElement {
             <h3>Things to consider</h3>
             <div class="reminder-items">
               <div>
-                <devtools-icon .data=${{
-                  iconName: 'google',
-                  width: 'var(--sys-size-8)',
-                  height: 'var(--sys-size-8)',
-                } as IconButton.Icon.IconData}>
+                <devtools-icon name="google" class="medium">
                 </devtools-icon>
               </div>
               <div>The console message, associated stack trace, related source code, and the associated network headers are sent to Google to generate explanations. ${noLogging
@@ -838,11 +833,7 @@ export class ConsoleInsight extends HTMLElement {
                   : 'This data may be seen by human reviewers to improve this feature. Avoid sharing sensitive or personal information.'}
               </div>
               <div>
-                <devtools-icon .data=${{
-                  iconName: 'policy',
-                  width: 'var(--sys-size-8)',
-                  height: 'var(--sys-size-8)',
-                } as IconButton.Icon.IconData}>
+                <devtools-icon name="policy" class="medium">
                 </devtools-icon>
               </div>
               <div>Use of this feature is subject to the <x-link
@@ -858,11 +849,7 @@ export class ConsoleInsight extends HTMLElement {
                 </x-link>
               </div>
               <div>
-                <devtools-icon .data=${{
-                  iconName: 'warning',
-                  width: 'var(--sys-size-8)',
-                  height: 'var(--sys-size-8)',
-                } as IconButton.Icon.IconData}>
+                <devtools-icon name="warning" class="medium">
                 </devtools-icon>
               </div>
               <div>
@@ -887,11 +874,7 @@ export class ConsoleInsight extends HTMLElement {
 
         return html`<main class="opt-in-teaser" jslog=${jslog}>
           <div class="badge">
-            <devtools-icon .data=${{
-              iconName: 'lightbulb-spark',
-              width: 'var(--sys-size-8)',
-              height: 'var(--sys-size-8)',
-            } as IconButton.Icon.IconData}>
+            <devtools-icon name="lightbulb-spark" class="medium">
             </devtools-icon>
           </div>
           <div>
@@ -1105,11 +1088,7 @@ export class ConsoleInsight extends HTMLElement {
       <header>
         ${hasIcon ? html`
           <div class="header-icon-container">
-            <devtools-icon .data=${{
-              iconName: 'lightbulb-spark',
-              width: '18px',
-              height: '18px',
-            } as IconButton.Icon.IconData}>
+            <devtools-icon name="lightbulb-spark" class="large">
             </devtools-icon>
           </div>`
         : Lit.nothing}

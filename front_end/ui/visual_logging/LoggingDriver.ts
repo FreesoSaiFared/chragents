@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -138,7 +138,7 @@ const viewportRectFor = (element: Element): DOMRect => {
   return viewportRect;
 };
 
-async function process(): Promise<void> {
+export async function process(): Promise<void> {
   if (document.hidden) {
     return;
   }
@@ -153,7 +153,8 @@ async function process(): Promise<void> {
     if (!loggingState.impressionLogged) {
       const overlap = visibleOverlap(element, viewportRectFor(element));
       const visibleSelectOption = element.tagName === 'OPTION' && loggingState.parent?.selectOpen;
-      const visible = overlap && (!parent || loggingState.parent?.impressionLogged);
+      const visible = overlap && element.checkVisibility({checkVisibilityCSS: true}) &&
+          (!parent || loggingState.parent?.impressionLogged);
       if (visible || visibleSelectOption) {
         if (overlap) {
           loggingState.size = overlap;

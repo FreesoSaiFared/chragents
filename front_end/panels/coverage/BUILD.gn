@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -33,6 +33,7 @@ devtools_module("coverage") {
     "../../models/formatter:bundle",
     "../../models/text_utils:bundle",
     "../../models/workspace:bundle",
+    "../../ui/components/highlighting:bundle",
     "../../ui/legacy:bundle",
     "../../ui/legacy/components/data_grid:bundle",
   ]
@@ -73,6 +74,7 @@ ts_library("unittests") {
 
   sources = [
     "CoverageDecorationManager.test.ts",
+    "CoverageListView.test.ts",
     "CoverageModel.test.ts",
     "CoverageView.test.ts",
   ]

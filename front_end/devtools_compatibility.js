@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,8 +48,8 @@ const DevToolsAPIImpl = class {
   }
 
   /**
-   * @param {number} id
-   * @param {?Object} arg
+   * @param id
+   * @param arg
    */
   embedderMessageAck(id, arg) {
     const callback = this._callbacks[id];
@@ -60,9 +60,9 @@ const DevToolsAPIImpl = class {
   }
 
   /**
-   * @param {string} method
-   * @param {!Array.<*>} args
-   * @param {?function(?Object)} callback
+   * @param method
+   * @param args
+   * @param callback
    */
   sendMessageToEmbedder(method, args, callback) {
     const callId = ++this._lastCallId;
@@ -77,8 +77,8 @@ const DevToolsAPIImpl = class {
   }
 
   /**
-   * @param {string} method
-   * @param {!Array<*>} args
+   * @param method
+   * @param args
    */
   _dispatchOnInspectorFrontendAPI(method, args) {
     const inspectorFrontendAPI = /** @type {!Object<string, function()>} */ (window['InspectorFrontendAPI']);
@@ -94,7 +94,7 @@ const DevToolsAPIImpl = class {
   // API methods below this line --------------------------------------------
 
   /**
-   * @param {!Array.<!ExtensionDescriptor>} extensions
+   * @param extensions
    */
   addExtensions(extensions) {
     // Support for legacy front-ends (<M41).
@@ -111,28 +111,28 @@ const DevToolsAPIImpl = class {
   }
 
   /**
-   * @param {!Array<string>} forbiddenOrigins
+   * @param forbiddenOrigins
    */
   setOriginsForbiddenForExtensions(forbiddenOrigins) {
     this._originsForbiddenForExtensions = forbiddenOrigins;
   }
 
   /**
-   * @return {!Array<string>}
+   * @returns
    */
   getOriginsForbiddenForExtensions() {
     return this._originsForbiddenForExtensions;
   }
 
   /**
-   * @param {string} url
+   * @param url
    */
   appendedToURL(url) {
     this._dispatchOnInspectorFrontendAPI('appendedToURL', [url]);
   }
 
   /**
-   * @param {string} url
+   * @param url
    */
   canceledSaveURL(url) {
     this._dispatchOnInspectorFrontendAPI('canceledSaveURL', [url]);
@@ -143,50 +143,50 @@ const DevToolsAPIImpl = class {
   }
 
   /**
-   * @param {string} id
+   * @param id
    */
   contextMenuItemSelected(id) {
     this._dispatchOnInspectorFrontendAPI('contextMenuItemSelected', [id]);
   }
 
   /**
-   * @param {number} count
+   * @param count
    */
   deviceCountUpdated(count) {
     this._dispatchOnInspectorFrontendAPI('deviceCountUpdated', [count]);
   }
 
   /**
-   * @param {!Adb.Config} config
+   * @param config
    */
   devicesDiscoveryConfigChanged(config) {
     this._dispatchOnInspectorFrontendAPI('devicesDiscoveryConfigChanged', [config]);
   }
 
   /**
-   * @param {!Adb.PortForwardingStatus} status
+   * @param status
    */
   devicesPortForwardingStatusChanged(status) {
     this._dispatchOnInspectorFrontendAPI('devicesPortForwardingStatusChanged', [status]);
   }
 
   /**
-   * @param {!Array.<!Adb.Device>} devices
+   * @param devices
    */
   devicesUpdated(devices) {
     this._dispatchOnInspectorFrontendAPI('devicesUpdated', [devices]);
   }
 
   /**
-   * @param {string} message
+   * @param message
    */
   dispatchMessage(message) {
     this._dispatchOnInspectorFrontendAPI('dispatchMessage', [message]);
   }
 
   /**
-   * @param {string} messageChunk
-   * @param {number} messageSize
+   * @param messageChunk
+   * @param messageSize
    */
   dispatchMessageChunk(messageChunk, messageSize) {
     this._dispatchOnInspectorFrontendAPI('dispatchMessageChunk', [messageChunk, messageSize]);
@@ -197,38 +197,38 @@ const DevToolsAPIImpl = class {
   }
 
   /**
-   * @param {!{r: number, g: number, b: number, a: number}} color
+   * @param color
    */
   eyeDropperPickedColor(color) {
     this._dispatchOnInspectorFrontendAPI('eyeDropperPickedColor', [color]);
   }
 
   /**
-   * @param {!Array.<!{fileSystemName: string, rootURL: string, fileSystemPath: string}>} fileSystems
+   * @param fileSystems
    */
   fileSystemsLoaded(fileSystems) {
     this._dispatchOnInspectorFrontendAPI('fileSystemsLoaded', [fileSystems]);
   }
 
   /**
-   * @param {string} fileSystemPath
+   * @param fileSystemPath
    */
   fileSystemRemoved(fileSystemPath) {
     this._dispatchOnInspectorFrontendAPI('fileSystemRemoved', [fileSystemPath]);
   }
 
   /**
-   * @param {?string} error
-   * @param {?{type: string, fileSystemName: string, rootURL: string, fileSystemPath: string}} fileSystem
+   * @param error
+   * @param fileSystem
    */
   fileSystemAdded(error, fileSystem) {
     this._dispatchOnInspectorFrontendAPI('fileSystemAdded', [error, fileSystem]);
   }
 
   /**
-   * @param {!Array<string>} changedPaths
-   * @param {!Array<string>} addedPaths
-   * @param {!Array<string>} removedPaths
+   * @param changedPaths
+   * @param addedPaths
+   * @param removedPaths
    */
   fileSystemFilesChangedAddedRemoved(changedPaths, addedPaths, removedPaths) {
     // Support for legacy front-ends (<M58)
@@ -242,33 +242,33 @@ const DevToolsAPIImpl = class {
   }
 
   /**
-   * @param {number} requestId
-   * @param {string} fileSystemPath
-   * @param {number} totalWork
+   * @param requestId
+   * @param fileSystemPath
+   * @param totalWork
    */
   indexingTotalWorkCalculated(requestId, fileSystemPath, totalWork) {
     this._dispatchOnInspectorFrontendAPI('indexingTotalWorkCalculated', [requestId, fileSystemPath, totalWork]);
   }
 
   /**
-   * @param {number} requestId
-   * @param {string} fileSystemPath
-   * @param {number} worked
+   * @param requestId
+   * @param fileSystemPath
+   * @param worked
    */
   indexingWorked(requestId, fileSystemPath, worked) {
     this._dispatchOnInspectorFrontendAPI('indexingWorked', [requestId, fileSystemPath, worked]);
   }
 
   /**
-   * @param {number} requestId
-   * @param {string} fileSystemPath
+   * @param requestId
+   * @param fileSystemPath
    */
   indexingDone(requestId, fileSystemPath) {
     this._dispatchOnInspectorFrontendAPI('indexingDone', [requestId, fileSystemPath]);
   }
 
   /**
-   * @param {{type: string, key: string, code: string, keyCode: number, modifiers: number}} event
+   * @param event
    */
   keyEventUnhandled(event) {
     event.keyIdentifier = keyCodeToKeyIdentifier(event.keyCode);
@@ -276,7 +276,7 @@ const DevToolsAPIImpl = class {
   }
 
   /**
-   * @param {function(!ExtensionDescriptor)} callback
+   * @param callback
    */
   setAddExtensionCallback(callback) {
     this._addExtensionCallback = callback;
@@ -287,33 +287,33 @@ const DevToolsAPIImpl = class {
   }
 
   /**
-   * @param {boolean} hard
+   * @param hard
    */
   reloadInspectedPage(hard) {
     this._dispatchOnInspectorFrontendAPI('reloadInspectedPage', [hard]);
   }
 
   /**
-   * @param {string} url
-   * @param {number} lineNumber
-   * @param {number} columnNumber
+   * @param url
+   * @param lineNumber
+   * @param columnNumber
    */
   revealSourceLine(url, lineNumber, columnNumber) {
     this._dispatchOnInspectorFrontendAPI('revealSourceLine', [url, lineNumber, columnNumber]);
   }
 
   /**
-   * @param {string} url
-   * @param {string=} fileSystemPath
+   * @param url
+   * @param fileSystemPath
    */
   savedURL(url, fileSystemPath) {
     this._dispatchOnInspectorFrontendAPI('savedURL', [url, fileSystemPath]);
   }
 
   /**
-   * @param {number} requestId
-   * @param {string} fileSystemPath
-   * @param {!Array.<string>} files
+   * @param requestId
+   * @param fileSystemPath
+   * @param files
    */
   searchCompleted(requestId, fileSystemPath, files) {
     this._dispatchOnInspectorFrontendAPI('searchCompleted', [requestId, fileSystemPath, files]);
@@ -324,7 +324,7 @@ const DevToolsAPIImpl = class {
   }
 
   /**
-   * @param {string} tabId
+   * @param tabId
    */
   setInspectedTabId(tabId) {
     this._inspectedTabIdValue = tabId;
@@ -338,45 +338,45 @@ const DevToolsAPIImpl = class {
   }
 
   /**
-   * @param {string} targetId
+   * @param targetId
    */
   setInitialTargetId(targetId) {
     this._setInitialTargetId(targetId);
   }
 
   /**
-   * @return {string|undefined}
+   * @returns
    */
   getInspectedTabId() {
     return this._inspectedTabIdValue;
   }
 
   /**
-   * @param {boolean} useSoftMenu
+   * @param useSoftMenu
    */
   setUseSoftMenu(useSoftMenu) {
     this._dispatchOnInspectorFrontendAPI('setUseSoftMenu', [useSoftMenu]);
   }
 
   /**
-   * @param {string} panelName
+   * @param panelName
    */
   showPanel(panelName) {
     this._dispatchOnInspectorFrontendAPI('showPanel', [panelName]);
   }
 
   /**
-   * @param {number} id
-   * @param {string} chunk
-   * @param {boolean} encoded
+   * @param id
+   * @param chunk
+   * @param encoded
    */
   streamWrite(id, chunk, encoded) {
     this._dispatchOnInspectorFrontendAPI('streamWrite', [id, encoded ? this._decodeBase64(chunk) : chunk]);
   }
 
   /**
-   * @param {string} chunk
-   * @return {string}
+   * @param chunk
+   * @returns
    */
   _decodeBase64(chunk) {
     const request = new XMLHttpRequest();
@@ -406,7 +406,6 @@ window.DevToolsAPI = DevToolsAPI;
 const EnumeratedHistogram = {
   // LINT.IfChange(EnumeratedHistogram)
   ActionTaken: 'DevTools.ActionTaken',
-  CSSHintShown: 'DevTools.CSSHintShown',
   DeveloperResourceLoaded: 'DevTools.DeveloperResourceLoaded',
   DeveloperResourceScheme: 'DevTools.DeveloperResourceScheme',
   ExperimentDisabled: 'DevTools.ExperimentDisabled',
@@ -447,28 +446,28 @@ const EnumeratedHistogram = {
  */
 const InspectorFrontendHostImpl = class {
   /**
-   * @return {string}
+   * @returns
    */
   getSelectionBackgroundColor() {
     return '#6e86ff';
   }
 
   /**
-   * @return {string}
+   * @returns
    */
   getSelectionForegroundColor() {
     return '#ffffff';
   }
 
   /**
-   * @return {string}
+   * @returns
    */
   getInactiveSelectionBackgroundColor() {
     return '#c9c8c8';
   }
 
   /**
-   * @return {string}
+   * @returns
    */
   getInactiveSelectionForegroundColor() {
     return '#323232';
@@ -476,7 +475,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @return {string}
+   * @returns
    */
   platform() {
     return DevToolsHost.platform();
@@ -512,8 +511,8 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {boolean} isDocked
-   * @param {function()} callback
+   * @param isDocked
+   * @param callback
    */
   setIsDocked(isDocked, callback) {
     DevToolsAPI.sendMessageToEmbedder('setIsDocked', [isDocked], callback);
@@ -521,8 +520,8 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} trigger
-   * @param {function(!InspectorFrontendHostAPI.ShowSurveyResult): void} callback
+   * @param trigger
+   * @param callback
    */
   showSurvey(trigger, callback) {
     DevToolsAPI.sendMessageToEmbedder('showSurvey', [trigger], /** @type {function(?Object)} */ (callback));
@@ -530,8 +529,8 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} trigger
-   * @param {function(!InspectorFrontendHostAPI.CanShowSurveyResult): void} callback
+   * @param trigger
+   * @param callback
    */
   canShowSurvey(trigger, callback) {
     DevToolsAPI.sendMessageToEmbedder('canShowSurvey', [trigger], /** @type {function(?Object)} */ (callback));
@@ -540,7 +539,7 @@ const InspectorFrontendHostImpl = class {
   /**
    * Requests inspected page to be placed atop of the inspector frontend with specified bounds.
    * @override
-   * @param {{x: number, y: number, width: number, height: number}} bounds
+   * @param bounds
    */
   setInspectedPageBounds(bounds) {
     DevToolsAPI.sendMessageToEmbedder('setInspectedPageBounds', [bounds], null);
@@ -555,10 +554,10 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} url
-   * @param {string} headers
-   * @param {number} streamId
-   * @param {function(!InspectorFrontendHostAPI.LoadNetworkResourceResult): void} callback
+   * @param url
+   * @param headers
+   * @param streamId
+   * @param callback
    */
   loadNetworkResource(url, headers, streamId, callback) {
     DevToolsAPI.sendMessageToEmbedder(
@@ -567,8 +566,8 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} name
-   * @param {!{synced: (boolean|undefined)}} options
+   * @param name
+   * @param options
    */
   registerPreference(name, options) {
     DevToolsAPI.sendMessageToEmbedder('registerPreference', [name, options], null);
@@ -576,7 +575,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {function(!Object<string, string>)} callback
+   * @param callback
    */
   getPreferences(callback) {
     DevToolsAPI.sendMessageToEmbedder('getPreferences', [], /** @type {function(?Object)} */ (callback));
@@ -584,8 +583,8 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} name
-   * @param {function(string)} callback
+   * @param name
+   * @param callback
    */
   getPreference(name, callback) {
     DevToolsAPI.sendMessageToEmbedder('getPreference', [name], /** @type {function(string)} */ (callback));
@@ -593,8 +592,8 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} name
-   * @param {string} value
+   * @param name
+   * @param value
    */
   setPreference(name, value) {
     DevToolsAPI.sendMessageToEmbedder('setPreference', [name, value], null);
@@ -602,7 +601,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} name
+   * @param name
    */
   removePreference(name) {
     DevToolsAPI.sendMessageToEmbedder('removePreference', [name], null);
@@ -617,7 +616,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {!function(!InspectorFrontendHostAPI.SyncInformation):void} callback
+   * @param callback
    */
   getSyncInformation(callback) {
     DevToolsAPI.sendMessageToEmbedder('getSyncInformation', [], callback);
@@ -625,7 +624,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {function(Object<string, Object<string, string|boolean>>):void} callback
+   * @param callback
    */
   getHostConfig(callback) {
     DevToolsAPI.sendMessageToEmbedder('getHostConfig', [], hostConfig => {
@@ -638,7 +637,7 @@ const InspectorFrontendHostImpl = class {
   }
 
   /**
-   * @param {Object<string, Object<string, string|boolean>>} newConfig
+   * @param newConfig
    */
   hostConfigNewToOld(newConfig) {
     const devToolsConsoleInsights = {
@@ -672,8 +671,8 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} origin
-   * @param {string} script
+   * @param origin
+   * @param script
    */
   setInjectedScriptForOrigin(origin, script) {
     DevToolsAPI.sendMessageToEmbedder('registerExtensionsAPI', [origin, script], null);
@@ -681,7 +680,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} url
+   * @param url
    */
   inspectedURLChanged(url) {
     DevToolsAPI.sendMessageToEmbedder('inspectedURLChanged', [url], null);
@@ -689,7 +688,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} text
+   * @param text
    */
   copyText(text) {
     DevToolsHost.copyText(text);
@@ -697,7 +696,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} url
+   * @param url
    */
   openInNewTab(url) {
     DevToolsAPI.sendMessageToEmbedder('openInNewTab', [url], null);
@@ -705,7 +704,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} query
+   * @param query
    */
   openSearchResultsInNewTab(query) {
     DevToolsAPI.sendMessageToEmbedder('openSearchResultsInNewTab', [query], null);
@@ -713,7 +712,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} fileSystemPath
+   * @param fileSystemPath
    */
   showItemInFolder(fileSystemPath) {
     DevToolsAPI.sendMessageToEmbedder('showItemInFolder', [fileSystemPath], null);
@@ -721,10 +720,10 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} url
-   * @param {string} content
-   * @param {boolean} forceSaveAs
-   * @param {boolean} isBase64
+   * @param url
+   * @param content
+   * @param forceSaveAs
+   * @param isBase64
    */
   save(url, content, forceSaveAs, isBase64) {
     DevToolsAPI.sendMessageToEmbedder('save', [url, content, forceSaveAs, isBase64], null);
@@ -732,8 +731,8 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} url
-   * @param {string} content
+   * @param url
+   * @param content
    */
   append(url, content) {
     DevToolsAPI.sendMessageToEmbedder('append', [url, content], null);
@@ -741,14 +740,14 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} url
+   * @param url
    */
   close(url) {
   }
 
   /**
    * @override
-   * @param {string} message
+   * @param message
    */
   sendMessageToBackend(message) {
     DevToolsAPI.sendMessageToEmbedder('dispatchProtocolMessage', [message], null);
@@ -756,11 +755,11 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} histogramName
-   * @param {number} sample
-   * @param {number} min
-   * @param {number} exclusiveMax
-   * @param {number} bucketSize
+   * @param histogramName
+   * @param sample
+   * @param min
+   * @param exclusiveMax
+   * @param bucketSize
    */
   recordCountHistogram(histogramName, sample, min, exclusiveMax, bucketSize) {
     DevToolsAPI.sendMessageToEmbedder(
@@ -769,9 +768,9 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {!InspectorFrontendHostAPI.EnumeratedHistogram} actionName
-   * @param {number} actionCode
-   * @param {number} bucketSize
+   * @param actionName
+   * @param actionCode
+   * @param bucketSize
    */
   recordEnumeratedHistogram(actionName, actionCode, bucketSize) {
     if (!Object.values(EnumeratedHistogram).includes(actionName)) {
@@ -782,8 +781,8 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} histogramName
-   * @param {number} duration
+   * @param histogramName
+   * @param duration
    */
   recordPerformanceHistogram(histogramName, duration) {
     DevToolsAPI.sendMessageToEmbedder('recordPerformanceHistogram', [histogramName, duration], null);
@@ -791,7 +790,15 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} umaName
+   * @param featureName
+   */
+  recordNewBadgeUsage(featureName) {
+    DevToolsAPI.sendMessageToEmbedder('recordNewBadgeUsage', [featureName], null);
+  }
+
+  /**
+   * @override
+   * @param umaName
    */
   recordUserMetricsAction(umaName) {
     DevToolsAPI.sendMessageToEmbedder('recordUserMetricsAction', [umaName], null);
@@ -828,7 +835,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string=} type
+   * @param type
    */
   addFileSystem(type) {
     DevToolsAPI.sendMessageToEmbedder('addFileSystem', [type || ''], null);
@@ -836,7 +843,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} fileSystemPath
+   * @param fileSystemPath
    */
   removeFileSystem(fileSystemPath) {
     DevToolsAPI.sendMessageToEmbedder('removeFileSystem', [fileSystemPath], null);
@@ -844,9 +851,9 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} fileSystemId
-   * @param {string} registeredName
-   * @return {?FileSystem}
+   * @param fileSystemId
+   * @param registeredName
+   * @returns
    */
   isolatedFileSystem(fileSystemId, registeredName) {
     return DevToolsHost.isolatedFileSystem(fileSystemId, registeredName);
@@ -854,7 +861,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {!FileSystem} fileSystem
+   * @param fileSystem
    */
   upgradeDraggedFileSystemPermissions(fileSystem) {
     DevToolsHost.upgradeDraggedFileSystemPermissions(fileSystem);
@@ -862,9 +869,9 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {number} requestId
-   * @param {string} fileSystemPath
-   * @param {string} excludedFolders
+   * @param requestId
+   * @param fileSystemPath
+   * @param excludedFolders
    */
   indexPath(requestId, fileSystemPath, excludedFolders) {
     // |excludedFolders| added in M67. For backward compatibility,
@@ -875,7 +882,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {number} requestId
+   * @param requestId
    */
   stopIndexing(requestId) {
     DevToolsAPI.sendMessageToEmbedder('stopIndexing', [requestId], null);
@@ -883,9 +890,9 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {number} requestId
-   * @param {string} fileSystemPath
-   * @param {string} query
+   * @param requestId
+   * @param fileSystemPath
+   * @param query
    */
   searchInPath(requestId, fileSystemPath, query) {
     DevToolsAPI.sendMessageToEmbedder('searchInPath', [requestId, fileSystemPath, query], null);
@@ -893,7 +900,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @return {number}
+   * @returns
    */
   zoomFactor() {
     return DevToolsHost.zoomFactor();
@@ -922,7 +929,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} shortcuts
+   * @param shortcuts
    */
   setWhitelistedShortcuts(shortcuts) {
     DevToolsAPI.sendMessageToEmbedder('setWhitelistedShortcuts', [shortcuts], null);
@@ -930,7 +937,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {boolean} active
+   * @param active
    */
   setEyeDropperActive(active) {
     DevToolsAPI.sendMessageToEmbedder('setEyeDropperActive', [active], null);
@@ -938,7 +945,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {!Array<string>} certChain
+   * @param certChain
    */
   showCertificateViewer(certChain) {
     DevToolsAPI.sendMessageToEmbedder('showCertificateViewer', [JSON.stringify(certChain)], null);
@@ -947,7 +954,7 @@ const InspectorFrontendHostImpl = class {
   /**
    * Only needed to run Lighthouse on old devtools.
    * @override
-   * @param {function()} callback
+   * @param callback
    */
   reattach(callback) {
     DevToolsAPI.sendMessageToEmbedder('reattach', [], callback);
@@ -969,7 +976,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {boolean} value
+   * @param value
    */
   setOpenNewWindowForPopups(value) {
     DevToolsAPI.sendMessageToEmbedder('setOpenNewWindowForPopups', [value], null);
@@ -977,7 +984,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {!Adb.Config} config
+   * @param config
    */
   setDevicesDiscoveryConfig(config) {
     DevToolsAPI.sendMessageToEmbedder(
@@ -991,7 +998,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {boolean} enabled
+   * @param enabled
    */
   setDevicesUpdatesEnabled(enabled) {
     DevToolsAPI.sendMessageToEmbedder('setDevicesUpdatesEnabled', [enabled], null);
@@ -999,8 +1006,8 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} browserId
-   * @param {string} url
+   * @param browserId
+   * @param url
    */
   openRemotePage(browserId, url) {
     DevToolsAPI.sendMessageToEmbedder('openRemotePage', [browserId, url], null);
@@ -1015,10 +1022,10 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {number} x
-   * @param {number} y
-   * @param {!Array.<!InspectorFrontendHostAPI.ContextMenuDescriptor>} items
-   * @param {!Document} document
+   * @param x
+   * @param y
+   * @param items
+   * @param document
    */
   showContextMenuAtPoint(x, y, items, document) {
     DevToolsHost.showContextMenuAtPoint(x, y, items, document);
@@ -1026,7 +1033,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @return {boolean}
+   * @returns
    */
   isHostedMode() {
     return DevToolsHost.isHostedMode();
@@ -1034,7 +1041,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {function(!ExtensionDescriptor)} callback
+   * @param callback
    */
   setAddExtensionCallback(callback) {
     DevToolsAPI.setAddExtensionCallback(callback);
@@ -1042,7 +1049,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {InspectorFrontendHostAPI.ImpressionEvent} impressionEvent
+   * @param impressionEvent
    */
   recordImpression(impressionEvent) {
     DevToolsAPI.sendMessageToEmbedder('recordImpression', [impressionEvent], null);
@@ -1050,7 +1057,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {InspectorFrontendHostAPI.ResizeEvent} resizeEvent
+   * @param resizeEvent
    */
   recordResize(resizeEvent) {
     DevToolsAPI.sendMessageToEmbedder('recordResize', [resizeEvent], null);
@@ -1058,7 +1065,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {InspectorFrontendHostAPI.ClickEvent} clickEvent
+   * @param clickEvent
    */
   recordClick(clickEvent) {
     DevToolsAPI.sendMessageToEmbedder('recordClick', [clickEvent], null);
@@ -1066,7 +1073,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {InspectorFrontendHostAPI.HoverEvent} hoverEvent
+   * @param hoverEvent
    */
   recordHover(hoverEvent) {
     DevToolsAPI.sendMessageToEmbedder('recordHover', [hoverEvent], null);
@@ -1074,7 +1081,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {InspectorFrontendHostAPI.DragEvent} dragEvent
+   * @param dragEvent
    */
   recordDrag(dragEvent) {
     DevToolsAPI.sendMessageToEmbedder('recordDrag', [dragEvent], null);
@@ -1082,7 +1089,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {InspectorFrontendHostAPI.ChangeEvent} changeEvent
+   * @param changeEvent
    */
   recordChange(changeEvent) {
     DevToolsAPI.sendMessageToEmbedder('recordChange', [changeEvent], null);
@@ -1090,7 +1097,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {InspectorFrontendHostAPI.KeyDownEvent} keyDownEvent
+   * @param keyDownEvent
    */
   recordKeyDown(keyDownEvent) {
     DevToolsAPI.sendMessageToEmbedder('recordKeyDown', [keyDownEvent], null);
@@ -1098,7 +1105,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {InspectorFrontendHostAPI.SettingAccessEvent} settingAccessEvent
+   * @param settingAccessEvent
    */
   recordSettingAccess(settingAccessEvent) {
     DevToolsAPI.sendMessageToEmbedder('recordSettingAccess', [settingAccessEvent], null);
@@ -1106,7 +1113,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {InspectorFrontendHostAPI.FunctionCallEvent} functionCallEvent
+   * @param functionCallEvent
    */
   recordFunctionCall(functionCallEvent) {
     DevToolsAPI.sendMessageToEmbedder('recordFunctionCall', [functionCallEvent], null);
@@ -1116,7 +1123,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * Support for legacy front-ends (<M65).
-   * @return {boolean}
+   * @returns
    */
   isUnderTest() {
     return false;
@@ -1124,14 +1131,14 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * Support for legacy front-ends (<M50).
-   * @param {string} message
+   * @param message
    */
   sendFrontendAPINotification(message) {
   }
 
   /**
    * Support for legacy front-ends (<M41).
-   * @return {string}
+   * @returns
    */
   port() {
     return 'unknown';
@@ -1139,7 +1146,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * Support for legacy front-ends (<M38).
-   * @param {number} zoomFactor
+   * @param zoomFactor
    */
   setZoomFactor(zoomFactor) {
   }
@@ -1152,7 +1159,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * Support for legacy front-ends (<M34).
-   * @param {string} dockSide
+   * @param dockSide
    */
   requestSetDockSide(dockSide) {
     DevToolsAPI.sendMessageToEmbedder('setIsDocked', [dockSide !== 'undocked'], null);
@@ -1160,7 +1167,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * Support for legacy front-ends (<M34).
-   * @return {boolean}
+   * @returns
    */
   supportsFileSystems() {
     return true;
@@ -1168,7 +1175,7 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * Support for legacy front-ends (<M44).
-   * @param {number} actionCode
+   * @param actionCode
    */
   recordActionTaken(actionCode) {
     // Do not record actions, as that may crash the DevTools renderer.
@@ -1176,34 +1183,50 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * Support for legacy front-ends (<M44).
-   * @param {number} panelCode
+   * @param panelCode
    */
   recordPanelShown(panelCode) {
     // Do not record actions, as that may crash the DevTools renderer.
   }
 
   /**
-   * @return {!Promise<string>}
+   * @returns
    */
   initialTargetId() {
     return DevToolsAPI._initialTargetIdPromise;
   }
 
   /**
-   * @param {string} request
-   * @param {number} streamId
-   * @param {function(!InspectorFrontendHostAPI.DoAidaConversationResult): void} cb
+   * @param request
+   * @param streamId
+   * @param cb
    */
   doAidaConversation(request, streamId, cb) {
     DevToolsAPI.sendMessageToEmbedder('doAidaConversation', [request, streamId], cb);
   }
 
   /**
-   * @param {string} request
-   * @param {function(!InspectorFrontendHostAPI.AidaClientResult): void} cb
+   * @param request
+   * @param cb
+   */
+  aidaCodeComplete(request, cb) {
+    DevToolsAPI.sendMessageToEmbedder('aidaCodeComplete', [request], cb);
+  }
+
+  /**
+   * @param request
+   * @param cb
    */
   registerAidaClientEvent(request, cb) {
     DevToolsAPI.sendMessageToEmbedder('registerAidaClientEvent', [request], cb);
+  }
+
+  /**
+   * @param request
+   * @param cb
+   */
+  dispatchHttpRequest(request, cb) {
+    DevToolsAPI.sendMessageToEmbedder('dispatchHttpRequest', [request], cb);
   }
 };
 
@@ -1396,8 +1419,8 @@ function installObjectObserve() {
   }
 
   /**
-   * @param {!Object} object
-   * @param {function(!Array<!{name: string}>)} observer
+   * @param object
+   * @param observer
    */
   function objectObserve(object, observer) {
     if (window['WebInspector']) {
@@ -1432,7 +1455,7 @@ function installObjectObserve() {
     const storage = new Map();
 
     /**
-     * @param {string} property
+     * @param property
      */
     function defineProperty(property) {
       if (property in object) {
@@ -1442,14 +1465,14 @@ function installObjectObserve() {
 
       Object.defineProperty(object, property, {
         /**
-         * @return {*}
+         * @returns
          */
         get: function() {
           return storage.get(property);
         },
 
         /**
-         * @param {*} value
+         * @param value
          */
         set: function(value) {
           storage.set(property, value);
@@ -1528,8 +1551,8 @@ const staticKeyIdentifiers = new Map([
 ]);
 
 /**
- * @param {number} keyCode
- * @return {string}
+ * @param keyCode
+ * @returns
  */
 function keyCodeToKeyIdentifier(keyCode) {
   let result = staticKeyIdentifiers.get(keyCode);
@@ -1647,9 +1670,9 @@ function installBackwardsCompatibility() {
     if (!ShadowRoot.prototype.__originalShadowRootElementFromPoint) {
       ShadowRoot.prototype.__originalShadowRootElementFromPoint = ShadowRoot.prototype.elementFromPoint;
       /**
-       *  @param {number} x
-       *  @param {number} y
-       *  @return {Element}
+       *  @param x
+       *  @param y
+       *  @returns
        */
       ShadowRoot.prototype.elementFromPoint = function(x, y) {
         const originalResult = ShadowRoot.prototype.__originalShadowRootElementFromPoint.apply(this, arguments);
@@ -1664,7 +1687,7 @@ function installBackwardsCompatibility() {
   if (majorVersion <= 53) {
     Object.defineProperty(window.KeyboardEvent.prototype, 'keyIdentifier', {
       /**
-       * @return {string}
+       * @returns
        * @this {KeyboardEvent}
        */
       get: function() {
@@ -1699,7 +1722,7 @@ function installBackwardsCompatibility() {
 }
 
 /**
- * @return {?number}
+ * @returns
  */
 function getRemoteMajorVersion() {
   try {
@@ -1715,7 +1738,7 @@ function getRemoteMajorVersion() {
 }
 
 /**
- * @param {!Array<string>} styleRules
+ * @param styleRules
  */
 function installExtraStyleRules(styleRules) {
   if (!styleRules.length) {
@@ -1733,8 +1756,8 @@ function installExtraStyleRules(styleRules) {
 }
 
 /**
- * @param {string} styleText
- * @return {!Element}
+ * @param styleText
+ * @returns
  */
 function createStyleElement(styleText) {
   const style = document.createElement('style');

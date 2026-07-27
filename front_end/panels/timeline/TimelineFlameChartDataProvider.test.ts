@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,10 +8,16 @@ import * as SDK from '../../core/sdk/sdk.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Trace from '../../models/trace/trace.js';
 import * as Workspace from '../../models/workspace/workspace.js';
-import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
-import {setupIgnoreListManagerEnvironment} from '../../testing/TraceHelpers.js';
+import {
+  describeWithEnvironment,
+  registerActions,
+  stubNoopSettings,
+  updateHostConfig
+} from '../../testing/EnvironmentHelpers.js';
+import {allThreadEntriesInTrace, setupIgnoreListManagerEnvironment} from '../../testing/TraceHelpers.js';
 import {TraceLoader} from '../../testing/TraceLoader.js';
 import * as PerfUi from '../../ui/legacy/components/perf_ui/perf_ui.js';
+import * as UI from '../../ui/legacy/legacy.js';
 
 import * as Timeline from './timeline.js';
 
@@ -22,33 +28,31 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
     const targetManager = SDK.TargetManager.TargetManager.instance({forceNew: true});
     const workspace = Workspace.Workspace.WorkspaceImpl.instance({forceNew: true});
     const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
-    const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
+    const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
+    Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
       forceNew: true,
       resourceMapping,
       targetManager,
-    });
-    Bindings.IgnoreListManager.IgnoreListManager.instance({
-      forceNew: true,
-      debuggerWorkspaceBinding,
+      ignoreListManager,
     });
   });
   afterEach(() => {
     SDK.TargetManager.TargetManager.removeInstance();
     Workspace.Workspace.WorkspaceImpl.removeInstance();
     Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.removeInstance();
-    Bindings.IgnoreListManager.IgnoreListManager.removeInstance();
+    Workspace.IgnoreListManager.IgnoreListManager.removeInstance();
   });
 
   it('shows initiator arrows when an event that has them is selected', async function() {
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-    const {parsedTrace} = await TraceLoader.traceEngine(this, 'scheduler-post-task.json.gz');
-    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    const parsedTrace = await TraceLoader.traceEngine(this, 'scheduler-post-task.json.gz');
+    const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
     dataProvider.setModel(parsedTrace, entityMapper);
     const timelineData1 = dataProvider.timelineData();
     assert.lengthOf(timelineData1.initiatorsData, 0);
 
     // a postTask scheduled event - picked as it has an initiator
-    const event = parsedTrace.Renderer.allTraceEntries.find(event => {
+    const event = allThreadEntriesInTrace(parsedTrace).find(event => {
       return event.name === Trace.Types.Events.Name.RUN_POST_TASK_CALLBACK && event.ts === 512724961655;
     });
     assert.exists(event);
@@ -66,12 +70,12 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
 
   it('caches initiator arrows for the same event', async function() {
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-    const {parsedTrace} = await TraceLoader.traceEngine(this, 'scheduler-post-task.json.gz');
-    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    const parsedTrace = await TraceLoader.traceEngine(this, 'scheduler-post-task.json.gz');
+    const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
     dataProvider.setModel(parsedTrace, entityMapper);
     dataProvider.timelineData();
     // a postTask scheduled event - picked as it has an initiator
-    const event = parsedTrace.Renderer.allTraceEntries.find(event => {
+    const event = allThreadEntriesInTrace(parsedTrace).find(event => {
       return event.name === Trace.Types.Events.Name.RUN_POST_TASK_CALLBACK && event.ts === 512724961655;
     });
     assert.exists(event);
@@ -87,12 +91,12 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
 
   it('does not trigger a redraw if there are no initiators for the old and new selection', async function() {
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-    const {parsedTrace} = await TraceLoader.traceEngine(this, 'scheduler-post-task.json.gz');
-    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    const parsedTrace = await TraceLoader.traceEngine(this, 'scheduler-post-task.json.gz');
+    const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
     dataProvider.setModel(parsedTrace, entityMapper);
     dataProvider.timelineData();
     // a RunTask event with no initiators
-    const event = parsedTrace.Renderer.allTraceEntries.find(event => {
+    const event = allThreadEntriesInTrace(parsedTrace).find(event => {
       return event.name === Trace.Types.Events.Name.RUN_TASK && event.ts === 512724754996;
     });
     assert.exists(event);
@@ -107,32 +111,28 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
   describe('groupTreeEvents', function() {
     it('returns the correct events for tree views given a flame chart group', async function() {
       const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'sync-like-timings.json.gz');
-      const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+      const parsedTrace = await TraceLoader.traceEngine(this, 'sync-like-timings.json.gz');
+      const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
       dataProvider.setModel(parsedTrace, entityMapper);
       const timingsTrackGroup = dataProvider.timelineData().groups.find(g => g.name === 'Timings');
-      if (!timingsTrackGroup) {
-        assert.fail('Could not find Timings track flame chart group');
-      }
+      assert.isOk(timingsTrackGroup, 'Could not find Timings track flame chart group');
       const groupTreeEvents = dataProvider.groupTreeEvents(timingsTrackGroup);
       const allTimingEvents = [
-        ...parsedTrace.UserTimings.consoleTimings,
-        ...parsedTrace.UserTimings.timestampEvents,
-        ...parsedTrace.UserTimings.performanceMarks,
-        ...parsedTrace.UserTimings.performanceMeasures,
+        ...parsedTrace.data.UserTimings.consoleTimings,
+        ...parsedTrace.data.UserTimings.timestampEvents,
+        ...parsedTrace.data.UserTimings.performanceMarks,
+        ...parsedTrace.data.UserTimings.performanceMeasures,
       ].sort((a, b) => a.ts - b.ts);
       assert.deepEqual(groupTreeEvents, allTimingEvents);
     });
 
     it('filters out async events if they cannot be added to the tree', async function() {
       const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'timings-track.json.gz');
-      const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+      const parsedTrace = await TraceLoader.traceEngine(this, 'timings-track.json.gz');
+      const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
       dataProvider.setModel(parsedTrace, entityMapper);
       const timingsTrackGroup = dataProvider.timelineData().groups.find(g => g.name === 'Timings');
-      if (!timingsTrackGroup) {
-        assert.fail('Could not find Timings track flame chart group');
-      }
+      assert.isOk(timingsTrackGroup, 'Could not find Timings track flame chart group');
       const groupTreeEvents = dataProvider.groupTreeEvents(timingsTrackGroup);
       assert.strictEqual(groupTreeEvents?.length, 6);
       const allEventsAreSync = groupTreeEvents?.every(event => !Trace.Types.Events.isPhaseAsync(event.ph));
@@ -143,8 +143,8 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
   it('can provide the index for an event and the event for a given index', async function() {
     setupIgnoreListManagerEnvironment();
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-    const {parsedTrace} = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
-    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    const parsedTrace = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
+    const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
     dataProvider.setModel(parsedTrace, entityMapper);
 
     // Need to use an index that is not a frame, so jump past the frames.
@@ -155,41 +155,29 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
   it('renders track in the correct order by default', async function() {
     setupIgnoreListManagerEnvironment();
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-    const {parsedTrace} = await TraceLoader.traceEngine(this, 'extension-tracks-and-marks.json.gz');
-    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    const parsedTrace = await TraceLoader.traceEngine(this, 'extension-tracks-and-marks.json.gz');
+    const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
     dataProvider.setModel(parsedTrace, entityMapper);
-    const groupNames = dataProvider.timelineData().groups.map(g => g.name);
-    assert.deepEqual(
-        groupNames,
-        [
-          'Frames',
-          'Timings',
-          'Interactions',
-          'A track group — Custom track',
-          'Another Extension Track',
-          'An Extension Track — Custom track',
-          'TimeStamp track — Custom track',
-          'Main — http://localhost:3000/',
-          'Thread pool',
-          'Thread pool worker 1',
-          'Thread pool worker 2',
-          'Thread pool worker 3',
-          'StackSamplingProfiler',
-          'GPU',
-        ],
-    );
+    const groupNames = dataProvider.timelineData().groups.map(g => [g.name, g.subtitle]);
+    assert.deepEqual(groupNames, [
+      ['Frames', undefined], ['Timings', undefined], ['Interactions', undefined], ['A track group', '— Custom'],
+      ['Another Extension Track', undefined], ['An Extension Track', '— Custom'], ['TimeStamp track', '— Custom'],
+      ['Main — http://localhost:3000/', undefined], ['Thread pool', undefined], ['Thread pool worker 1', undefined],
+      ['Thread pool worker 2', undefined], ['Thread pool worker 3', undefined], ['StackSamplingProfiler', undefined],
+      ['GPU', undefined]
+    ]);
   });
 
   it('can return the FlameChart group for a given event', async function() {
     setupIgnoreListManagerEnvironment();
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-    const {parsedTrace} = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
-    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    const parsedTrace = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
+    const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
     dataProvider.setModel(parsedTrace, entityMapper);
     // Force the track appenders to run and populate the chart data.
     dataProvider.timelineData();
 
-    const longest = parsedTrace.UserInteractions.longestInteractionEvent;
+    const longest = parsedTrace.data.UserInteractions.longestInteractionEvent;
     assert.isOk(longest);
     const index = dataProvider.indexForEvent(longest);
     assert.isNotNull(index);
@@ -200,8 +188,8 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
   it('adds candy stripe and triangle decorations to long tasks in the main thread', async function() {
     setupIgnoreListManagerEnvironment();
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-    const {parsedTrace} = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
-    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    const parsedTrace = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
+    const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
     dataProvider.setModel(parsedTrace, entityMapper);
     dataProvider.timelineData();
 
@@ -233,8 +221,8 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
 
   it('populates the frames track with frames and screenshots', async function() {
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-    const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
-    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    const parsedTrace = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
+    const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
     dataProvider.setModel(parsedTrace, entityMapper);
     const framesTrack = dataProvider.timelineData().groups.find(g => {
       return g.name.includes('Frames');
@@ -261,8 +249,8 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
       const {ignoreListManager} = setupIgnoreListManagerEnvironment();
 
       const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'react-hello-world.json.gz');
-      const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+      const parsedTrace = await TraceLoader.traceEngine(this, 'react-hello-world.json.gz');
+      const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
       dataProvider.setModel(parsedTrace, entityMapper);
 
       const eventCountBeforeIgnoreList = dataProvider.timelineData().entryStartTimes.length;
@@ -287,14 +275,40 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
     });
   });
 
+  it('shows Debug with AI submenu items', async function() {
+    updateHostConfig({
+      devToolsAiSubmenuPrompts: {
+        enabled: true,
+      },
+    });
+    stubNoopSettings();
+    registerActions([{
+      actionId: 'drjones.performance-panel-context',
+      title: () => 'Debug with AI' as Platform.UIString.LocalizedString,
+      category: UI.ActionRegistration.ActionCategory.GLOBAL,
+    }]);
+
+    const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
+    const parsedTrace = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
+    const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
+    dataProvider.setModel(parsedTrace, entityMapper);
+    const contextMenu = dataProvider.customizedContextMenu(new MouseEvent('click'), 7, 0);
+    assert.exists(contextMenu);
+    const debugWithAiItem = contextMenu.buildDescriptor().subItems?.find(item => item.label === 'Debug with AI');
+    assert.exists(debugWithAiItem);
+    assert.deepEqual(
+        debugWithAiItem?.subItems?.map(item => item.label),
+        ['Start a chat', 'Label entry', 'Assess the purpose', 'Identify time spent', 'Find improvements']);
+  });
+
   it('filters navigations to only return those that happen on the main frame', async function() {
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-    const {parsedTrace} = await TraceLoader.traceEngine(this, 'multiple-navigations-with-iframes.json.gz');
-    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    const parsedTrace = await TraceLoader.traceEngine(this, 'multiple-navigations-with-iframes.json.gz');
+    const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
 
     dataProvider.setModel(parsedTrace, entityMapper);
 
-    const mainFrameID = parsedTrace.Meta.mainFrameId;
+    const mainFrameID = parsedTrace.data.Meta.mainFrameId;
     const navigationEvents = dataProvider.mainFrameNavigationStartEvents();
     // Ensure that every navigation event that we return is for the main frame.
     assert.isTrue(navigationEvents.every(navEvent => {
@@ -304,11 +318,11 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
 
   it('can search for entries within a given time-range', async function() {
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-    const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
-    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    const parsedTrace = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+    const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
     dataProvider.setModel(parsedTrace, entityMapper);
 
-    const bounds = parsedTrace.Meta.traceBounds;
+    const bounds = parsedTrace.data.Meta.traceBounds;
     const filter = new Timeline.TimelineFilters.TimelineRegExp(/Evaluate script/);
     const results = dataProvider.search(bounds, filter);
     assert.lengthOf(results, 12);
@@ -318,11 +332,11 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
   it('persists track configurations to the setting if it is provided with one', async function() {
     const {Settings} = Common.Settings;
     const setting =
-        Settings.instance().createSetting<PerfUi.FlameChart.PersistedConfigPerTrace>('persist-flame-config', {});
+        Settings.instance().createSetting<PerfUi.FlameChart.PersistedGroupConfig[]|null>('persist-flame-config', null);
 
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-    const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
-    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    const parsedTrace = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+    const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
     dataProvider.setModel(parsedTrace, entityMapper);
     dataProvider.setPersistedGroupConfigSetting(setting);
 
@@ -336,25 +350,27 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
     dataProvider.handleTrackConfigurationChange(groups, newVisualOrder);
 
     const newSetting = setting.get();
-    const traceKey = Timeline.TrackConfiguration.keyForTraceConfig(parsedTrace);
-    assert.deepEqual(newSetting[traceKey], [
+    assert.deepEqual(newSetting, [
       {
         expanded: false,
         hidden: false,
         originalIndex: 0,
         visualIndex: 2,
+        trackName: 'Frames',
       },
       {
         expanded: false,
         hidden: false,
         originalIndex: 1,
         visualIndex: 0,
+        trackName: '',  // This is screenshots.
       },
       {
         expanded: false,
         hidden: false,
         originalIndex: 2,
         visualIndex: 1,
+        trackName: 'Animations',
       }
     ]);
   });

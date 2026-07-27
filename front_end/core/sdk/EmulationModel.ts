@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,11 +12,17 @@ import {Events, OverlayModel} from './OverlayModel.js';
 import {SDKModel} from './SDKModel.js';
 import {Capability, type Target} from './Target.js';
 
+export const enum DataSaverOverride {
+  UNSET = 'unset',
+  ENABLED = 'enabled',
+  DISABLED = 'disabled',
+}
+
 export class EmulationModel extends SDKModel<void> {
   readonly #emulationAgent: ProtocolProxyApi.EmulationApi;
   readonly #deviceOrientationAgent: ProtocolProxyApi.DeviceOrientationApi;
   #cssModel: CSSModel|null;
-  readonly #overlayModelInternal: OverlayModel|null;
+  readonly #overlayModel: OverlayModel|null;
   readonly #mediaConfiguration: Map<string, string>;
   #cpuPressureEnabled: boolean;
   #touchEnabled: boolean;
@@ -33,9 +39,9 @@ export class EmulationModel extends SDKModel<void> {
     this.#emulationAgent = target.emulationAgent();
     this.#deviceOrientationAgent = target.deviceOrientationAgent();
     this.#cssModel = target.model(CSSModel);
-    this.#overlayModelInternal = target.model(OverlayModel);
-    if (this.#overlayModelInternal) {
-      this.#overlayModelInternal.addEventListener(Events.INSPECT_MODE_WILL_BE_TOGGLED, () => {
+    this.#overlayModel = target.model(OverlayModel);
+    if (this.#overlayModel) {
+      this.#overlayModel.addEventListener(Events.INSPECT_MODE_WILL_BE_TOGGLED, () => {
         void this.updateTouch();
       }, this);
     }
@@ -237,7 +243,7 @@ export class EmulationModel extends SDKModel<void> {
   }
 
   overlayModel(): OverlayModel|null {
-    return this.#overlayModelInternal;
+    return this.#overlayModel;
   }
 
   async setPressureSourceOverrideEnabled(enabled: boolean): Promise<void> {
@@ -369,6 +375,13 @@ export class EmulationModel extends SDKModel<void> {
     void this.#emulationAgent.invoke_setDisabledImageTypes({imageTypes});
   }
 
+  async setDataSaverOverride(dataSaverOverride: DataSaverOverride): Promise<void> {
+    const dataSaverEnabled = dataSaverOverride === DataSaverOverride.UNSET ? undefined :
+        dataSaverOverride === DataSaverOverride.ENABLED                    ? true :
+                                                                             false;
+    await this.#emulationAgent.invoke_setDataSaverOverride({dataSaverEnabled});
+  }
+
   async setCPUThrottlingRate(rate: number): Promise<void> {
     await this.#emulationAgent.invoke_setCPUThrottlingRate({rate});
   }
@@ -404,7 +417,7 @@ export class EmulationModel extends SDKModel<void> {
       };
     }
 
-    if (this.#overlayModelInternal && this.#overlayModelInternal.inspectModeEnabled()) {
+    if (this.#overlayModel && this.#overlayModel.inspectModeEnabled()) {
       configuration = {
         enabled: false,
         configuration: Protocol.Emulation.SetEmitTouchEventsForMouseRequestConfiguration.Mobile,

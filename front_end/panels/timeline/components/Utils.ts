@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -14,17 +14,17 @@ import type {CompareRating} from './MetricCompareStrings.js';
 
 const UIStrings = {
   /**
-   *@description ms is the short form of milli-seconds and the placeholder is a decimal number.
+   * @description ms is the short form of milli-seconds and the placeholder is a decimal number.
    * The shortest form or abbreviation of milliseconds should be used, as there is
    * limited room in this UI.
-   *@example {2.14} PH1
+   * @example {2.14} PH1
    */
   fms: '{PH1}[ms]()',
   /**
-   *@description s is short for seconds and the placeholder is a decimal number
+   * @description s is short for seconds and the placeholder is a decimal number
    * The shortest form or abbreviation of seconds should be used, as there is
    * limited room in this UI.
-   *@example {2.14} PH1
+   * @example {2.14} PH1
    */
   fs: '{PH1}[s]()',
 } as const;
@@ -119,7 +119,7 @@ export function colorForNetworkRequest(request: Trace.Types.Events.SyntheticNetw
 export type MetricRating = 'good'|'needs-improvement'|'poor';
 export type MetricThresholds = [number, number];
 
-// TODO: Consolidate our metric rating logic with the trace engine.
+/** TODO: Consolidate our metric rating logic with the trace engine. **/
 export const LCP_THRESHOLDS = [2500, 4000] as MetricThresholds;
 export const CLS_THRESHOLDS = [0.1, 0.25] as MetricThresholds;
 export const INP_THRESHOLDS = [200, 500] as MetricThresholds;
@@ -181,11 +181,11 @@ export interface NumberWithUnitString {
  *
  * As of this writing, our only locale where the unit comes before the number is `sw`, ex: `Sek {PH1}`.
  *
-    new Intl.NumberFormat('sw', {
-      style: 'unit',
-      unit: 'millisecond',
-      unitDisplay: 'narrow'
-    }).format(10); // 'ms 10'
+ * new Intl.NumberFormat('sw', {
+ * style: 'unit',
+ * unit: 'millisecond',
+ * unitDisplay: 'narrow'
+ * }).format(10); // 'ms 10'
  *
  */
 export namespace NumberWithUnit {

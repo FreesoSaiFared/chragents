@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import type {TSESLint, TSESTree} from '@typescript-eslint/utils';
@@ -25,7 +25,7 @@ export default createRule({
   },
   defaultOptions: [],
   create: function(context) {
-    const sourceCode = context.sourceCode ?? context.getSourceCode();
+    const sourceCode = context.sourceCode;
     let lastImport: ImportDeclaration|null = null;
     let shorthandDefined = false;
     return {
@@ -33,7 +33,7 @@ export default createRule({
         lastImport = node;
       },
       VariableDeclarator(node) {
-        const scope = sourceCode.getScope ? sourceCode.getScope(node) : context.getScope();
+        const scope = sourceCode.getScope(node);
         if (scope.type !== 'module') {
           return;
         }

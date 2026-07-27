@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,11 +17,13 @@ const {urlString} = Platform.DevToolsPath;
 describeWithEnvironment('UISourceCodeDiff', () => {
   function setup() {
     const workspace = Workspace.Workspace.WorkspaceImpl.instance({forceNew: true});
+    const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
     const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
       forceNew: true,
       targetManager: SDK.TargetManager.TargetManager.instance(),
       resourceMapping:
           new Bindings.ResourceMapping.ResourceMapping(SDK.TargetManager.TargetManager.instance(), workspace),
+      ignoreListManager,
     });
     const breakpointManager = Breakpoints.BreakpointManager.BreakpointManager.instance({
       forceNew: true,

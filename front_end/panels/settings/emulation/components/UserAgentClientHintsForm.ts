@@ -1,7 +1,7 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-/* eslint-disable rulesdir/no-lit-render-outside-of-view, rulesdir/inject-checkbox-styles */
+/* eslint-disable rulesdir/no-lit-render-outside-of-view*/
 
 import '../../../../ui/legacy/legacy.js';
 
@@ -82,9 +82,46 @@ const UIStrings = {
   brandFullVersionListDelete: 'Delete brand from full version list',
 
   /**
+   * @description Heading for the form factors section.
+   */
+  formFactorsTitle: 'Form Factors (Sec-CH-UA-Form-Factors)',
+  /**
+   * @description ARIA label for the group of form factor checkboxes.
+   */
+  formFactorsGroupAriaLabel: 'Available Form Factors',
+  /**
+   * @description Form factor option: Desktop.
+   */
+  formFactorDesktop: 'Desktop',
+  /**
+   * @description Form factor option: Automotive.
+   */
+  formFactorAutomotive: 'Automotive',
+  /**
+   * @description Form factor option: Mobile.
+   */
+  formFactorMobile: 'Mobile',
+  /**
+   * @description Form factor option: Tablet.
+   */
+  formFactorTablet: 'Tablet',
+  /**
+   * @description Form factor option: XR.
+   */
+  formFactorXR: 'XR',
+  /**
+   * @description Form factor option: EInk.
+   */
+  formFactorEInk: 'EInk',
+  /**
+   * @description Form factor option: Watch.
+   */
+  formFactorWatch: 'Watch',
+
+  /**
    * @description Label for full browser version input field.
    */
-  fullBrowserVersion: 'Full browser version (Sec-CH-UA-Full-Browser-Version)',
+  fullBrowserVersion: 'Full browser version (Sec-CH-UA-Full-Version)',
   /**
    * @description Placeholder for full browser version input field.
    */
@@ -130,7 +167,7 @@ const UIStrings = {
    */
   update: 'Update',
   /**
-   *@description Field Error message in the Device settings pane that shows that the entered value has characters that can't be represented in the corresponding User Agent Client Hints
+   * @description Field Error message in the Device settings pane that shows that the entered value has characters that can't be represented in the corresponding User Agent Client Hints
    */
   notRepresentable: 'Not representable as structured headers string.',
   /**
@@ -149,7 +186,7 @@ const UIStrings = {
    */
   deletedBrand: 'Deleted brand row',
   /**
-   *@description Text that is usually a hyperlink to more documentation
+   * @description Text that is usually a hyperlink to more documentation
    */
   learnMore: 'Learn more',
 } as const;
@@ -198,7 +235,18 @@ const DEFAULT_METADATA = {
   architecture: '',
   model: '',
   mobile: false,
+  formFactors: []
 };
+
+export const ALL_PROTOCOL_FORM_FACTORS: string[] = [
+  UIStrings.formFactorDesktop,
+  UIStrings.formFactorAutomotive,
+  UIStrings.formFactorMobile,
+  UIStrings.formFactorTablet,
+  UIStrings.formFactorXR,
+  UIStrings.formFactorEInk,
+  UIStrings.formFactorWatch,
+] as const;
 
 /**
  * Component for user agent client hints form, it is used in device settings panel
@@ -412,6 +460,23 @@ export class UserAgentClientHintsForm extends HTMLElement {
     }
   };
 
+  #handleFormFactorCheckboxChange = (formFactorValue: string, isChecked: boolean): void => {
+    let currentFormFactors = [...(this.#metaData.formFactors || [])];
+    if (isChecked) {
+      if (!currentFormFactors.includes(formFactorValue)) {
+        currentFormFactors.push(formFactorValue);
+      }
+    } else {
+      currentFormFactors = currentFormFactors.filter(ff => ff !== formFactorValue);
+    }
+    this.#metaData = {
+      ...this.#metaData,
+      formFactors: currentFormFactors,
+    };
+    this.dispatchEvent(new ClientHintsChangeEvent());
+    this.#render();
+  };
+
   #handleInputChange = (stateKey: keyof Protocol.Emulation.UserAgentMetadata, value: string|boolean): void => {
     if (stateKey in this.#metaData) {
       this.#metaData = {
@@ -520,7 +585,7 @@ export class UserAgentClientHintsForm extends HTMLElement {
         ${i18nString(UIStrings.mobileCheckboxLabel)}
       </label>
     ` :
-                                                           html``;
+                                                           Lit.nothing;
     return html`
       <span class="full-row label">${i18nString(UIStrings.deviceModel)}</span>
       <div class="full-row brand-row" aria-label=${i18nString(UIStrings.deviceProperties)} role="group">
@@ -597,11 +662,7 @@ export class UserAgentClientHintsForm extends HTMLElement {
         change: true,
       })}
           />
-          <devtools-icon
-            .data=${{
-        color: 'var(--icon-default)', iconName: 'bin', width: '16px', height: '16px',
-      }
-      }
+          <devtools-icon name="bin" class="medium"
             title=${i18nString(UIStrings.brandUserAgentDelete)}
             class="delete-icon"
             tabindex="0"
@@ -627,12 +688,7 @@ export class UserAgentClientHintsForm extends HTMLElement {
         @keypress=${this.#handleAddUseragentBrandKeyPress}
       >
         <devtools-icon
-          aria-hidden="true"
-          .data=${{
-      color: 'var(--icon-default)', iconName: 'plus', width: '16px',
-    }
-    }
-        >
+          aria-hidden="true" name="plus" class="medium">
         </devtools-icon>
         ${i18nString(UIStrings.addBrand)}
       </div>
@@ -701,11 +757,7 @@ export class UserAgentClientHintsForm extends HTMLElement {
         change: true,
       })}
           />
-          <devtools-icon
-            .data=${{
-        color: 'var(--icon-default)', iconName: 'bin', width: '16px', height: '16px',
-      }
-      }
+          <devtools-icon name="bin" class="medium"
             title=${i18nString(UIStrings.brandFullVersionListDelete)}
             class="delete-icon"
             tabindex="0"
@@ -730,15 +782,44 @@ export class UserAgentClientHintsForm extends HTMLElement {
         @click=${this.#handleAddFullVersionListBrandClick}
         @keypress=${this.#handleAddFullVersionListBrandKeyPress}
       >
-        <devtools-icon
-          aria-hidden="true"
-          .data=${{
-      color: 'var(--icon-default)', iconName: 'plus', width: '16px',
-    }
-    }
-        >
+        <devtools-icon name="plus" class="medium"
+          aria-hidden="true">
         </devtools-icon>
         ${i18nString(UIStrings.addBrand)}
+      </div>
+    `;
+  }
+
+  #renderFormFactorsSection(): Lit.TemplateResult {
+    const checkboxElements = ALL_PROTOCOL_FORM_FACTORS.map(ffValue => {
+      const isChecked = this.#metaData.formFactors?.includes(ffValue) || false;
+      const labelStringId = `formFactor${ffValue}` as keyof typeof UIStrings;
+      const label = i18nString(UIStrings[labelStringId]);
+
+      return html`
+        <label class="form-factor-checkbox-label">
+          <input
+            type="checkbox"
+            .checked=${isChecked}
+            value=${ffValue}
+            jslog=${VisualLogging.toggle(Platform.StringUtilities.toKebabCase(ffValue)).track({
+        click: true
+      })}
+            @change=${
+          (e: Event) => this.#handleFormFactorCheckboxChange(ffValue, (e.target as HTMLInputElement).checked)}
+          />
+          ${label}
+        </label>
+      `;
+    });
+
+    return html`
+      <span class="full-row label" jslog=${VisualLogging.sectionHeader('form-factors')}>
+        ${i18nString(UIStrings.formFactorsTitle)}
+      </span>
+      <div class="full-row form-factors-checkbox-group" role="group" aria-label=${
+        i18nString(UIStrings.formFactorsGroupAriaLabel)}>
+        ${checkboxElements}
       </div>
     `;
   }
@@ -750,6 +831,7 @@ export class UserAgentClientHintsForm extends HTMLElement {
     const fullBrowserInput = this.#renderInputWithLabel(
         i18nString(UIStrings.fullBrowserVersion), i18nString(UIStrings.fullBrowserVersionPlaceholder),
         fullVersion || '', 'fullVersion');
+    const formFactorsSection = this.#renderFormFactorsSection();
     const platformSection = this.#renderPlatformSection();
     const architectureInput = this.#renderInputWithLabel(
         i18nString(UIStrings.architecture), i18nString(UIStrings.architecturePlaceholder), architecture,
@@ -805,10 +887,17 @@ export class UserAgentClientHintsForm extends HTMLElement {
           @submit=${this.#handleSubmit}
         >
           ${useragentSection}
+          <hr class="section-separator">
           ${fullVersionListSection}
+          <hr class="section-separator">
           ${fullBrowserInput}
+          <hr class="section-separator">
+          ${formFactorsSection}
+          <hr class="section-separator">
           ${platformSection}
+          <hr class="section-separator">
           ${architectureInput}
+          <hr class="section-separator">
           ${deviceModelSection}
           ${submitButton}
         </form>
@@ -822,7 +911,7 @@ export class UserAgentClientHintsForm extends HTMLElement {
   validate = (): UI.ListWidget.ValidatorResult => {
     for (const [metaDataKey, metaDataValue] of Object.entries(this.#metaData)) {
       if (metaDataKey === 'brands' || metaDataKey === 'fullVersionList') {
-        // for sturctured fields, check each individual brand/version
+        // for structured fields, check each individual brand/version
         const isBrandValid = this.#metaData.brands?.every(({brand, version}) => {
           const brandNameResult = EmulationUtils.UserAgentMetadata.validateAsStructuredHeadersString(
               brand, i18nString(UIStrings.notRepresentable));
@@ -832,6 +921,23 @@ export class UserAgentClientHintsForm extends HTMLElement {
         });
         if (!isBrandValid) {
           return {valid: false, errorMessage: i18nString(UIStrings.notRepresentable)};
+        }
+      } else if (metaDataKey === 'formFactors') {
+        const formFactors = metaDataValue as string[] | undefined;
+        if (formFactors) {
+          for (const ff of formFactors) {
+            if (!ALL_PROTOCOL_FORM_FACTORS.includes(ff)) {
+              return {
+                valid: false,
+                errorMessage: i18nString(UIStrings.notRepresentable) + ` (Invalid form factor: ${ff})`,
+              };
+            }
+            const ffError = EmulationUtils.UserAgentMetadata.validateAsStructuredHeadersString(
+                ff, i18nString(UIStrings.notRepresentable));
+            if (!ffError.valid) {
+              return ffError;
+            }
+          }
         }
       } else {
         // otherwise, validate the value as a string

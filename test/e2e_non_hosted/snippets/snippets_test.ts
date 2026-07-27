@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -100,9 +100,7 @@ describe('Expression evaluation', () => {
       return await getWatchExpressionsValues(devToolsPage);
     });
 
-    if (!watchExpressions) {
-      assert.fail('No watch expressions found');
-    }
+    assert.isOk(watchExpressions, 'No watch expressions found');
     const cleanWatchExpressions = watchExpressions.map(expression => expression.replace(/["]+/g, '\''));
     assert.deepEqual(cleanWatchExpressions[0], message);
     await devToolsPage.reload();

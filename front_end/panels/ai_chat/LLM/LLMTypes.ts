@@ -54,13 +54,16 @@ export interface UnifiedLLMOptions {
   // Tool usage (for function calling)
   tools?: any[];
   tool_choice?: any;
-  
+
+  // Agent context
+  agentName?: string; // Name of the calling agent for provider-specific routing
+
   // Feature flags
   strictJsonMode?: boolean; // Enables strict JSON parsing with retries
-  
+
   // Retry configuration override
   customRetryConfig?: Partial<RetryConfig>;
-  
+
   // Legacy compatibility (deprecated - use customRetryConfig instead)
   maxRetries?: number;
 }
@@ -139,14 +142,14 @@ export interface ExtendedRetryConfig extends ErrorRetryConfig {
 /**
  * LLM Provider types
  */
-export type LLMProvider = 'openai' | 'litellm' | 'groq' | 'openrouter';
+export type LLMProvider = 'openai' | 'litellm' | 'groq' | 'openrouter' | 'browseroperator' | 'cerebras' | 'anthropic' | 'googleai';
 
 /**
- * Content types for multimodal messages (text + images)
+ * Content types for multimodal messages (text + images + files)
  */
 export type MessageContent = 
   | string 
-  | Array<TextContent | ImageContent>;
+  | Array<TextContent | ImageContent | FileContent>;
 
 export interface TextContent {
   type: 'text';
@@ -161,9 +164,17 @@ export interface ImageContent {
   };
 }
 
+export interface FileContent {
+  type: 'file';
+  file: {
+    filename: string;
+    file_data: string; // Base64 encoded data URL (e.g., "data:application/pdf;base64,...")
+  };
+}
+
 /**
  * Message format compatible with OpenAI and LiteLLM APIs
- * Supports both text-only and multimodal (text + images) content
+ * Supports both text-only and multimodal (text + images + PDFs) content
  */
 export interface LLMMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -189,6 +200,15 @@ export interface LLMCallOptions {
   temperature?: number;
   reasoningLevel?: 'low' | 'medium' | 'high'; // For O-series models
   retryConfig?: Partial<RetryConfig>;
+  agentName?: string; // Name of the calling agent for provider-specific routing
+  // Tracing metadata for Langfuse integration via LiteLLM
+  tracingMetadata?: {
+    session_id?: string;
+    trace_id?: string;
+    generation_name?: string;
+    tags?: string[];
+    [key: string]: any;
+  };
 }
 
 /**
@@ -225,4 +245,87 @@ export interface ModelInfo {
   name: string;
   provider: LLMProvider;
   capabilities?: ModelCapabilities;
+}
+
+/**
+ * Helper functions for custom provider handling
+ */
+
+/**
+ * Check if a provider ID represents a custom provider
+ * Custom providers have IDs that start with "custom:"
+ */
+export function isCustomProvider(providerId: string): boolean {
+  return providerId.startsWith('custom:');
+}
+
+/**
+ * Check if a provider ID represents a built-in provider
+ */
+export function isBuiltInProvider(providerId: string): providerId is LLMProvider {
+  const builtInProviders: LLMProvider[] = [
+    'openai',
+    'litellm',
+    'groq',
+    'openrouter',
+    'browseroperator',
+    'cerebras',
+    'anthropic',
+    'googleai'
+  ];
+  return builtInProviders.includes(providerId as LLMProvider);
+}
+
+/**
+ * Get the display name for a provider (handles both built-in and custom)
+ * For custom providers, extracts the name from the ID (e.g., "custom:z-ai" -> "Z.AI")
+ */
+export function getProviderDisplayName(providerId: string): string {
+  // Handle built-in providers
+  const builtInNames: Record<LLMProvider, string> = {
+    'openai': 'OpenAI',
+    'litellm': 'LiteLLM',
+    'groq': 'Groq',
+    'openrouter': 'OpenRouter',
+    'browseroperator': 'BrowserOperator',
+    'cerebras': 'Cerebras',
+    'anthropic': 'Anthropic',
+    'googleai': 'Google AI'
+  };
+
+  if (isBuiltInProvider(providerId)) {
+    return builtInNames[providerId as LLMProvider];
+  }
+
+  // Handle custom providers - extract name from ID
+  if (isCustomProvider(providerId)) {
+    const name = providerId.replace('custom:', '');
+    // Capitalize first letter of each word
+    return name.split('-')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+
+  return providerId;
+}
+
+/**
+ * Validate provider ID format
+ */
+export function isValidProviderId(providerId: string): boolean {
+  if (!providerId || typeof providerId !== 'string') {
+    return false;
+  }
+
+  // Check if it's a built-in provider
+  if (isBuiltInProvider(providerId)) {
+    return true;
+  }
+
+  // Check if it's a valid custom provider ID (starts with "custom:" and has content after)
+  if (isCustomProvider(providerId)) {
+    return providerId.length > 7; // "custom:" is 7 characters
+  }
+
+  return false;
 }

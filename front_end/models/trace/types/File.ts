@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -124,17 +124,19 @@ export function isEntriesLinkAnnotation(annotation: Annotation): annotation is E
   return annotation.type === 'ENTRIES_LINK';
 }
 
-// Serializable keys are created for trace events to be able to save
-// references to timeline events in a trace file. These keys enable
-// user modifications that can be saved. See go/cpq:event-data-json for
-// more details on the key format.
+/**
+ * Serializable keys are created for trace events to be able to save
+ * references to timeline events in a trace file. These keys enable
+ * user modifications that can be saved. See go/cpq:event-data-json for
+ * more details on the key format.
+ **/
 export type RawEventKey = `${EventKeyType.RAW_EVENT}-${number}`;
 export type SyntheticEventKey = `${EventKeyType.SYNTHETIC_EVENT}-${number}`;
 export type ProfileCallKey = `${EventKeyType.PROFILE_CALL}-${ProcessID}-${ThreadID}-${SampleIndex}-${Protocol.integer}`;
 export type LegacyTimelineFrameKey = `${EventKeyType.LEGACY_TIMELINE_FRAME}-${number}`;
 export type SerializableKey = RawEventKey|ProfileCallKey|SyntheticEventKey|LegacyTimelineFrameKey;
 
-// Serializable keys values objects contain data that maps the keys to original Trace Events
+/** Serializable keys values objects contain data that maps the keys to original Trace Events **/
 export interface RawEventKeyValues {
   type: EventKeyType.RAW_EVENT;
   rawIndex: number;
@@ -172,19 +174,24 @@ export interface Modifications {
   annotations: SerializedAnnotations;
 }
 
-// IMPORTANT: this is the same as PerfUI.FlameChart.PersistedGroupConfig
-// However, the PerfUI code should not depend on the model/trace, and similarly
-// this model cannot depend on that code, so we duplicate it.
+/**
+ * IMPORTANT: this is the same as PerfUI.FlameChart.PersistedGroupConfig
+ * However, the PerfUI code should not depend on the model/trace, and similarly
+ * this model cannot depend on that code, so we duplicate it.
+ **/
 export interface TrackVisualConfig {
   hidden: boolean;
   expanded: boolean;
   originalIndex: number;
   visualIndex: number;
+  trackName: string;
 }
 
 /**
  * Stores the visual config if the user has modified it. Split into "main" and
  * "network" so we can pass the relevant config into the right data provider.
+ * NOTE: as of August 2025 (M141) we currently do not export this in new
+ * traces, or use it if an existing trace is imported with it.
  */
 export interface PersistedTraceVisualConfig {
   main: TrackVisualConfig[]|null;
@@ -216,7 +223,7 @@ export interface MetaData {
   hostDPR?: number;
 }
 
-interface MetadataSourceMap {
+export interface MetadataSourceMap {
   url: string;
   /** If not defined, then this was a data url. */
   sourceMapUrl?: string;

@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,11 +39,11 @@ describe('The Performance tool, Bottom-up panel', function() {
   increaseTimeoutForPerfPanel(this);
 
   setup({dockingMode: 'undocked'});
-  // navigate to the Performance tab and upload performance profile
+  /** navigate to the Performance tab and upload performance profile **/
   async function setupPerformancePanel(devToolsPage: DevToolsPage, inspectedPage: InspectedPage) {
     await navigateToPerformanceTab('empty', devToolsPage, inspectedPage);
 
-    const uploadProfileHandle = await devToolsPage.waitFor<HTMLInputElement>('input[type=file]');
+    const uploadProfileHandle = await devToolsPage.waitFor('input[type=file]');
     assert.isNotNull(uploadProfileHandle, 'unable to upload the performance profile');
     await uploadProfileHandle.uploadFile(
         path.join(GEN_DIR, 'test/e2e/resources/performance/timeline/treeView-test-trace.json'));
@@ -54,7 +54,7 @@ describe('The Performance tool, Bottom-up panel', function() {
     const expectedActivities = ['h2', 'H2', 'h2_with_suffix'];
     await navigateToBottomUpTab(devToolsPage, 'url');
 
-    const timelineTree = await devToolsPage.$('.timeline-tree-view') as puppeteer.ElementHandle<HTMLSelectElement>;
+    const timelineTree = await devToolsPage.$<HTMLSelectElement>('.timeline-tree-view');
     await devToolsPage.waitForElementWithTextContent(expectedActivities[0], timelineTree);
     await toggleCaseSensitive(devToolsPage);
     await setFilter('H2', devToolsPage);
@@ -68,7 +68,7 @@ describe('The Performance tool, Bottom-up panel', function() {
     await navigateToBottomUpTab(devToolsPage, 'url');
 
     // click on the "Regex Button" and validate activities
-    const timelineTree = await devToolsPage.$('.timeline-tree-view') as puppeteer.ElementHandle<HTMLSelectElement>;
+    const timelineTree = await devToolsPage.$<HTMLSelectElement>('.timeline-tree-view');
     await devToolsPage.waitForElementWithTextContent(allActivities[0], timelineTree);
     await toggleRegExButtonBottomUp(devToolsPage);
     await setFilter('h2$', devToolsPage);
@@ -82,7 +82,7 @@ describe('The Performance tool, Bottom-up panel', function() {
     await navigateToBottomUpTab(devToolsPage, 'url');
 
     // click on the "Match whole word" and validate activities
-    const timelineTree = await devToolsPage.$('.timeline-tree-view') as puppeteer.ElementHandle<HTMLSelectElement>;
+    const timelineTree = await devToolsPage.$<HTMLSelectElement>('.timeline-tree-view');
     await devToolsPage.waitForElementWithTextContent(expectedActivities[0], timelineTree);
     await toggleMatchWholeWordButtonBottomUp(devToolsPage);
     await setFilter('function', devToolsPage);
@@ -96,7 +96,7 @@ describe('The Performance tool, Bottom-up panel', function() {
     const expectedActivities = ['H2', 'h2_with_suffix', 'h2'];
     await navigateToBottomUpTab(devToolsPage, 'url');
 
-    const timelineTree = await devToolsPage.$('.timeline-tree-view') as puppeteer.ElementHandle<HTMLSelectElement>;
+    const timelineTree = await devToolsPage.$<HTMLSelectElement>('.timeline-tree-view');
     await devToolsPage.waitForElementWithTextContent(expectedActivities[0], timelineTree);
     await setFilter('h2', devToolsPage);
     const foundActivities = await enumerateTreeItems(devToolsPage);
@@ -109,7 +109,7 @@ describe('The Performance tool, Bottom-up panel', function() {
     await navigateToBottomUpTab(devToolsPage, 'url');
 
     // use group-by drop down and validate activities
-    const timelineTree = await devToolsPage.$('.timeline-tree-view') as puppeteer.ElementHandle;
+    const timelineTree = await devToolsPage.$('.timeline-tree-view');
     await devToolsPage.waitForElementWithTextContent('h2_with_suffix', timelineTree);
     const dropdown = await devToolsPage.waitFor('select[aria-label="No grouping"]');
     await dropdown.evaluate(el => {
@@ -126,14 +126,12 @@ describe('The Performance tool, Bottom-up panel', function() {
     const expectedActivities = ['h2_with_suffix', 'container2', 'Function call', 'Timer fired', 'Profiling overhead'];
     await navigateToBottomUpTab(devToolsPage, 'url');
 
-    const timelineTree = await devToolsPage.$('.timeline-tree-view') as puppeteer.ElementHandle<HTMLSelectElement>;
+    const timelineTree = await devToolsPage.$<HTMLSelectElement>('.timeline-tree-view');
     await toggleRegExButtonBottomUp(devToolsPage);
     await toggleCaseSensitive(devToolsPage);
     await setFilter('h2_', devToolsPage);
     const rootActivity = await devToolsPage.waitForElementWithTextContent(expectedActivities[0], timelineTree);
-    if (!rootActivity) {
-      assert.fail(`Could not find ${expectedActivities[0]} in frontend.`);
-    }
+    assert.isOk(rootActivity, `Could not find ${expectedActivities[0]} in DevTools.`);
 
     const initialActivities = await enumerateTreeItems(devToolsPage);
     assert.deepEqual(initialActivities, [expectedActivities.at(0)]);
@@ -156,11 +154,9 @@ describe('The Performance tool, Bottom-up panel', function() {
     await devToolsPage.click('th.activity-column');
     await devToolsPage.waitFor('th.activity-column.sortable.sort-ascending');
 
-    const timelineTree = await devToolsPage.$('.timeline-tree-view') as puppeteer.ElementHandle<HTMLSelectElement>;
+    const timelineTree = await devToolsPage.$<HTMLSelectElement>('.timeline-tree-view');
     const rootActivity = await devToolsPage.waitForElementWithTextContent(expectedActivities[0], timelineTree);
-    if (!rootActivity) {
-      assert.fail(`Could not find ${expectedActivities[0]} in frontend.`);
-    }
+    assert.isOk(rootActivity, `Could not find ${expectedActivities[0]} in DevTools.`);
     await expandNodeRecursively(rootActivity, devToolsPage);
     // Wait for all nodes
     await devToolsPage.waitForMany('td.activity-column', 7);

@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2012 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2012 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 import type * as PublicAPI from '../../../extension-api/ExtensionAPI'; // eslint-disable-line rulesdir/es-modules-import
 import type * as Platform from '../../core/platform/platform.js';
@@ -230,6 +204,7 @@ export namespace PrivateAPI {
   interface SetOpenResourceHandlerRequest {
     command: Commands.SetOpenResourceHandler;
     handlerPresent: boolean;
+    urlScheme?: string;
   }
   interface SetThemeChangeHandlerRequest {
     command: Commands.SetThemeChangeHandler;
@@ -473,7 +448,8 @@ namespace APIImpl {
 
   export interface Panels extends PublicAPI.Chrome.DevTools.Panels {
     get SearchAction(): Record<string, string>;
-    setOpenResourceHandler(callback?: (resource: PublicAPI.Chrome.DevTools.Resource, lineNumber: number) => unknown):
+    setOpenResourceHandler(
+        callback?: (resource: PublicAPI.Chrome.DevTools.Resource, lineNumber: number, columnNumber: number) => unknown):
         void;
     setThemeChangeHandler(callback?: (themeName: string) => unknown): void;
   }
@@ -693,15 +669,17 @@ self.injectedExtensionAPI = function(
     },
 
     setOpenResourceHandler: function(
-        callback: (resource: PublicAPI.Chrome.DevTools.Resource, lineNumber: number) => unknown): void {
+        callback: (resource: PublicAPI.Chrome.DevTools.Resource, lineNumber: number, columnNumber: number) => unknown,
+        urlScheme?: string): void {
       const hadHandler = extensionServer.hasHandler(PrivateAPI.Events.OpenResource);
 
       function callbackWrapper(message: unknown): void {
         // Allow the panel to show itself when handling the event.
         userAction = true;
         try {
-          const {resource, lineNumber} = message as {resource: APIImpl.ResourceData, lineNumber: number};
-          callback.call(null, new (Constructor(Resource))(resource), lineNumber);
+          const {resource, lineNumber, columnNumber} =
+              message as {resource: APIImpl.ResourceData, lineNumber: number, columnNumber: number};
+          callback.call(null, new (Constructor(Resource))(resource), lineNumber, columnNumber);
         } finally {
           userAction = false;
         }
@@ -716,7 +694,7 @@ self.injectedExtensionAPI = function(
       // Only send command if we either removed an existing handler or added handler and had none before.
       if (hadHandler === !callback) {
         extensionServer.sendRequest(
-            {command: PrivateAPI.Commands.SetOpenResourceHandler, handlerPresent: Boolean(callback)});
+            {command: PrivateAPI.Commands.SetOpenResourceHandler, handlerPresent: Boolean(callback), urlScheme});
       }
     },
 

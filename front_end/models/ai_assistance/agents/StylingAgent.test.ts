@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@ import {
   setUserAgentForTesting,
   updateHostConfig,
 } from '../../../testing/EnvironmentHelpers.js';
+import {SnapshotTester} from '../../../testing/SnapshotTester.js';
 import * as AiAssistance from '../ai_assistance.js';
 
 const {StylingAgent, ErrorType} = AiAssistance;
@@ -43,390 +44,43 @@ describeWithEnvironment('StylingAgent', () => {
   }
 
   let element: sinon.SinonStubbedInstance<SDK.DOMModel.DOMNode>;
+  let target: sinon.SinonStubbedInstance<SDK.Target.Target>;
+  let domModel: sinon.SinonStubbedInstance<SDK.DOMModel.DOMModel>;
+
   beforeEach(() => {
     mockHostConfig();
+    target = sinon.createStubInstance(SDK.Target.Target);
+    target.model.returns(null);
+
+    domModel = sinon.createStubInstance(SDK.DOMModel.DOMModel);
+    domModel.target.returns(target);
+
     element = sinon.createStubInstance(SDK.DOMModel.DOMNode);
+    element.domModel.returns(domModel);
+    element.backendNodeId.returns(99 as unknown as ReturnType<SDK.DOMModel.DOMNode['backendNodeId']>);
   });
 
-  describe('parseResponse', () => {
-    const agent = new StylingAgent({
-      aidaClient: {} as Host.AidaClient.AidaClient,
-    });
+  let snapshotTester: SnapshotTester;
+  before(async () => {
+    snapshotTester = new SnapshotTester(import.meta);
+    await snapshotTester.load();
+  });
 
-    function getParsedTextResponse(explanation: string): AiAssistance.ParsedResponse {
-      return agent.parseTextResponse(explanation);
-    }
-
-    it('parses a thought', async () => {
-      const payload = 'some response';
-      assert.deepEqual(
-          getParsedTextResponse(`THOUGHT: ${payload}`),
-          {
-            title: undefined,
-            thought: payload,
-          },
-      );
-      assert.deepEqual(
-          getParsedTextResponse(`   THOUGHT: ${payload}`),
-          {
-            title: undefined,
-            thought: payload,
-          },
-      );
-      assert.deepEqual(
-          getParsedTextResponse(`Something\n   THOUGHT: ${payload}`),
-          {
-            title: undefined,
-            thought: payload,
-          },
-      );
-    });
-    it('parses a answer', async () => {
-      const payload = 'some response';
-      assert.deepEqual(
-          getParsedTextResponse(`ANSWER: ${payload}`),
-          {
-            answer: payload,
-            suggestions: undefined,
-          },
-      );
-      assert.deepEqual(
-          getParsedTextResponse(`   ANSWER: ${payload}`),
-          {
-            answer: payload,
-            suggestions: undefined,
-          },
-      );
-      assert.deepEqual(
-          getParsedTextResponse(`Something\n   ANSWER: ${payload}`),
-          {
-            answer: payload,
-            suggestions: undefined,
-          },
-      );
-    });
-    it('parses a multiline answer', async () => {
-      const payload = `a
-b
-c`;
-      assert.deepEqual(
-          getParsedTextResponse(`ANSWER: ${payload}`),
-          {
-            answer: payload,
-            suggestions: undefined,
-          },
-      );
-      assert.deepEqual(
-          getParsedTextResponse(`   ANSWER: ${payload}`),
-          {
-            answer: payload,
-            suggestions: undefined,
-          },
-      );
-      assert.deepEqual(
-          getParsedTextResponse(`Something\n   ANSWER: ${payload}`),
-          {
-            answer: payload,
-            suggestions: undefined,
-          },
-      );
-      assert.deepEqual(
-          getParsedTextResponse(`ANSWER: ${payload}\nTHOUGHT: thought`),
-          {
-            answer: payload,
-            suggestions: undefined,
-          },
-      );
-      assert.deepEqual(
-          getParsedTextResponse(
-              `ANSWER: ${payload}\nOBSERVATION: observation`,
-              ),
-          {
-            answer: payload,
-            suggestions: undefined,
-          },
-      );
-      assert.deepEqual(
-          getParsedTextResponse(
-              `ANSWER: ${payload}\nACTION\naction\nSTOP`,
-              ),
-          {
-            action: 'action',
-            title: undefined,
-            thought: undefined,
-          },
-      );
-    });
-    it('parses an action', async () => {
-      const payload = `const data = {
-  someKey: "value",
-}`;
-      assert.deepEqual(
-          getParsedTextResponse(`ACTION\n${payload}\nSTOP`),
-          {
-            action: payload,
-            title: undefined,
-            thought: undefined,
-          },
-      );
-      assert.deepEqual(
-          getParsedTextResponse(`ACTION\n${payload}`),
-          {
-            action: payload,
-            title: undefined,
-            thought: undefined,
-          },
-      );
-      assert.deepEqual(
-          getParsedTextResponse(`ACTION\n\n${payload}\n\nSTOP`),
-          {
-            action: payload,
-            title: undefined,
-            thought: undefined,
-          },
-      );
-
-      assert.deepEqual(
-          getParsedTextResponse(`ACTION\n\n${payload}\n\nANSWER: answer`),
-          {
-            action: payload,
-            title: undefined,
-            thought: undefined,
-          },
-      );
-    });
-    it('parses an action where the last line of the code block ends with STOP keyword', async () => {
-      const payload = `const styles = window.getComputedStyle($0);
-        const data = {
-          styles
-        };`;
-      assert.deepEqual(
-          getParsedTextResponse(`ACTION\n${payload}STOP`),
-          {
-            action: payload,
-            title: undefined,
-            thought: undefined,
-          },
-      );
-    });
-    it('parses a thought and title', async () => {
-      const payload = 'some response';
-      const title = 'this is the title';
-      assert.deepEqual(
-          getParsedTextResponse(`THOUGHT: ${payload}\nTITLE: ${title}`),
-          {
-            thought: payload,
-            title,
-          },
-      );
-    });
-
-    it('parses an action with backticks in the code', async () => {
-      const payload = `const data = {
-  someKey: "value",
-}`;
-      assert.deepEqual(
-          getParsedTextResponse(
-              `ACTION\n\`\`\`\n${payload}\n\`\`\`\nSTOP`,
-              ),
-          {
-            action: payload,
-            title: undefined,
-            thought: undefined,
-          },
-      );
-    });
-
-    it('parses an action with 5 backticks in the code language tag', async () => {
-      const payload = `const data = {
-  someKey: "value",
-}`;
-      assert.deepEqual(
-          getParsedTextResponse(
-              `ACTION\n\`\`\`\`\`js\n${payload}\n\`\`\`\`\`\nSTOP`,
-              ),
-          {
-            action: payload,
-            title: undefined,
-            thought: undefined,
-          },
-      );
-    });
-
-    it('parses an action with 5 backticks in the code and `js` text in the prelude', async () => {
-      const payload = `const data = {
-  someKey: "value",
-}`;
-      assert.deepEqual(
-          getParsedTextResponse(
-              `ACTION\n\`\`\`\`\`\njs\n${payload}\n\`\`\`\`\`\nSTOP`,
-              ),
-          {
-            action: payload,
-            title: undefined,
-            thought: undefined,
-          },
-      );
-    });
-
-    it('parses a thought and an action', async () => {
-      const actionPayload = `const data = {
-  someKey: "value",
-}`;
-      const thoughtPayload = 'thought';
-      assert.deepEqual(
-          getParsedTextResponse(
-              `THOUGHT:${thoughtPayload}\nACTION\n${actionPayload}\nSTOP`,
-              ),
-          {
-            action: actionPayload,
-            title: undefined,
-            thought: thoughtPayload,
-          },
-      );
-    });
-
-    it('parses a thought and an answer', async () => {
-      const answerPayload = 'answer';
-      const thoughtPayload = 'thought';
-      assert.deepEqual(
-          getParsedTextResponse(
-              `THOUGHT:${thoughtPayload}\nANSWER:${answerPayload}`,
-              ),
-          {
-            answer: answerPayload,
-            suggestions: undefined,
-          },
-      );
-    });
-
-    it('parses an answer and suggestions', async () => {
-      const answerPayload = 'answer';
-      const suggestions = ['suggestion'] as [string];
-      const suggestionsText = JSON.stringify(suggestions);
-      assert.deepEqual(
-          getParsedTextResponse(
-              `ANSWER:${answerPayload}\nSUGGESTIONS: ${suggestionsText}`,
-              ),
-          {
-            answer: answerPayload,
-            suggestions,
-          },
-      );
-    });
-
-    it('parses a thought, title, action and answer from same response', async () => {
-      const answerPayload = 'answer';
-      const thoughtPayload = 'thought';
-      const actionPayload = `const data = {
-  someKey: "value",
-}`;
-      const title = 'title';
-      assert.deepEqual(
-          getParsedTextResponse(
-              `THOUGHT: ${thoughtPayload}\nTITLE: ${title}\nACTION\n${actionPayload}\nSTOP\nANSWER:${answerPayload}`,
-              ),
-          {
-            thought: thoughtPayload,
-            action: actionPayload,
-            title,
-          },
-      );
-    });
-    it('parses an action when STOP appearing in its last line and has ANSWER after that', async () => {
-      const answerPayload = 'answer';
-      const suggestions = ['suggestion'];
-      const payload = `const styles = window.getComputedStyle($0);
-        const data = {
-          styles
-        };`;
-      assert.deepEqual(
-          getParsedTextResponse(
-              `ACTION\n${payload}STOP\nANSWER:${answerPayload}\nSUGGESTIONS: ${JSON.stringify(suggestions)}`),
-          {
-            action: payload,
-            thought: undefined,
-            title: undefined,
-          },
-      );
-    });
-    it('parses an action when STOP appearing in its last line and has OBSERVATION after that', async () => {
-      const payload = `const styles = window.getComputedStyle($0);
-        const data = {
-          styles
-        };`;
-      assert.deepEqual(
-          getParsedTextResponse(`ACTION\n${payload}STOP\nOBSERVATION:{styles: {}}`),
-          {
-            action: payload,
-            thought: undefined,
-            title: undefined,
-          },
-      );
-    });
-    it('parses an action when STOP appearing in its last line and has THOUGHT after that', async () => {
-      const payload = `const styles = window.getComputedStyle($0);
-        const data = {
-          styles
-        };`;
-      const thoughtPayload = 'thought';
-      assert.deepEqual(
-          getParsedTextResponse(`ACTION\n${payload}STOP\nTHOUGHT:${thoughtPayload}`),
-          {
-            action: payload,
-            thought: thoughtPayload,
-            title: undefined,
-          },
-      );
-    });
-
-    it('parses a response as an answer', async () => {
-      assert.deepEqual(
-          getParsedTextResponse(
-              'This is also an answer',
-              ),
-          {
-            answer: 'This is also an answer',
-            suggestions: undefined,
-          },
-      );
-    });
-
-    it('parses a response with no instruction tags as an answer and correctly parses suggestions', async () => {
-      assert.deepEqual(
-          getParsedTextResponse(
-              'This is also an answer\nSUGGESTIONS: [\"suggestion\"]',
-              ),
-          {
-            answer: 'This is also an answer',
-            suggestions: ['suggestion'],
-          },
-      );
-    });
-
-    it('parses multi line thoughts', () => {
-      const thoughtText = 'first line\nsecond line';
-      assert.deepEqual(
-          getParsedTextResponse(`THOUGHT: ${thoughtText}`),
-          {
-            thought: thoughtText,
-            title: undefined,
-          },
-      );
-    });
+  after(async () => {
+    await snapshotTester.finish();
   });
 
   describe('describeElement', () => {
-    it('should describe an element with no children, siblings, or parent', async () => {
+    it('should describe an element with no children, siblings, or parent', async function() {
       element.simpleSelector.returns('div#myElement');
       element.getChildNodesPromise.resolves(null);
 
       const result = await StylingAgent.describeElement(element);
 
-      assert.strictEqual(result, '* Its selector is `div#myElement`');
+      snapshotTester.assert(this, result);
     });
 
-    it('should describe an element with child element and text nodes', async () => {
+    it('should describe an element with child element and text nodes', async function() {
       const childNodes: Array<sinon.SinonStubbedInstance<SDK.DOMModel.DOMNode>> = [
         sinon.createStubInstance(SDK.DOMModel.DOMNode),
         sinon.createStubInstance(SDK.DOMModel.DOMNode),
@@ -445,14 +99,10 @@ c`;
       element.parentNode = null;
 
       const result = await StylingAgent.describeElement(element);
-      const expectedOutput = `* Its selector is \`div#parentElement\`
-* It has 2 child element nodes: \`span.child1\`, \`span.child2\`
-* It only has 1 child text node`;
-
-      assert.strictEqual(result, expectedOutput);
+      snapshotTester.assert(this, result);
     });
 
-    it('should describe an element with siblings and a parent', async () => {
+    it('should describe an element with siblings and a parent', async function() {
       const nextSibling = sinon.createStubInstance(SDK.DOMModel.DOMNode);
       nextSibling.nodeType.returns(Node.ELEMENT_NODE);
       const previousSibling = sinon.createStubInstance(SDK.DOMModel.DOMNode);
@@ -476,25 +126,13 @@ c`;
       element.parentNode = parentNode;
 
       const result = await StylingAgent.describeElement(element);
-      const expectedOutput = `* Its selector is \`div#parentElement\`
-* It has a next sibling and it is an element node
-* It has a previous sibling and it is a non element node
-* Its parent's selector is \`div#grandparentElement\`
-* Its parent is a non element node
-* Its parent has only 1 child element node
-* Its parent has only 1 child text node`;
-
-      assert.strictEqual(result, expectedOutput);
+      snapshotTester.assert(this, result);
     });
   });
 
   describe('buildRequest', () => {
     beforeEach(() => {
       sinon.stub(crypto, 'randomUUID').returns('sessionId' as `${string}-${string}-${string}-${string}-${string}`);
-    });
-
-    afterEach(() => {
-      sinon.restore();
     });
 
     it('builds a request with a model id', async () => {
@@ -530,7 +168,7 @@ c`;
       );
     });
 
-    it('structure matches the snapshot', async () => {
+    it('structure matches the snapshot', async function() {
       mockHostConfig('test model');
       const agent = new StylingAgent({
         aidaClient: mockAidaClient([[{
@@ -541,55 +179,29 @@ c`;
       await Array.fromAsync(agent.run('question', {selected: null}));
 
       setUserAgentForTesting();
-      assert.deepEqual(
-          agent.buildRequest(
-              {
-                text: 'test input',
-              },
-              Host.AidaClient.Role.USER),
-          {
-            current_message: {role: Host.AidaClient.Role.USER, parts: [{text: 'test input'}]},
-            client: 'CHROME_DEVTOOLS',
-            preamble: undefined,
-            historical_contexts: [
-              {
-                role: 1,
-                parts: [{text: 'QUERY: question'}],
-              },
-              {
-                role: 2,
-                parts: [{text: 'ANSWER: answer'}],
-              },
-            ],
-            facts: undefined,
-            metadata: {
-              disable_user_content_logging: false,
-              string_session_id: 'sessionId',
-              user_tier: 2,
-              client_version: 'unit_test',
-            },
-            options: {
-              model_id: 'test model',
-              temperature: undefined,
-            },
-            client_feature: 2,
-            functionality_type: 1,
-          },
-      );
-      restoreUserAgentForTesting();
+      try {
+        snapshotTester.assert(
+            this,
+            JSON.stringify(
+                agent.buildRequest(
+                    {
+                      text: 'test input',
+                    },
+                    Host.AidaClient.Role.USER),
+                null, 2));
+      } finally {
+        restoreUserAgentForTesting();
+      }
     });
 
-    it('builds a request with aborted query in history before a real request', async () => {
+    it('builds a request with aborted query in history before a real request', async function() {
       const execJs = sinon.mock().once();
       execJs.onCall(0).returns('result2');
       const agent = new StylingAgent({
         aidaClient: mockAidaClient([
           [{
-            explanation: `THOUGHT: thought2
-TITLE: title2
-ACTION
-action2
-STOP`
+            functionCalls: [{name: 'executeJavaScript', args: {title: 'title2', thought: 'thought2', code: 'action2'}}],
+            explanation: '',
           }],
           [{explanation: 'answer2'}]
         ]),
@@ -597,34 +209,19 @@ STOP`
         execJs,
       });
 
+      sinon.stub(StylingAgent, 'describeElement').resolves('element-description');
+
       const controller = new AbortController();
       controller.abort();
       await Array.fromAsync(agent.run('test', {
-        selected: null,
+        selected: new AiAssistance.NodeContext(element),
         signal: controller.signal,
       }));
-      await Array.fromAsync(agent.run('test2', {selected: null}));
+      await Array.fromAsync(agent.run('test2', {selected: new AiAssistance.NodeContext(element)}));
 
       const request = agent.buildRequest({text: 'test input'}, Host.AidaClient.Role.USER);
       assert.deepEqual(request.current_message?.parts[0], {text: 'test input'});
-      assert.deepEqual(request.historical_contexts, [
-        {
-          parts: [{text: 'QUERY: test2'}],
-          role: 1,
-        },
-        {
-          role: 2,
-          parts: [{text: 'THOUGHT: thought2\nTITLE: title2\nACTION\naction2\nSTOP'}],
-        },
-        {
-          role: 1,
-          parts: [{text: 'OBSERVATION: result2'}],
-        },
-        {
-          role: 2,
-          parts: [{text: 'ANSWER: answer2'}],
-        },
-      ]);
+      snapshotTester.assert(this, JSON.stringify(request.historical_contexts, null, 2));
     });
   });
 
@@ -638,12 +235,11 @@ STOP`
         const agent = new StylingAgent({
           aidaClient: mockAidaClient([
             [{
-              explanation: `ACTION
-$0.style.backgroundColor = 'red'
-STOP`,
+              functionCalls: [{name: 'executeJavaScript', args: {code: '$0.style.backgroundColor = \'red\''}}],
+              explanation: '',
             }],
             [{
-              explanation: 'ANSWER: This is the answer',
+              explanation: 'This is the answer',
             }]
           ]),
           createExtensionScope,
@@ -667,12 +263,11 @@ STOP`,
         const agent = new StylingAgent({
           aidaClient: mockAidaClient([
             [{
-              explanation: `ACTION
-            $0.style.backgroundColor = 'red'
-            STOP`,
+              functionCalls: [{name: 'executeJavaScript', args: {code: '$0.style.backgroundColor = \'red\''}}],
+              explanation: '',
             }],
             [{
-              explanation: 'ANSWER: This is the answer',
+              explanation: 'This is the answer',
             }]
           ]),
           createExtensionScope,
@@ -695,12 +290,11 @@ STOP`,
         const agent = new StylingAgent({
           aidaClient: mockAidaClient([
             [{
-              explanation: `ACTION
-$0.style.backgroundColor = 'red'
-STOP`,
+              functionCalls: [{name: 'executeJavaScript', args: {code: '$0.style.backgroundColor = \'red\''}}],
+              explanation: '',
             }],
             [{
-              explanation: 'ANSWER: This is the answer',
+              explanation: 'This is the answer',
             }]
           ]),
           createExtensionScope,
@@ -723,9 +317,8 @@ STOP`,
         const sideEffectConfirmationPromise = Promise.withResolvers();
         const agent = new StylingAgent({
           aidaClient: mockAidaClient([[{
-            explanation: `ACTION
-$0.style.backgroundColor = 'red'
-STOP`,
+            functionCalls: [{name: 'executeJavaScript', args: {code: '$0.style.backgroundColor = \'red\''}}],
+            explanation: '',
           }]]),
           createExtensionScope,
           confirmSideEffectForTest: sinon.stub().returns(sideEffectConfirmationPromise),
@@ -758,12 +351,14 @@ STOP`,
         const agent = new StylingAgent({
           aidaClient: mockAidaClient([
             [{
-              explanation: `ACTION
-$0.style.backgroundColor = 'red';
-STOP`,
+              functionCalls: [{
+                name: 'executeJavaScript',
+                args: {code: '$0.style.backgroundColor = \'red\';'},
+              }],
+              explanation: '',
             }],
             [{
-              explanation: 'ANSWER: This is the answer',
+              explanation: 'This is the answer',
             }]
           ]),
           createExtensionScope,
@@ -780,68 +375,43 @@ STOP`,
       });
     });
 
-    it('generates an answer immediately', async () => {
+    it('generates an answer immediately', async function() {
       const execJs = sinon.spy();
       const agent = new StylingAgent({
-        aidaClient: mockAidaClient([[{explanation: 'ANSWER: this is the answer'}]]),
+        aidaClient: mockAidaClient([[{explanation: 'this is the answer'}]]),
         execJs,
       });
 
       const responses = await Array.fromAsync(agent.run('test', {selected: new AiAssistance.NodeContext(element)}));
-      assert.deepEqual(responses, [
-        {
-          type: AiAssistance.ResponseType.USER_QUERY,
-          query: 'test',
-          imageInput: undefined,
-          imageId: undefined,
-        },
-        {
-          type: AiAssistance.ResponseType.CONTEXT,
-          title: 'Analyzing the prompt',
-          details: [
-            {
-              text: '* Its selector is `undefined`',
-              title: 'Data used',
-            },
-          ],
-        },
-        {
-          type: AiAssistance.ResponseType.QUERYING,
-        },
-        {
-          type: AiAssistance.ResponseType.ANSWER,
-          text: 'this is the answer',
-          complete: true,
-          suggestions: undefined,
-          rpcId: undefined,
-        },
-      ]);
+      snapshotTester.assert(this, JSON.stringify(responses, null, 2));
       sinon.assert.notCalled(execJs);
-      assert.deepEqual(agent.buildRequest({text: ''}, Host.AidaClient.Role.USER).historical_contexts, [
-        {
-          role: 1,
-          parts: [{text: '# Inspected element\n\n* Its selector is `undefined`\n\n# User request\n\nQUERY: test'}],
-        },
-        {
-          role: 2,
-          parts: [{text: 'ANSWER: this is the answer'}],
-        },
-      ]);
     });
 
-    it('correctly handles historical_contexts in AIDA requests', async () => {
+    it('generates an answer immediately with correct historical contexts in the new request', async function() {
+      const execJs = sinon.spy();
+      const agent = new StylingAgent({
+        aidaClient: mockAidaClient([[{explanation: 'this is the answer'}]]),
+        execJs,
+      });
+
+      await Array.fromAsync(agent.run('test', {selected: new AiAssistance.NodeContext(element)}));
+      snapshotTester.assert(
+          this, JSON.stringify(agent.buildRequest({text: ''}, Host.AidaClient.Role.USER).historical_contexts, null, 2));
+    });
+
+    it('correctly handles historical_contexts in AIDA requests', async function() {
       const execJs = sinon.mock().once();
       execJs.onCall(0).returns('test data');
       const aidaClient = mockAidaClient([
         [{
-          explanation: `THOUGHT: I am thinking.
-TITLE: thinking
-ACTION
-const data = {"test": "observation"};
-STOP`,
+          functionCalls: [{
+            name: 'executeJavaScript',
+            args: {code: 'const data = {"test": "observation"}', thought: 'I am thinking.', title: 'thinking'},
+          }],
+          explanation: '',
         }],
         [{
-          explanation: 'ANSWER: this is the actual answer',
+          explanation: 'this is the actual answer',
         }]
       ]);
       const agent = new StylingAgent({
@@ -852,92 +422,56 @@ STOP`,
 
       await Array.fromAsync(agent.run('test', {selected: new AiAssistance.NodeContext(element)}));
 
-      const requests: Host.AidaClient.AidaRequest[] = (aidaClient.fetch as sinon.SinonStub).args.map(arg => arg[0]);
+      const requests: Host.AidaClient.DoConversationRequest[] =
+          (aidaClient.doConversation as sinon.SinonStub).args.map(arg => arg[0]);
+
+      const snapshot = [];
 
       assert.lengthOf(requests, 2, 'Unexpected number of AIDA requests');
       assert.isUndefined(requests[0].historical_contexts, 'Unexpected historical contexts in the initial request');
       assert.exists(requests[0].current_message);
       assert.lengthOf(requests[0].current_message.parts, 1);
-      assert.deepEqual(
-          requests[0].current_message.parts[0], {
-            text: '# Inspected element\n\n* Its selector is `undefined`\n\n# User request\n\nQUERY: test',
-          },
-          'Unexpected input text in the initial request');
+      snapshot.push(requests[0].current_message.parts[0]);
       assert.strictEqual(requests[0].current_message.role, Host.AidaClient.Role.USER);
-      assert.deepEqual(
-          requests[1].historical_contexts,
-          [
-            {
-              role: 1,
-              parts: [{text: '# Inspected element\n\n* Its selector is `undefined`\n\n# User request\n\nQUERY: test'}],
-            },
-            {
-              role: 2,
-              parts: [{
-                text:
-                    'THOUGHT: I am thinking.\nTITLE: thinking\nACTION\nconst data = {\"test\": \"observation\"};\nSTOP',
-              }],
-            },
-          ],
-          'Unexpected historical contexts in the follow-up request');
+      snapshot.push(requests[1].historical_contexts);
+      snapshotTester.assert(this, JSON.stringify(snapshot, null, 2));
       assert.exists(requests[1].current_message);
       assert.lengthOf(requests[1].current_message.parts, 1);
       assert.deepEqual(
-          requests[1].current_message.parts[0], {text: 'OBSERVATION: test data'},
+          requests[1].current_message.parts[0], {
+            functionResponse: {
+              name: 'executeJavaScript',
+              response: {
+                result: 'test data',
+              }
+            }
+          },
           'Unexpected input in the follow-up request');
     });
 
-    it('generates an rpcId for the answer', async () => {
+    it('generates an rpcId for the answer', async function() {
       const agent = new StylingAgent({
         aidaClient: mockAidaClient([[{
-          explanation: 'ANSWER: this is the answer',
+          explanation: 'this is the answer',
           metadata: {
             rpcGlobalId: 123,
           },
         }]]),
         execJs: sinon.spy(),
-
       });
 
       const responses = await Array.fromAsync(agent.run('test', {selected: new AiAssistance.NodeContext(element)}));
-      assert.deepEqual(responses, [
-        {
-          type: AiAssistance.ResponseType.USER_QUERY,
-          query: 'test',
-          imageInput: undefined,
-          imageId: undefined,
-        },
-        {
-          type: AiAssistance.ResponseType.CONTEXT,
-          title: 'Analyzing the prompt',
-          details: [
-            {
-              text: '* Its selector is `undefined`',
-              title: 'Data used',
-            },
-          ],
-        },
-        {
-          type: AiAssistance.ResponseType.QUERYING,
-        },
-        {
-          type: AiAssistance.ResponseType.ANSWER,
-          text: 'this is the answer',
-          complete: true,
-          suggestions: undefined,
-          rpcId: 123,
-        },
-      ]);
+      snapshotTester.assert(this, JSON.stringify(responses, null, 2));
     });
 
-    it('throws an error based on the attribution metadata including RecitationAction.BLOCK', async () => {
+    it('throws an error based on the attribution metadata including RecitationAction.BLOCK', async function() {
       const agent = new StylingAgent({
         aidaClient: mockAidaClient([[
           {
-            explanation: 'ANSWER: this is the partial answer',
+            explanation: 'this is the partial answer',
           },
           {
-            explanation: 'ANSWER: this is the partial answer and now it\'s complete',
+            explanation: 'this is the partial answer and now it\'s complete',
             metadata: {
               attributionMetadata: {
                 attributionAction: Host.AidaClient.RecitationAction.BLOCK,
@@ -950,42 +484,13 @@ STOP`,
       });
 
       const responses = await Array.fromAsync(agent.run('test', {selected: new AiAssistance.NodeContext(element)}));
-      assert.deepEqual(responses, [
-        {
-          type: AiAssistance.ResponseType.USER_QUERY,
-          query: 'test',
-          imageInput: undefined,
-          imageId: undefined,
-        },
-        {
-          type: AiAssistance.ResponseType.CONTEXT,
-          title: 'Analyzing the prompt',
-          details: [
-            {
-              text: '* Its selector is `undefined`',
-              title: 'Data used',
-            },
-          ],
-        },
-        {
-          type: AiAssistance.ResponseType.QUERYING,
-        },
-        {
-          text: 'this is the partial answer',
-          type: AiAssistance.ResponseType.ANSWER,
-          complete: false,
-        },
-        {
-          type: AiAssistance.ResponseType.ERROR,
-          error: AiAssistance.ErrorType.BLOCK,
-        },
-      ]);
+      snapshotTester.assert(this, JSON.stringify(responses, null, 2));
     });
 
-    it('does not throw an error based on attribution metadata not including RecitationAction.BLOCK', async () => {
+    it('does not throw an error based on attribution metadata not including RecitationAction.BLOCK', async function() {
       const agent = new StylingAgent({
         aidaClient: mockAidaClient([[{
-          explanation: 'ANSWER: this is the answer',
+          explanation: 'this is the answer',
           metadata: {
             rpcGlobalId: 123,
             attributionMetadata: {
@@ -999,117 +504,35 @@ STOP`,
       });
 
       const responses = await Array.fromAsync(agent.run('test', {selected: new AiAssistance.NodeContext(element)}));
-      assert.deepEqual(responses, [
-        {
-          type: AiAssistance.ResponseType.USER_QUERY,
-          query: 'test',
-          imageInput: undefined,
-          imageId: undefined,
-        },
-        {
-          type: AiAssistance.ResponseType.CONTEXT,
-          title: 'Analyzing the prompt',
-          details: [
-            {
-              text: '* Its selector is `undefined`',
-              title: 'Data used',
-            },
-          ],
-        },
-        {
-          type: AiAssistance.ResponseType.QUERYING,
-        },
-        {
-          type: AiAssistance.ResponseType.ANSWER,
-          text: 'this is the answer',
-          complete: true,
-          suggestions: undefined,
-          rpcId: 123,
-        },
-      ]);
+      snapshotTester.assert(this, JSON.stringify(responses, null, 2));
     });
 
-    it('should execute an action only once even when the partial response contains an action', async () => {
-      const execJs = sinon.spy();
-      const agent = new StylingAgent({
-        aidaClient: mockAidaClient([[
-          {
-            explanation: `THOUGHT: I am thinking.
-
-ACTION
-console.log('hel
-          `,
-          },
-          {
-            explanation: `THOUGHT: I am thinking.
-
-ACTION
-console.log('hello');
-STOP
-          `,
-          }
-        ]]),
-        createExtensionScope,
-        execJs,
-      });
-      await Array.fromAsync(agent.run('test', {selected: new AiAssistance.NodeContext(element)}));
-
-      sinon.assert.calledOnce(execJs);
-      assert.include(execJs.lastCall.args[0], 'console.log(\'hello\');');
-    });
-
-    it('generates a response if nothing is returned', async () => {
+    it('generates a response if nothing is returned', async function() {
       const execJs = sinon.spy();
       const agent = new StylingAgent({
         aidaClient: mockAidaClient([[{explanation: ''}]]),
         execJs,
       });
       const responses = await Array.fromAsync(agent.run('test', {selected: new AiAssistance.NodeContext(element)}));
-      assert.deepEqual(responses, [
-        {
-          type: AiAssistance.ResponseType.USER_QUERY,
-          query: 'test',
-          imageInput: undefined,
-          imageId: undefined,
-        },
-        {
-          type: AiAssistance.ResponseType.CONTEXT,
-          title: 'Analyzing the prompt',
-          details: [
-            {
-              text: '* Its selector is `undefined`',
-              title: 'Data used',
-            },
-          ],
-        },
-        {
-          type: AiAssistance.ResponseType.QUERYING,
-        },
-        {
-          type: AiAssistance.ResponseType.ERROR,
-          error: AiAssistance.ErrorType.UNKNOWN,
-        },
-      ]);
+      snapshotTester.assert(this, JSON.stringify(responses, null, 2));
       sinon.assert.notCalled(execJs);
       assert.isUndefined(agent.buildRequest({text: ''}, Host.AidaClient.Role.USER).historical_contexts);
     });
 
-    it('generates an action response if action and answer both present', async () => {
+    it('generates an action response if action and answer both present', async function() {
       const execJs = sinon.mock().once();
       execJs.onCall(0).returns('hello');
       const agent = new StylingAgent({
         aidaClient: mockAidaClient([
           [{
-            explanation: `THOUGHT: I am thinking.
-
-          ACTION
-          console.log('hello');
-          STOP
-
-          ANSWER: this is the answer`,
+            functionCalls: [{
+              name: 'executeJavaScript',
+              args: {thought: 'I am thinking.', code: 'console.log(\'hello\');'},
+            }],
+            explanation: 'this is the answer',
           }],
           [{
-            explanation: 'ANSWER: this is the actual answer',
+            explanation: 'this is the actual answer',
             metadata: {},
           }]
         ]),
@@ -1118,66 +541,36 @@ STOP
 
       });
       const responses = await Array.fromAsync(agent.run('test', {selected: new AiAssistance.NodeContext(element)}));
-      assert.deepEqual(responses, [
-        {
-          type: AiAssistance.ResponseType.USER_QUERY,
-          query: 'test',
-          imageInput: undefined,
-          imageId: undefined,
-        },
-        {
-          type: AiAssistance.ResponseType.CONTEXT,
-          title: 'Analyzing the prompt',
-          details: [
-            {
-              text: '* Its selector is `undefined`',
-              title: 'Data used',
-            },
-          ],
-        },
-        {
-          type: AiAssistance.ResponseType.QUERYING,
-        },
-        {
-          type: AiAssistance.ResponseType.THOUGHT,
-          thought: 'I am thinking.',
-        },
-        {
-          type: AiAssistance.ResponseType.ACTION,
-          code: 'console.log(\'hello\');',
-          output: 'hello',
-          canceled: false,
-        },
-        {
-          type: AiAssistance.ResponseType.QUERYING,
-        },
-        {
-          type: AiAssistance.ResponseType.ANSWER,
-          text: 'this is the actual answer',
-          complete: true,
-          suggestions: undefined,
-          rpcId: undefined,
-        },
-      ]);
+      snapshotTester.assert(this, JSON.stringify(responses, null, 2));
       sinon.assert.calledOnce(execJs);
     });
 
-    it('generates history for multiple actions', async () => {
+    it('generates history for multiple actions', async function() {
       const execJs = sinon.spy(async () => 'undefined');
       const agent = new StylingAgent({
         aidaClient: mockAidaClient([
           [{
-            explanation: 'THOUGHT: thought 1\nTITLE:test\nACTION\nconsole.log(\'test\')\nSTOP\n',
+            functionCalls: [{
+              name: 'executeJavaScript',
+              args: {thought: 'thought 1', title: 'test', code: 'console.log(\'test\')'},
+            }],
+            explanation: '',
           }],
           [{
-            explanation: 'THOUGHT: thought 2\nTITLE:test\nACTION\nconsole.log(\'test\')\nSTOP\n',
+            functionCalls: [{
+              name: 'executeJavaScript',
+              args: {thought: 'thought 2', title: 'test', code: 'console.log(\'test\')'},
+            }],
+            explanation: '',
           }],
           [{
-            explanation: 'THOUGHT: thought 3\nTITLE:test\nACTION\nconsole.log(\'test\')\nSTOP\n',
+            functionCalls: [{
+              name: 'executeJavaScript',
+              args: {thought: 'thought 3', title: 'test', code: 'console.log(\'test\')'},
+            }],
+            explanation: '',
           }],
-          [{
-            explanation: 'ANSWER: this is the answer',
-          }]
+          [{explanation: 'this is the answer'}]
         ]),
         createExtensionScope,
         execJs,
@@ -1186,40 +579,8 @@ STOP
 
       await Array.fromAsync(agent.run('test', {selected: new AiAssistance.NodeContext(element)}));
 
-      assert.deepEqual(agent.buildRequest({text: ''}, Host.AidaClient.Role.USER).historical_contexts, [
-        {
-          role: 1,
-          parts: [{text: '# Inspected element\n\n* Its selector is `undefined`\n\n# User request\n\nQUERY: test'}],
-        },
-        {
-          role: 2,
-          parts: [{text: 'THOUGHT: thought 1\nTITLE: test\nACTION\nconsole.log(\'test\')\nSTOP'}],
-        },
-        {
-          role: 1,
-          parts: [{text: 'OBSERVATION: undefined'}],
-        },
-        {
-          role: 2,
-          parts: [{text: 'THOUGHT: thought 2\nTITLE: test\nACTION\nconsole.log(\'test\')\nSTOP'}],
-        },
-        {
-          role: 1,
-          parts: [{text: 'OBSERVATION: undefined'}],
-        },
-        {
-          role: 2,
-          parts: [{text: 'THOUGHT: thought 3\nTITLE: test\nACTION\nconsole.log(\'test\')\nSTOP'}],
-        },
-        {
-          role: 1,
-          parts: [{text: 'OBSERVATION: undefined'}],
-        },
-        {
-          role: 2,
-          parts: [{text: 'ANSWER: this is the answer'}],
-        },
-      ]);
+      snapshotTester.assert(
+          this, JSON.stringify(agent.buildRequest({text: ''}, Host.AidaClient.Role.USER).historical_contexts, null, 2));
     });
 
     it('stops when aborted', async () => {
@@ -1227,17 +588,27 @@ STOP
       const agent = new StylingAgent({
         aidaClient: mockAidaClient([
           [{
-            explanation: 'THOUGHT: thought 1\nTITLE:test\nACTION\nconsole.log(\'test\')\nSTOP\n',
+            functionCalls: [{
+              name: 'executeJavaScript',
+              args: {thought: 'thought 1', title: 'test', code: 'console.log(\'test\')'},
+            }],
+            explanation: '',
           }],
           [{
-            explanation: 'THOUGHT: thought 2\nTITLE:test\nACTION\nconsole.log(\'test\')\nSTOP\n',
+            functionCalls: [{
+              name: 'executeJavaScript',
+              args: {thought: 'thought 2', title: 'test', code: 'console.log(\'test\')'},
+            }],
+            explanation: '',
           }],
           [{
-            explanation: 'THOUGHT: thought 3\nTITLE:test\nACTION\nconsole.log(\'test\')\nSTOP\n',
+            functionCalls: [{
+              name: 'executeJavaScript',
+              args: {thought: 'thought 3', title: 'test', code: 'console.log(\'test\')'},
+            }],
+            explanation: '',
           }],
-          [{
-            explanation: 'ANSWER: this is the answer',
-          }]
+          [{explanation: 'this is the answer'}]
         ]),
         createExtensionScope,
         execJs,
@@ -1262,88 +633,38 @@ STOP
       element.getChildNodesPromise.resolves(null);
     });
 
-    it('does not add multimodal input evaluation prompt when multimodal is disabled', async () => {
+    it('does not add multimodal input evaluation prompt when multimodal is disabled', async function() {
       mockHostConfig('test model');
       const enhancedQuery = await agent.enhanceQuery(
           'test query', new AiAssistance.NodeContext(element), AiAssistance.MultimodalInputType.SCREENSHOT);
 
-      assert.strictEqual(
-          enhancedQuery,
-          '# Inspected element\n\n* Its selector is `div#myElement`\n\n# User request\n\nQUERY: test query',
-      );
+      snapshotTester.assert(this, enhancedQuery);
     });
 
     it('does not add multimodal input evaluation prompt when multimodal is enabled but multimodalInputType is missing',
-       async () => {
+       async function() {
          mockHostConfig('test model', 1, 'PUBLIC', Root.Runtime.HostConfigFreestylerExecutionMode.NO_SCRIPTS, true);
          const enhancedQuery = await agent.enhanceQuery('test query', new AiAssistance.NodeContext(element));
 
-         assert.strictEqual(
-             enhancedQuery,
-             '# Inspected element\n\n* Its selector is `div#myElement`\n\n# User request\n\nQUERY: test query',
-         );
+         snapshotTester.assert(this, enhancedQuery);
        });
 
     it('adds multimodal input evaluation prompt when multimodal is enabled and multimodalInputType is screenshot',
-       async () => {
+       async function() {
          mockHostConfig('test model', 1, 'PUBLIC', Root.Runtime.HostConfigFreestylerExecutionMode.NO_SCRIPTS, true);
          const enhancedQuery = await agent.enhanceQuery(
              'test query', new AiAssistance.NodeContext(element), AiAssistance.MultimodalInputType.SCREENSHOT);
 
-         assert.strictEqual(
-             enhancedQuery,
-             `The user has provided you a screenshot of the page (as visible in the viewport) in base64-encoded format. You SHOULD use it while answering user's queries.
-
-* Try to connect the screenshot to actual DOM elements in the page.
-# Considerations for evaluating image:
-* Pay close attention to the spatial details as well as the visual appearance of the selected element in the image, particularly in relation to layout, spacing, and styling.
-* Analyze the image to identify the layout structure surrounding the element, including the positioning of neighboring elements.
-* Extract visual information from the image, such as colors, fonts, spacing, and sizes, that might be relevant to the user's query.
-* If the image suggests responsiveness issues (e.g., cropped content, overlapping elements), consider those in your response.
-* Consider the surrounding elements and overall layout in the image, but prioritize the selected element's styling and positioning.
-* **CRITICAL** When the user provides image input, interpret and use content and information from the image STRICTLY for web site debugging purposes.
-
-* As part of THOUGHT, evaluate the image to gather data that might be needed to answer the question.
-In case query is related to the image, ALWAYS first use image evaluation to get all details from the image. ONLY after you have all data needed from image, you should move to other steps.
-
-# Inspected element
-
-* Its selector is \`div#myElement\`
-
-# User request
-
-QUERY: test query`,
-         );
+         snapshotTester.assert(this, enhancedQuery);
        });
 
     it('adds multimodal input evaluation prompt when multimodal is enabled and multimodalInputType is uploaded image',
-       async () => {
+       async function() {
          mockHostConfig('test model', 1, 'PUBLIC', Root.Runtime.HostConfigFreestylerExecutionMode.NO_SCRIPTS, true);
          const enhancedQuery = await agent.enhanceQuery(
              'test query', new AiAssistance.NodeContext(element), AiAssistance.MultimodalInputType.UPLOADED_IMAGE);
 
-         assert.strictEqual(
-             enhancedQuery,
-             `The user has uploaded an image in base64-encoded format. You SHOULD use it while answering user's queries.
-# Considerations for evaluating image:
-* Pay close attention to the spatial details as well as the visual appearance of the selected element in the image, particularly in relation to layout, spacing, and styling.
-* Analyze the image to identify the layout structure surrounding the element, including the positioning of neighboring elements.
-* Extract visual information from the image, such as colors, fonts, spacing, and sizes, that might be relevant to the user's query.
-* If the image suggests responsiveness issues (e.g., cropped content, overlapping elements), consider those in your response.
-* Consider the surrounding elements and overall layout in the image, but prioritize the selected element's styling and positioning.
-* **CRITICAL** When the user provides image input, interpret and use content and information from the image STRICTLY for web site debugging purposes.
-
-* As part of THOUGHT, evaluate the image to gather data that might be needed to answer the question.
-In case query is related to the image, ALWAYS first use image evaluation to get all details from the image. ONLY after you have all data needed from image, you should move to other steps.
-
-# Inspected element
-
-* Its selector is \`div#myElement\`
-
-# User request
-
-QUERY: test query`,
-         );
+         snapshotTester.assert(this, enhancedQuery);
        });
   });
 
@@ -1351,12 +672,11 @@ QUERY: test query`,
     function getMockClient() {
       return mockAidaClient([
         [{
-          explanation: `ACTION
-$0.style.backgroundColor = 'red'
-STOP`,
+          functionCalls: [{name: 'executeJavaScript', args: {code: '$0.style.backgroundColor = \'red\''}}],
+          explanation: '',
         }],
         [{
-          explanation: 'ANSWER: This is the answer',
+          explanation: 'This is the answer',
         }]
       ]);
     }

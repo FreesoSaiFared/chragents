@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@ import cssOverviewProcessingViewStyles from './cssOverviewProcessingView.css.js'
 
 const UIStrings = {
   /**
-   *@description Text to cancel something
+   * @description Text to cancel something
    */
   cancel: 'Cancel',
 } as const;
@@ -39,7 +39,7 @@ export const DEFAULT_VIEW: View = (input, _output, target) => {
         </div>
       </div>
     </div>`,
-    target, {host: input});
+    target);
   // clang-format on
 };
 
@@ -48,7 +48,7 @@ export class CSSOverviewProcessingView extends UI.Widget.Widget {
   #view: View;
 
   constructor(element?: HTMLElement, view: View = DEFAULT_VIEW) {
-    super(false, false, element);
+    super(element);
     this.#view = view;
     this.requestUpdate();
   }

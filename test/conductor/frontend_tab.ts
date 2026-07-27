@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,8 +60,9 @@ export class DevToolsFrontendTab {
     // We also use a unique ID per DevTools frontend instance, to avoid the same issue with other
     // frontend instances.
     const id = DevToolsFrontendTab.tabCounter++;
+
     const frontendUrl = `https://i${id}.devtools-frontend.test:${testServerPort}/${devToolsAppURL}?ws=localhost:${
-        getDebugPort(browser)}/devtools/page/${targetId}&targetType=tab&veLogging=true`;
+        getDebugPort(browser)}/devtools/page/${targetId}&targetType=tab`;
 
     const frontend = await browser.newPage();
     installPageErrorHandlers(frontend);

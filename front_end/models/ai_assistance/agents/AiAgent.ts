@@ -1,10 +1,9 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import * as Host from '../../../core/host/host.js';
 import * as Root from '../../../core/root/root.js';
-import type * as Lit from '../../../ui/lit/lit.js';
 import {debugLog, isStructuredLogEnabled} from '../debug.js';
 
 export const enum ResponseType {
@@ -85,6 +84,7 @@ export interface SideEffectResponse {
   code?: string;
   confirm: (confirm: boolean) => void;
 }
+interface SerializedSideEffectResponse extends Omit<SideEffectResponse, 'confirm'> {}
 
 export interface ActionResponse {
   type: ResponseType.ACTION;
@@ -93,11 +93,8 @@ export interface ActionResponse {
   canceled: boolean;
 }
 
-export interface QueryResponse {
+export interface QueryingResponse {
   type: ResponseType.QUERYING;
-  query?: string;
-  imageInput?: Host.AidaClient.Part;
-  imageId?: string;
 }
 
 export interface UserQuery {
@@ -108,7 +105,10 @@ export interface UserQuery {
 }
 
 export type ResponseData = AnswerResponse|SuggestionsResponse|ErrorResponse|ActionResponse|SideEffectResponse|
-    ThoughtResponse|TitleResponse|QueryResponse|ContextResponse|UserQuery;
+    ThoughtResponse|TitleResponse|QueryingResponse|ContextResponse|UserQuery;
+
+export type SerializedResponseData = AnswerResponse|SuggestionsResponse|ErrorResponse|ActionResponse|
+    SerializedSideEffectResponse|ThoughtResponse|TitleResponse|QueryingResponse|ContextResponse|UserQuery;
 
 export type FunctionCallResponseData =
     TitleResponse|ThoughtResponse|ActionResponse|SideEffectResponse|SuggestionsResponse;
@@ -133,13 +133,7 @@ export interface ParsedAnswer {
   suggestions?: [string, ...string[]];
 }
 
-export interface ParsedStep {
-  thought?: string;
-  title?: string;
-  action?: string;
-}
-
-export type ParsedResponse = ParsedAnswer|ParsedStep;
+export type ParsedResponse = ParsedAnswer;
 
 export const MAX_STEPS = 10;
 
@@ -148,11 +142,37 @@ export interface ConversationSuggestion {
   jslogContext?: string;
 }
 
+/** At least one. */
+export type ConversationSuggestions = [ConversationSuggestion, ...ConversationSuggestion[]];
+
+export const enum ExternalRequestResponseType {
+  ANSWER = 'answer',
+  NOTIFICATION = 'notification',
+  ERROR = 'error',
+}
+
+export interface ExternalRequestAnswer {
+  type: ExternalRequestResponseType.ANSWER;
+  message: string;
+  devToolsLogs: object[];
+}
+
+export interface ExternalRequestNotification {
+  type: ExternalRequestResponseType.NOTIFICATION;
+  message: string;
+}
+
+export interface ExternalRequestError {
+  type: ExternalRequestResponseType.ERROR;
+  message: string;
+}
+
+export type ExternalRequestResponse = ExternalRequestAnswer|ExternalRequestNotification|ExternalRequestError;
+
 export abstract class ConversationContext<T> {
   abstract getOrigin(): string;
   abstract getItem(): T;
-  abstract getIcon(): Lit.TemplateResult|undefined;
-  abstract getTitle(opts?: {disabled: boolean}): string|ReturnType<typeof Lit.Directives.until>;
+  abstract getTitle(): string;
 
   isOriginAllowed(agentOrigin: string|undefined): boolean {
     if (!agentOrigin) {
@@ -173,7 +193,7 @@ export abstract class ConversationContext<T> {
     return;
   }
 
-  async getSuggestions(): Promise<[ConversationSuggestion, ...ConversationSuggestion[]]|undefined> {
+  async getSuggestions(): Promise<ConversationSuggestions|undefined> {
     return;
   }
 }
@@ -218,8 +238,6 @@ export interface FunctionDeclaration<Args extends Record<string, unknown>, Retur
   }) => Promise<FunctionCallHandlerResult<ReturnType>>;
 }
 
-const OBSERVATION_PREFIX = 'OBSERVATION: ';
-
 interface AidaFetchResult {
   text?: string;
   functionCall?: Host.AidaClient.AidaFunctionCallResponse;
@@ -259,8 +277,8 @@ export abstract class AiAgent<T> {
    * Used in the debug mode and evals.
    */
   readonly #structuredLog: Array<{
-    request: Host.AidaClient.AidaRequest,
-    aidaResponse: Host.AidaClient.AidaResponse,
+    request: Host.AidaClient.DoConversationRequest,
+    aidaResponse: Host.AidaClient.DoConversationResponse,
   }> = [];
 
   /**
@@ -268,7 +286,14 @@ export abstract class AiAgent<T> {
    * historical conversations.
    */
   #origin?: string;
-  #context?: ConversationContext<T>;
+
+  /**
+   * `context` does not change during `AiAgent.run()`, ensuring that calls to JS
+   * have the correct `context`. We don't want element selection by the user to
+   * change the `context` during an `AiAgent.run()`.
+   */
+  protected context?: ConversationContext<T>;
+
   #id: string = crypto.randomUUID();
   #history: Host.AidaClient.Content[] = [];
 
@@ -308,9 +333,13 @@ export abstract class AiAgent<T> {
     this.#facts.clear();
   }
 
+  preambleFeatures(): string[] {
+    return [];
+  }
+
   buildRequest(
       part: Host.AidaClient.Part|Host.AidaClient.Part[],
-      role: Host.AidaClient.Role.USER|Host.AidaClient.Role.ROLE_UNSPECIFIED): Host.AidaClient.AidaRequest {
+      role: Host.AidaClient.Role.USER|Host.AidaClient.Role.ROLE_UNSPECIFIED): Host.AidaClient.DoConversationRequest {
     const parts = Array.isArray(part) ? part : [part];
     const currentMessage: Host.AidaClient.Content = {
       parts,
@@ -328,11 +357,11 @@ export abstract class AiAgent<T> {
     function validTemperature(temperature: number|undefined): number|undefined {
       return typeof temperature === 'number' && temperature >= 0 ? temperature : undefined;
     }
-    const enableAidaFunctionCalling = declarations.length && !this.functionCallEmulationEnabled;
+    const enableAidaFunctionCalling = declarations.length;
     const userTier = Host.AidaClient.convertToUserTierEnum(this.userTier);
     const preamble = userTier === Host.AidaClient.UserTier.TESTERS ? this.preamble : undefined;
     const facts = Array.from(this.#facts);
-    const request: Host.AidaClient.AidaRequest = {
+    const request: Host.AidaClient.DoConversationRequest = {
       client: Host.AidaClient.CLIENT_NAME,
       current_message: currentMessage,
       preamble,
@@ -349,7 +378,8 @@ export abstract class AiAgent<T> {
         disable_user_content_logging: !(this.#serverSideLoggingEnabled ?? false),
         string_session_id: this.#sessionId,
         user_tier: userTier,
-        client_version: Root.Runtime.getChromeVersion(),
+        client_version:
+            Root.Runtime.getChromeVersion() + this.preambleFeatures().map(feature => `+${feature}`).join(''),
       },
 
       functionality_type: enableAidaFunctionCalling ? Host.AidaClient.FunctionalityType.AGENTIC_CHAT :
@@ -369,18 +399,71 @@ export abstract class AiAgent<T> {
   }
 
   /**
+   * The AI has instructions to emit structured suggestions in their response. This
+   * function parses for that.
+   *
+   * Note: currently only StylingAgent and PerformanceAgent utilize this, but
+   * eventually all agents should support this.
+   */
+  parseTextResponseForSuggestions(text: string): ParsedResponse {
+    if (!text) {
+      return {answer: ''};
+    }
+
+    const lines = text.split('\n');
+    const answerLines: string[] = [];
+    let suggestions: [string, ...string[]]|undefined;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('SUGGESTIONS:')) {
+        try {
+          // TODO: Do basic validation this is an array with strings
+          suggestions = JSON.parse(trimmed.substring('SUGGESTIONS:'.length).trim());
+        } catch {
+        }
+      } else {
+        answerLines.push(line);
+      }
+    }
+
+    // Sometimes the model fails to put the SUGGESTIONS text on its own line. Handle
+    // the case where the suggestions are part of the last line of the answer.
+    if (!suggestions && answerLines.at(-1)?.includes('SUGGESTIONS:')) {
+      const [answer, suggestionsText] = answerLines[answerLines.length - 1].split('SUGGESTIONS:', 2);
+      try {
+        // TODO: Do basic validation this is an array with strings
+        suggestions = JSON.parse(suggestionsText.trim().substring('SUGGESTIONS:'.length).trim());
+      } catch {
+      }
+      answerLines[answerLines.length - 1] = answer;
+    }
+
+    const response: ParsedResponse = {
+      // If we could not parse the parts, consider the response to be an
+      // answer.
+      answer: answerLines.join('\n'),
+    };
+
+    if (suggestions) {
+      response.suggestions = suggestions;
+    }
+
+    return response;
+  }
+
+  /**
    * Parses a streaming text response into a
-   * though/action/title/answer/suggestions component. This is only used
-   * by StylingAgent.
+   * though/action/title/answer/suggestions component.
    */
   parseTextResponse(response: string): ParsedResponse {
-    return {answer: response};
+    return this.parseTextResponseForSuggestions(response.trim());
   }
 
   /**
    * Declare a function that the AI model can call.
-   * @param name - The name of the function
-   * @param declaration - the function declaration. Currently functions must:
+   * @param name The name of the function
+   * @param declaration the function declaration. Currently functions must:
    * 1. Return an object of serializable key/value pairs. You cannot return
    *    anything other than a plain JavaScript object that can be serialized.
    * 2. Take one parameter which is an object that can have
@@ -396,18 +479,8 @@ export abstract class AiAgent<T> {
     this.#functionDeclarations.set(name, declaration as FunctionDeclaration<Record<string, unknown>, ReturnType>);
   }
 
-  protected formatParsedAnswer({answer}: ParsedAnswer): string {
-    return answer;
-  }
-
-  /**
-   * Special mode for StylingAgent that turns custom text output into a
-   * function call.
-   */
-  protected functionCallEmulationEnabled = false;
-  protected emulateFunctionCall(_aidaResponse: Host.AidaClient.AidaResponse): Host.AidaClient.AidaFunctionCallResponse|
-      'no-function-call'|'wait-for-completion' {
-    throw new Error('Unexpected emulateFunctionCall. Only StylingAgent implements function call emulation');
+  protected clearDeclaredFunctions(): void {
+    this.#functionDeclarations.clear();
   }
 
   async *
@@ -418,13 +491,14 @@ export abstract class AiAgent<T> {
           multimodalInput?: MultimodalInput): AsyncGenerator<ResponseData, void, void> {
     await options.selected?.refresh();
 
-    // First context set on the agent determines its origin from now on.
-    if (options.selected && this.#origin === undefined && options.selected) {
-      this.#origin = options.selected.getOrigin();
-    }
-    // Remember if the context that is set.
-    if (options.selected && !this.#context) {
-      this.#context = options.selected;
+    if (options.selected) {
+      // First context set on the agent determines its origin from now on.
+      if (this.#origin === undefined) {
+        this.#origin = options.selected.getOrigin();
+      }
+      if (options.selected.isOriginAllowed(this.#origin)) {
+        this.context = options.selected;
+      }
     }
 
     const enhancedQuery = await this.enhanceQuery(initialQuery, options.selected, multimodalInput?.type);
@@ -495,7 +569,7 @@ export abstract class AiAgent<T> {
         }
         this.#history.push({
           parts: [{
-            text: this.formatParsedAnswer(parsedResponse),
+            text: parsedResponse.answer,
           }],
           role: Host.AidaClient.Role.MODEL,
         });
@@ -517,15 +591,13 @@ export abstract class AiAgent<T> {
             yield this.#createErrorResponse(ErrorType.ABORT);
             break;
           }
-          query = this.functionCallEmulationEnabled ? {text: OBSERVATION_PREFIX + result.result} : {
+          query = {
             functionResponse: {
               name: functionCall.name,
               response: result,
             },
           };
-          request = this.buildRequest(
-              query,
-              this.functionCallEmulationEnabled ? Host.AidaClient.Role.USER : Host.AidaClient.Role.ROLE_UNSPECIFIED);
+          request = this.buildRequest(query, Host.AidaClient.Role.ROLE_UNSPECIFIED);
         } catch {
           yield this.#createErrorResponse(ErrorType.UNKNOWN);
           break;
@@ -549,26 +621,15 @@ export abstract class AiAgent<T> {
     if (!call) {
       throw new Error(`Function ${name} is not found.`);
     }
-    if (this.functionCallEmulationEnabled) {
-      if (!call.displayInfoFromArgs) {
-        throw new Error('functionCallEmulationEnabled requires all functions to provide displayInfoFromArgs');
-      }
-      // Emulated function calls are formatted as text.
-      this.#history.push({
-        parts: [{text: this.#formatParsedStep(call.displayInfoFromArgs(args))}],
-        role: Host.AidaClient.Role.MODEL,
-      });
-    } else {
-      this.#history.push({
-        parts: [{
-          functionCall: {
-            name,
-            args,
-          },
-        }],
-        role: Host.AidaClient.Role.MODEL,
-      });
-    }
+    this.#history.push({
+      parts: [{
+        functionCall: {
+          name,
+          args,
+        },
+      }],
+      role: Host.AidaClient.Role.MODEL,
+    });
 
     let code;
     if (call.displayInfoFromArgs) {
@@ -665,12 +726,12 @@ export abstract class AiAgent<T> {
   }
 
   async *
-      #aidaFetch(request: Host.AidaClient.AidaRequest, options?: {signal?: AbortSignal}):
+      #aidaFetch(request: Host.AidaClient.DoConversationRequest, options?: {signal?: AbortSignal}):
           AsyncGenerator<AidaFetchResult, void, void> {
-    let aidaResponse: Host.AidaClient.AidaResponse|undefined = undefined;
+    let aidaResponse: Host.AidaClient.DoConversationResponse|undefined = undefined;
     let rpcId: Host.AidaClient.RpcGlobalId|undefined;
 
-    for await (aidaResponse of this.#aidaClient.fetch(request, options)) {
+    for await (aidaResponse of this.#aidaClient.doConversation(request, options)) {
       if (aidaResponse.functionCalls?.length) {
         debugLog('functionCalls.length', aidaResponse.functionCalls.length);
         yield {
@@ -679,21 +740,6 @@ export abstract class AiAgent<T> {
           completed: true,
         };
         break;
-      }
-
-      if (this.functionCallEmulationEnabled) {
-        const emulatedFunctionCall = this.emulateFunctionCall(aidaResponse);
-        if (emulatedFunctionCall === 'wait-for-completion') {
-          continue;
-        }
-        if (emulatedFunctionCall !== 'no-function-call') {
-          yield {
-            rpcId,
-            functionCall: emulatedFunctionCall,
-            completed: true,
-          };
-          break;
-        }
       }
 
       rpcId = aidaResponse.metadata.rpcGlobalId ?? rpcId;
@@ -715,23 +761,6 @@ export abstract class AiAgent<T> {
       });
       localStorage.setItem('aiAssistanceStructuredLog', JSON.stringify(this.#structuredLog));
     }
-  }
-
-  #formatParsedStep(step: ParsedStep): string {
-    let text = '';
-    if (step.thought) {
-      text = `THOUGHT: ${step.thought}`;
-    }
-    if (step.title) {
-      text += `\nTITLE: ${step.title}`;
-    }
-    if (step.action) {
-      text += `\nACTION
-${step.action}
-STOP`;
-    }
-
-    return text;
   }
 
   #removeLastRunParts(): void {

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,7 +43,7 @@ export class MockProtocolBackend {
     setMockConnectionResponseHandler('Debugger.getScriptSource', this.#getScriptSourceHandler.bind(this));
     setMockConnectionResponseHandler('Runtime.getProperties', this.#getPropertiesHandler.bind(this));
     setMockConnectionResponseHandler('Debugger.setBreakpointByUrl', this.#setBreakpointByUrlHandler.bind(this));
-    setMockConnectionResponseHandler('Storage.getStorageKeyForFrame', () => ({storageKey: 'test-key'}));
+    setMockConnectionResponseHandler('Storage.getStorageKey', () => ({storageKey: 'test-key'}));
     setMockConnectionResponseHandler('Debugger.removeBreakpoint', this.#removeBreakpointHandler.bind(this));
     setMockConnectionResponseHandler('Debugger.resume', () => ({}));
     setMockConnectionResponseHandler('Debugger.enable', () => ({debuggerId: 'DEBUGGER_ID'}));

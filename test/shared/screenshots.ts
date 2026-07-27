@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,15 +11,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type * as puppeteer from 'puppeteer-core';
 
-import {platform} from '../conductor/mocha-interface-helpers.js';
 import {SOURCE_ROOT} from '../conductor/paths.js';
+import {platform} from '../conductor/platform.js';
 import {ScreenshotError} from '../conductor/screenshot-error.js';
 import {TestConfig} from '../conductor/test_config.js';
-import {
-  getBrowserAndPages,
-  timeout,
-  waitFor,
-} from '../shared/helper.js';
+import {getBrowserAndPages} from '../shared/helper.js';
 
 /**
  * The goldens screenshot folder is always taken from the source directory (NOT
@@ -68,10 +64,11 @@ const DEFAULT_MS_BETWEEN_RETRIES = 150;
 const DEFAULT_SCREENSHOT_THRESHOLD_PERCENT = 0.1;
 
 export const assertElementScreenshotUnchanged = async (
-    element: puppeteer.ElementHandle|null, fileName: string, options: Partial<puppeteer.ScreenshotOptions> = {}) => {
-  if (!element) {
-    assert.fail(`Given element for test ${fileName} was not found.`);
-  }
+    element: puppeteer.ElementHandle|null,
+    fileName: NonNullable<puppeteer.ScreenshotOptions['path']>,
+    options: Partial<puppeteer.ScreenshotOptions> = {},
+    ) => {
+  assert.isOk(element, `Given element for test ${fileName} was not found.`);
   // Only assert screenshots on Linux. We don't observe platform-specific differences enough to justify
   // the costs of asserting 3 platforms per screenshot.
   if (platform !== 'linux') {
@@ -95,8 +92,8 @@ function getFrontend() {
 }
 
 const assertScreenshotUnchangedWithRetries = async (
-    elementOrPage: puppeteer.ElementHandle|puppeteer.Page, fileName: string, maximumDiffThreshold: number,
-    maximumRetries: number, options: Partial<puppeteer.ScreenshotOptions> = {}) => {
+    elementOrPage: puppeteer.ElementHandle|puppeteer.Page, fileName: NonNullable<puppeteer.ScreenshotOptions['path']>,
+    maximumDiffThreshold: number, maximumRetries: number, options: Partial<puppeteer.ScreenshotOptions> = {}) => {
   const frontend = getFrontend();
   try {
     await frontend?.evaluate(() => window.dispatchEvent(new Event('hidecomponentdocsui')));
@@ -107,7 +104,8 @@ const assertScreenshotUnchangedWithRetries = async (
      */
     const fileNameForPlatform = fileName.split('/').join(path.sep);
     const goldenScreenshotPath = path.join(GOLDENS_FOLDER, fileNameForPlatform);
-    const generatedScreenshotPath = path.join(generatedScreenshotFolder, fileNameForPlatform);
+    const generatedScreenshotPath =
+        path.join(generatedScreenshotFolder, fileNameForPlatform) as NonNullable<puppeteer.ScreenshotOptions['path']>;
 
     /**
      * Ensure that the directories for the golden/generated file exist. We need
@@ -133,7 +131,7 @@ const assertScreenshotUnchangedWithRetries = async (
 
 interface ScreenshotAssertionOptions {
   goldenScreenshotPath: string;
-  generatedScreenshotPath: string;
+  generatedScreenshotPath: NonNullable<puppeteer.ScreenshotOptions['path']>;
   screenshotOptions: Partial<puppeteer.ScreenshotOptions>;
   elementOrPage: puppeteer.ElementHandle|puppeteer.Page;
   fileName: string;
@@ -153,7 +151,7 @@ const assertScreenshotUnchanged = async (options: ScreenshotAssertionOptions) =>
     retryCount = 1,
   } = options;
   const screenshotOptions = {...defaultScreenshotOpts, ...options.screenshotOptions, path: generatedScreenshotPath};
-  await (elementOrPage as puppeteer.Page).screenshot(screenshotOptions);
+  await elementOrPage.screenshot(screenshotOptions);
 
   /**
    * The user can do UPDATE_GOLDEN=accordion/basic.png npm run screenshotstest
@@ -341,15 +339,4 @@ function setGeneratedFileAsGolden(golden: string, generated: string) {
   } catch (e) {
     assert.fail(`Error setting golden, ${e}`);
   }
-}
-
-export async function waitForDialogAnimationEnd(root?: puppeteer.ElementHandle) {
-  const ANIMATION_TIMEOUT = 2000;
-  const dialog = await waitFor('dialog[open]', root);
-  const animationPromise = dialog.evaluate((dialog: Element) => {
-    return new Promise<void>(resolve => {
-      dialog.addEventListener('animationend', () => resolve(), {once: true});
-    });
-  });
-  await Promise.race([animationPromise, timeout(ANIMATION_TIMEOUT)]);
 }

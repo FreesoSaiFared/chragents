@@ -1,7 +1,8 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Debugging from './Debugging.js';
 import type * as LoggableModule from './Loggable.js';
 import * as LoggingConfig from './LoggingConfig.js';
 import * as LoggingDriver from './LoggingDriver.js';
@@ -39,6 +40,13 @@ export async function isUnderInspection(origin?: string): Promise<boolean> {
   return [431010711, -1313957874, -1093325535].includes(context);
 }
 
+export function setHighlightedVe(veKey: string|null): void {
+  Debugging.setHighlightedVe(veKey);
+  if (veKey) {
+    void LoggingDriver.process();
+  }
+}
+
 /**
  * Action visual elements are either buttons or menu items that trigger a given action. Use the
  * context to differentiate between different actions, and make sure that buttons and menu items
@@ -49,6 +57,7 @@ export async function isUnderInspection(origin?: string): Promise<boolean> {
 export const action = LoggingConfig.makeConfigStringBuilder.bind(null, 'Action');
 export const adorner = LoggingConfig.makeConfigStringBuilder.bind(null, 'Adorner');
 export const animationClip = LoggingConfig.makeConfigStringBuilder.bind(null, 'AnimationClip');
+export const badge = LoggingConfig.makeConfigStringBuilder.bind(null, 'Badge');
 export const bezierCurveEditor = LoggingConfig.makeConfigStringBuilder.bind(null, 'BezierCurveEditor');
 export const bezierPresetCategory = LoggingConfig.makeConfigStringBuilder.bind(null, 'BezierPresetCategory');
 export const breakpointMarker = LoggingConfig.makeConfigStringBuilder.bind(null, 'BreakpointMarker');

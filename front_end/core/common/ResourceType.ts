@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,119 +38,115 @@ import {ParsedURL} from './ParsedURL.js';
 
 const UIStrings = {
   /**
-   *@description Text that appears in a tooltip the fetch and xhr resource types filter.
+   * @description Text that appears in a tooltip the fetch and xhr resource types filter.
    */
   fetchAndXHR: '`Fetch` and `XHR`',
   /**
-   *@description Text that appears in a tooltip for the JavaScript types filter.
+   * @description Text that appears in a tooltip for the JavaScript types filter.
    */
   javascript: 'JavaScript',
   /**
-   *@description Text that appears on a button for the JavaScript resource type filter.
+   * @description Text that appears on a button for the JavaScript resource type filter.
    */
   js: 'JS',
   /**
-   *@description Text that appears on a button for the css resource type filter.
+   * @description Text that appears on a button for the css resource type filter.
    */
   css: 'CSS',
   /**
-   *@description Text that appears on a button for the image resource type filter.
+   * @description Text that appears on a button for the image resource type filter.
    */
   img: 'Img',
   /**
-   *@description Text that appears on a button for the media resource type filter.
+   * @description Text that appears on a button for the media resource type filter.
    */
   media: 'Media',
   /**
-   *@description Text that appears on a button for the font resource type filter.
+   * @description Text that appears on a button for the font resource type filter.
    */
   font: 'Font',
   /**
-   *@description Text that appears on a button for the document resource type filter.
+   * @description Text that appears on a button for the document resource type filter.
    */
   doc: 'Doc',
   /**
-   *@description Text that appears on a button for the websocket, webtransport, directsocket resource type filter.
+   * @description Text that appears on a button for the websocket, webtransport, directsocket resource type filter.
    */
   socketShort: 'Socket',
   /**
-   *@description Text that appears in a tooltip for the WebAssembly types filter.
+   * @description Text that appears in a tooltip for the WebAssembly types filter.
    */
   webassembly: 'WebAssembly',
   /**
-   *@description Text that appears on a button for the WebAssembly resource type filter.
+   * @description Text that appears on a button for the WebAssembly resource type filter.
    */
   wasm: 'Wasm',
   /**
-   *@description Text that appears on a button for the manifest resource type filter.
+   * @description Text that appears on a button for the manifest resource type filter.
    */
   manifest: 'Manifest',
   /**
-   *@description Text for other types of items
+   * @description Text for other types of items
    */
   other: 'Other',
   /**
-   *@description Name of a network resource type
+   * @description Name of a network resource type
    */
   document: 'Document',
   /**
-   *@description Name of a network resource type
+   * @description Name of a network resource type
    */
   stylesheet: 'Stylesheet',
   /**
-   *@description Text in Image View of the Sources panel
+   * @description Text in Image View of the Sources panel
    */
   image: 'Image',
   /**
-   *@description Label for a group of JavaScript files
+   * @description Label for a group of JavaScript files
    */
   script: 'Script',
   /**
-   *@description Name of a network resource type
+   * @description Name of a network resource type
    */
   texttrack: 'TextTrack',
   /**
-   *@description Name of a network resource type
+   * @description Name of a network resource type
    */
   fetch: 'Fetch',
   /**
-   *@description Name of a network resource type
+   * @description Name of a network resource type
    */
   eventsource: 'EventSource',
   /**
-   *@description Name of a network resource type
+   * @description Name of a network resource type
    */
   websocket: 'WebSocket',
   /**
-   *@description Name of a network resource type
+   * @description Name of a network resource type
    */
   webtransport: 'WebTransport',
   /**
-   *@description Name of a network resource type
+   * @description Name of a network resource type
    */
   directsocket: 'DirectSocket',
   /**
-   *@description Name of a network resource type
+   * @description Name of a network resource type
    */
   signedexchange: 'SignedExchange',
   /**
-   *@description Name of a network resource type
+   * @description Name of a network resource type
    */
   ping: 'Ping',
   /**
-   *@description Name of a network resource type
+   * @description Name of a network resource type
    */
   cspviolationreport: 'CSPViolationReport',
   /**
-   *@description Name of a network initiator type
+   * @description Name of a network initiator type
    */
   preflight: 'Preflight',
   /**
-   *@description Name of a network initiator type
-   */
-  webbundle: 'WebBundle',
-  /**
-   *@description Name of a network initiator type for FedCM requests
+   * @description Name of a network initiator type for FedCM requests
    */
   fedcm: 'FedCM',
 } as const;
@@ -159,17 +155,17 @@ const str_ = i18n.i18n.registerUIStrings('core/common/ResourceType.ts', UIString
 const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
 
 export class ResourceType {
-  readonly #nameInternal: string;
-  readonly #titleInternal: () => Platform.UIString.LocalizedString;
-  readonly #categoryInternal: ResourceCategory;
-  readonly #isTextTypeInternal: boolean;
+  readonly #name: string;
+  readonly #title: () => Platform.UIString.LocalizedString;
+  readonly #category: ResourceCategory;
+  readonly #isTextType: boolean;
 
   constructor(
       name: string, title: () => Platform.UIString.LocalizedString, category: ResourceCategory, isTextType: boolean) {
-    this.#nameInternal = name;
-    this.#titleInternal = title;
-    this.#categoryInternal = category;
-    this.#isTextTypeInternal = isTextType;
+    this.#name = name;
+    this.#title = title;
+    this.#category = category;
+    this.#isTextType = isTextType;
   }
 
   static fromMimeType(mimeType: string|null): ResourceType {
@@ -211,9 +207,6 @@ export class ResourceType {
     }
     if (mimeType === 'application/wasm') {
       return resourceTypes.Wasm;
-    }
-    if (mimeType === 'application/webbundle') {
-      return resourceTypes.WebBundle;
     }
 
     return null;
@@ -286,23 +279,23 @@ export class ResourceType {
   }
 
   name(): string {
-    return this.#nameInternal;
+    return this.#name;
   }
 
   title(): string {
-    return this.#titleInternal();
+    return this.#title();
   }
 
   category(): ResourceCategory {
-    return this.#categoryInternal;
+    return this.#category;
   }
 
   isTextType(): boolean {
-    return this.#isTextTypeInternal;
+    return this.#isTextType;
   }
 
   isScript(): boolean {
-    return this.#nameInternal === 'script' || this.#nameInternal === 'sm-script';
+    return this.#name === 'script' || this.#name === 'sm-script';
   }
 
   hasScripts(): boolean {
@@ -310,7 +303,7 @@ export class ResourceType {
   }
 
   isStyleSheet(): boolean {
-    return this.#nameInternal === 'stylesheet' || this.#nameInternal === 'sm-stylesheet';
+    return this.#name === 'stylesheet' || this.#name === 'sm-stylesheet';
   }
 
   hasStyleSheets(): boolean {
@@ -318,7 +311,7 @@ export class ResourceType {
   }
 
   isDocument(): boolean {
-    return this.#nameInternal === 'document';
+    return this.#name === 'document';
   }
 
   isDocumentOrScriptOrStyleSheet(): boolean {
@@ -326,23 +319,19 @@ export class ResourceType {
   }
 
   isFont(): boolean {
-    return this.#nameInternal === 'font';
+    return this.#name === 'font';
   }
 
   isImage(): boolean {
-    return this.#nameInternal === 'image';
+    return this.#name === 'image';
   }
 
   isFromSourceMap(): boolean {
-    return this.#nameInternal.startsWith('sm-');
-  }
-
-  isWebbundle(): boolean {
-    return this.#nameInternal === 'webbundle';
+    return this.#name.startsWith('sm-');
   }
 
   toString(): string {
-    return this.#nameInternal;
+    return this.#name;
   }
 
   canonicalMimeType(): string {
@@ -427,7 +416,6 @@ export const resourceTypes = {
   SourceMapScript: new ResourceType('sm-script', i18nLazyString(UIStrings.script), resourceCategories.Script, true),
   SourceMapStyleSheet:
       new ResourceType('sm-stylesheet', i18nLazyString(UIStrings.stylesheet), resourceCategories.Stylesheet, true),
-  WebBundle: new ResourceType('webbundle', i18nLazyString(UIStrings.webbundle), resourceCategories.Other, false),
   FedCM: new ResourceType('fedcm', i18nLazyString(UIStrings.fedcm), resourceCategories.Other, false),
 } as const;
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,7 +40,7 @@ const UIStrings = {
    */
   forceElementSpecificStates: 'Force specific element state',
   /**
-   *@description Text that is usually a hyperlink to more documentation
+   * @description Text that is usually a hyperlink to more documentation
    */
   learnMore: 'Learn more',
 } as const;
@@ -66,6 +66,7 @@ enum SpecificPseudoStates {
   PLACEHOLDER_SHOWN = 'placeholder-shown',
   AUTOFILL = 'autofill',
   OPEN = 'open',
+  TARGET_CURRENT = 'target-current',
 }
 
 interface ElementState {
@@ -132,7 +133,7 @@ export const DEFAULT_VIEW: View = (input, _output, target) => {
               .map(state => createElementStateCheckbox(state))}
         </div>
       </details>
-    </div>`, target, {host: input});
+    </div>`, target);
   // clang-format on
 };
 
@@ -143,7 +144,7 @@ export class ElementStatePaneWidget extends UI.Widget.Widget {
   readonly #view: View;
 
   constructor(view: View = DEFAULT_VIEW) {
-    super(true);
+    super({useShadowDom: true});
     this.#view = view;
     this.#duals = new Map();
     const setDualStateCheckboxes = (first: SpecificPseudoStates, second: SpecificPseudoStates): void => {
@@ -179,6 +180,8 @@ export class ElementStatePaneWidget extends UI.Widget.Widget {
         SpecificPseudoStates.PLACEHOLDER_SHOWN, {state: SpecificPseudoStates.PLACEHOLDER_SHOWN, type: 'specific'});
     this.#states.set(SpecificPseudoStates.AUTOFILL, {state: SpecificPseudoStates.AUTOFILL, type: 'specific'});
     this.#states.set(SpecificPseudoStates.OPEN, {state: SpecificPseudoStates.OPEN, type: 'specific'});
+    this.#states.set(
+        SpecificPseudoStates.TARGET_CURRENT, {state: SpecificPseudoStates.TARGET_CURRENT, type: 'specific'});
 
     setDualStateCheckboxes(SpecificPseudoStates.VALID, SpecificPseudoStates.INVALID);
     setDualStateCheckboxes(SpecificPseudoStates.USER_VALID, SpecificPseudoStates.USER_INVALID);
@@ -267,6 +270,9 @@ export class ElementStatePaneWidget extends UI.Widget.Widget {
     };
     const isElementOfTypes = (node: SDK.DOMModel.DOMNode, types: string[]): boolean => {
       return types.includes(node.nodeName()?.toLowerCase());
+    };
+    const isAnchorElementWithHref = (node: SDK.DOMModel.DOMNode): boolean => {
+      return isElementOfTypes(node, ['a']) && node.getAttribute('href') !== undefined;
     };
     const isInputWithTypeRadioOrCheckbox = (node: SDK.DOMModel.DOMNode): boolean => {
       return isElementOfTypes(node, ['input']) &&
@@ -384,6 +390,12 @@ export class ElementStatePaneWidget extends UI.Widget.Widget {
       hideSpecificCheckbox(SpecificPseudoStates.OPEN, false);
     } else {
       hideSpecificCheckbox(SpecificPseudoStates.OPEN, true);
+    }
+
+    if (isAnchorElementWithHref(node) || node.pseudoType() === 'scroll-marker') {
+      hideSpecificCheckbox(SpecificPseudoStates.TARGET_CURRENT, false);
+    } else {
+      hideSpecificCheckbox(SpecificPseudoStates.TARGET_CURRENT, true);
     }
   }
 }

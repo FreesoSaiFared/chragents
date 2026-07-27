@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -36,20 +36,24 @@
 
 import './Toolbar.js';
 
+import type * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
+import * as Geometry from '../../models/geometry/geometry.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as Buttons from '../components/buttons/buttons.js';
 import * as IconButton from '../components/icon_button/icon_button.js';
+import * as Lit from '../lit/lit.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
 
+import * as ActionRegistration from './ActionRegistration.js';
+import {ActionRegistry} from './ActionRegistry.js';
 import * as ARIAUtils from './ARIAUtils.js';
 import checkboxTextLabelStyles from './checkboxTextLabel.css.js';
 import confirmDialogStyles from './confirmDialog.css.js';
 import {Dialog} from './Dialog.js';
-import {Size} from './Geometry.js';
 import {GlassPane, PointerEventsBehavior, SizeBehavior} from './GlassPane.js';
 import inlineButtonStyles from './inlineButton.css.js';
 import inspectorCommonStyles from './inspectorCommon.css.js';
@@ -57,9 +61,7 @@ import {KeyboardShortcut, Keys} from './KeyboardShortcut.js';
 import smallBubbleStyles from './smallBubble.css.js';
 import type {ToolbarButton} from './Toolbar.js';
 import {Tooltip} from './Tooltip.js';
-import type {TreeOutline} from './Treeoutline.js';
 import {Widget} from './Widget.js';
-import type {XWidget} from './XWidget.js';
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -69,52 +71,57 @@ declare global {
     'dt-small-bubble': DevToolsSmallBubble;
   }
 }
+const {Directives, render} = Lit;
 
 const UIStrings = {
   /**
-   *@description label to open link externally
+   * @description label to open link externally
    */
   openInNewTab: 'Open in new tab',
   /**
-   *@description label to copy link address
+   * @description label to copy link address
    */
   copyLinkAddress: 'Copy link address',
   /**
-   *@description label to copy file name
+   * @description label to copy file name
    */
   copyFileName: 'Copy file name',
   /**
-   *@description label for the profiler control button
+   * @description label for the profiler control button
    */
   anotherProfilerIsAlreadyActive: 'Another profiler is already active',
   /**
-   *@description Text in UIUtils
+   * @description Text in UIUtils
    */
   promiseResolvedAsync: 'Promise resolved (async)',
   /**
-   *@description Text in UIUtils
+   * @description Text in UIUtils
    */
   promiseRejectedAsync: 'Promise rejected (async)',
   /**
-   *@description Text for the title of asynchronous function calls group in Call Stack
+   * @description Text for the title of asynchronous function calls group in Call Stack
    */
   asyncCall: 'Async Call',
   /**
-   *@description Text for the name of anonymous functions
+   * @description Text for the name of anonymous functions
    */
   anonymous: '(anonymous)',
   /**
-   *@description Text to close something
+   * @description Text to close something
    */
   close: 'Close',
   /**
-   *@description Text on a button for message dialog
+   * @description Text on a button for message dialog
    */
   ok: 'OK',
   /**
-   *@description Text to cancel something
+   * @description Text to cancel something
    */
   cancel: 'Cancel',
+  /**
+   * @description Text for the new badge appearing next to some menu items
+   */
+  new: 'NEW',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/UIUtils.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -239,8 +246,7 @@ class DragHandler {
 
     targetDocument.addEventListener('pointermove', this.elementDragMove, true);
     targetDocument.addEventListener('pointerup', this.elementDragEnd, true);
-    DragHandler.rootForMouseOut &&
-        DragHandler.rootForMouseOut.addEventListener('pointerout', this.mouseOutWhileDragging, {capture: true});
+    DragHandler.rootForMouseOut?.addEventListener('pointerout', this.mouseOutWhileDragging, {capture: true});
     if (this.dragEventsTargetDocumentTop && targetDocument !== this.dragEventsTargetDocumentTop) {
       this.dragEventsTargetDocumentTop.addEventListener('pointerup', this.elementDragEnd, true);
     }
@@ -292,7 +298,7 @@ class DragHandler {
       this.elementDragEnd(event);
       return;
     }
-    if (this.elementDraggingEventListener && this.elementDraggingEventListener(event)) {
+    if (this.elementDraggingEventListener?.(event)) {
       this.cancelDragEvents(event);
     }
   }
@@ -468,7 +474,8 @@ function modifiedHexValue(hexString: string, event: Event): string|null {
   return resultString;
 }
 
-export function modifiedFloatNumber(number: number, event: Event, modifierMultiplier?: number): number|null {
+export function modifiedFloatNumber(
+    number: number, event: Event, modifierMultiplier?: number, range?: {min?: number, max?: number}): number|null {
   const direction = getValueModificationDirection(event);
   if (!direction) {
     return null;
@@ -499,7 +506,13 @@ export function modifiedFloatNumber(number: number, event: Event, modifierMultip
 
   // Make the new number and constrain it to a precision of 6, this matches numbers the engine returns.
   // Use the Number constructor to forget the fixed precision, so 1.100000 will print as 1.1.
-  const result = Number((number + delta).toFixed(6));
+  let result = Number((number + delta).toFixed(6));
+  if (range?.min !== undefined) {
+    result = Math.max(result, range.min);
+  }
+  if (range?.max !== undefined) {
+    result = Math.min(result, range.max);
+  }
   if (!String(result).match(numberRegex)) {
     return null;
   }
@@ -508,7 +521,8 @@ export function modifiedFloatNumber(number: number, event: Event, modifierMultip
 
 export function createReplacementString(
     wordString: string, event: Event,
-    customNumberHandler?: ((arg0: string, arg1: number, arg2: string) => string)): string|null {
+    customNumberHandler?: ((prefix: string, number: number, suffix: string) => string),
+    stepping?: {step?: number, range?: {min?: number, max?: number}}): string|null {
   let prefix;
   let suffix;
   let number;
@@ -526,7 +540,7 @@ export function createReplacementString(
     if (matches?.length) {
       prefix = matches[1];
       suffix = matches[3];
-      number = modifiedFloatNumber(parseFloat(matches[2]), event);
+      number = modifiedFloatNumber(parseFloat(matches[2]), event, stepping?.step, stepping?.range);
       if (number !== null) {
         replacementString =
             customNumberHandler ? customNumberHandler(prefix, number, suffix) : prefix + number + suffix;
@@ -843,7 +857,7 @@ export function highlightRangesWithStyleClass(
   return highlightNodes;
 }
 
-// Used in chromium/src/third_party/blink/web_tests/http/tests/devtools/components/utilities-highlight-results.js
+/** Used in chromium/src/third_party/blink/web_tests/http/tests/devtools/components/utilities-highlight-results.js **/
 export function applyDomChanges(domChanges: HighlightChange[]): void {
   for (let i = 0, size = domChanges.length; i < size; ++i) {
     const entry = domChanges[i];
@@ -872,7 +886,7 @@ export function revertDomChanges(domChanges: HighlightChange[]): void {
   }
 }
 
-export function measurePreferredSize(element: Element, containerElement?: Element|null): Size {
+export function measurePreferredSize(element: Element, containerElement?: Element|null): Geometry.Size {
   const oldParent = element.parentElement;
   const oldNextSibling = element.nextSibling;
   containerElement = containerElement || element.ownerDocument.body;
@@ -886,7 +900,7 @@ export function measurePreferredSize(element: Element, containerElement?: Elemen
   } else {
     element.remove();
   }
-  return new Size(result.width, result.height);
+  return new Geometry.Size(result.width, result.height);
 }
 
 class InvokeOnceHandlers {
@@ -948,13 +962,6 @@ export function endBatchUpdate(): void {
     postUpdateHandlers.scheduleInvoke();
     postUpdateHandlers = null;
   }
-}
-
-export function invokeOnceAfterBatchUpdate(object: Object, method: () => void): void {
-  if (!postUpdateHandlers) {
-    postUpdateHandlers = new InvokeOnceHandlers(true);
-  }
-  postUpdateHandlers.add(object, method);
 }
 
 export function animateFunction(
@@ -1668,8 +1675,8 @@ export function loadImage(url: string): Promise<HTMLImageElement|null> {
 
 /**
  * Creates a file selector element.
- * @param callback - the function that will be called with the file the user selected
- * @param accept - optionally used to set the [`accept`](https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/accept) parameter to limit file-types the user can pick.
+ * @param callback the function that will be called with the file the user selected
+ * @param accept optionally used to set the [`accept`](https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/accept) parameter to limit file-types the user can pick.
  */
 export function createFileSelectorElement(callback: (arg0: File) => void, accept?: string): HTMLInputElement {
   const fileSelectorElement = document.createElement('input');
@@ -1759,16 +1766,15 @@ export function createInlineButton(toolbarButton: ToolbarButton): Element {
   return element;
 }
 
-export abstract class Renderer {
-  abstract render(object: Object, options?: Options): Promise<{
-    node: Node,
-    tree: TreeOutline|null,
-  }|null>;
+export interface RenderedObject {
+  element: HTMLElement;
+  forceSelect(): void;
+}
 
-  static async render(object: Object, options?: Options): Promise<{
-    node: Node,
-    tree: TreeOutline|null,
-  }|null> {
+export abstract class Renderer {
+  abstract render(object: Object, options?: Options): Promise<RenderedObject|null>;
+
+  static async render(object: Object, options?: Options): Promise<RenderedObject|null> {
     if (!object) {
       throw new Error('Can\'t render ' + object);
     }
@@ -1797,6 +1803,10 @@ export function formatTimestamp(timestamp: number, full: boolean): string {
 export interface Options {
   title?: string|Element;
   editable?: boolean;
+  /**
+   * Should the resulting object be expanded.
+   */
+  expand?: boolean;
 }
 
 export interface HighlightChange {
@@ -1924,27 +1934,11 @@ function updateWidgetfocusWidgetForNode(node: Node|null): void {
   }
 }
 
-function updateXWidgetfocusWidgetForNode(node: Node|null): void {
-  node = node?.parentNodeOrShadowHost() ?? null;
-  const XWidgetConstructor = customElements.get('x-widget') as Platform.Constructor.Constructor<XWidget>| undefined;
-  let widget = null;
-  while (node) {
-    if (XWidgetConstructor && node instanceof XWidgetConstructor) {
-      if (widget) {
-        node.defaultFocusedElement = widget;
-      }
-      widget = node;
-    }
-    node = node.parentNodeOrShadowHost();
-  }
-}
-
 function focusChanged(event: Event): void {
   const target = event.target as HTMLElement;
   const document = target ? target.ownerDocument : null;
   const element = document ? Platform.DOMUtilities.deepActiveElement(document) : null;
   updateWidgetfocusWidgetForNode(element);
-  updateXWidgetfocusWidgetForNode(element);
 }
 
 /**
@@ -2031,4 +2025,325 @@ export function openInNewTab(url: URL|string): void {
     }
   }
   Host.InspectorFrontendHost.InspectorFrontendHostInstance.openInNewTab(Platform.DevToolsPath.urlString`${url}`);
+}
+
+export interface PromotionDisplayState {
+  displayCount: number;
+  firstRegistered: number;
+  featureInteractionCount: number;
+}
+
+const MAX_DISPLAY_COUNT = 10;
+// 60 days in ms
+const MAX_DURATION = 60 * 24 * 60 * 60 * 1000;
+const MAX_INTERACTION_COUNT = 2;
+
+export class PromotionManager {
+  static #instance?: PromotionManager;
+
+  static instance(): PromotionManager {
+    if (!PromotionManager.#instance) {
+      PromotionManager.#instance = new PromotionManager();
+    }
+    return PromotionManager.#instance;
+  }
+
+  private getPromotionDisplayState(id: string): PromotionDisplayState|null {
+    const displayStateString = localStorage.getItem(id);
+    return displayStateString ? JSON.parse(displayStateString) : null;
+  }
+
+  private setPromotionDisplayState(id: string, promotionDisplayState: PromotionDisplayState): void {
+    localStorage.setItem(id, JSON.stringify(promotionDisplayState));
+  }
+
+  private registerPromotion(id: string): void {
+    this.setPromotionDisplayState(id, {
+      displayCount: 0,
+      firstRegistered: Date.now(),
+      featureInteractionCount: 0,
+    });
+  }
+
+  private recordPromotionShown(id: string): void {
+    const displayState = this.getPromotionDisplayState(id);
+    if (!displayState) {
+      throw new Error(`Cannot record promotion shown for unregistered promotion ${id}`);
+    }
+    this.setPromotionDisplayState(id, {
+      ...displayState,
+      displayCount: displayState.displayCount + 1,
+    });
+  }
+
+  canShowPromotion(id: string): boolean {
+    const displayState = this.getPromotionDisplayState(id);
+    if (!displayState) {
+      this.registerPromotion(id);
+      return true;
+    }
+    return displayState.displayCount < MAX_DISPLAY_COUNT && Date.now() - displayState.firstRegistered < MAX_DURATION &&
+        displayState.featureInteractionCount < MAX_INTERACTION_COUNT;
+  }
+
+  recordFeatureInteraction(id: string): void {
+    const displayState = this.getPromotionDisplayState(id);
+    if (!displayState) {
+      throw new Error(`Cannot record feature interaction for unregistered promotion ${id}`);
+    }
+    this.setPromotionDisplayState(id, {
+      ...displayState,
+      featureInteractionCount: displayState.featureInteractionCount + 1,
+    });
+  }
+
+  maybeShowPromotion(id: string): boolean {
+    if (this.canShowPromotion(id)) {
+      this.recordPromotionShown(id);
+      return true;
+    }
+    return false;
+  }
+}
+
+/**
+ * Creates a `<div>` element with the localized text NEW.
+ *
+ * The element is automatically styled correctly, as long as the core styles (in particular
+ * `inspectorCommon.css` is injected into the current document / shadow root). The lit
+ * equivalent of calling this method is:
+ *
+ * ```js
+ * const jslog = VisualLogging.badge('new-badge');
+ * html`<div class='new-badge' jsog=${jslog}>i18nString(UIStrings.new)</div>`
+ *
+ * @returns the newly created `HTMLDivElement` for the new badge.
+ */
+export function maybeCreateNewBadge(promotionId: string): HTMLDivElement|undefined {
+  const promotionManager = PromotionManager.instance();
+  if (promotionManager.maybeShowPromotion(promotionId)) {
+    const badge = document.createElement('div');
+    badge.className = 'new-badge';
+    badge.textContent = i18nString(UIStrings.new);
+    badge.setAttribute('jslog', `${VisualLogging.badge('new-badge')}`);
+    return badge;
+  }
+  return undefined;
+}
+
+export function bindToAction(actionName: string): ReturnType<typeof Directives.ref> {
+  const action = ActionRegistry.instance().getAction(actionName);
+
+  let setEnabled: (enabled: boolean) => void;
+  let toggled: () => void;
+  function actionEnabledChanged(event: Common.EventTarget.EventTargetEvent<boolean>): void {
+    setEnabled(event.data);
+  }
+
+  return Directives.ref((e: Element|undefined) => {
+    if (!e || !(e instanceof Buttons.Button.Button)) {
+      action.removeEventListener(ActionRegistration.Events.ENABLED, actionEnabledChanged);
+      action.removeEventListener(ActionRegistration.Events.TOGGLED, toggled);
+      return;
+    }
+
+    setEnabled = enabled => {
+      e.disabled = !enabled;
+    };
+
+    action.addEventListener(ActionRegistration.Events.ENABLED, actionEnabledChanged);
+
+    const toggleable = action.toggleable();
+    if (toggleable) {
+      toggled = () => {
+        e.toggled = action.toggled();
+        if (action.title()) {
+          e.title = action.title();
+          Tooltip.installWithActionBinding(e, action.title(), action.id());
+        }
+      };
+      action.addEventListener(ActionRegistration.Events.TOGGLED, toggled);
+    }
+    const title = action.title();
+    const iconName = action.icon() ?? '';
+    const jslogContext = action.id();
+    const toggledIconName = action.toggledIcon() ?? iconName;
+    const toggleType = action.toggleWithRedColor() ? Buttons.Button.ToggleType.RED : Buttons.Button.ToggleType.PRIMARY;
+    if (toggleable) {
+      e.data = {
+        jslogContext,
+        title,
+        variant: Buttons.Button.Variant.ICON_TOGGLE,
+        iconName,
+        toggledIconName,
+        toggleType,
+        toggled: action.toggled(),
+      };
+      toggled();
+    } else if (iconName) {
+      e.data = {iconName, jslogContext, title, variant: Buttons.Button.Variant.ICON};
+    } else {
+      e.data = {jslogContext, title, variant: Buttons.Button.Variant.TEXT};
+    }
+    setEnabled(action.enabled());
+    e.onclick = () => action.execute();
+  });
+}
+
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+type BindingEventListener = (arg: any) => any;
+export class InterceptBindingDirective extends Lit.Directive.Directive {
+  static readonly #interceptedBindings = new WeakMap<Element, Map<string, BindingEventListener>>();
+
+  override update(part: Lit.Directive.Part, [listener]: [BindingEventListener]): unknown {
+    if (part.type !== Lit.Directive.PartType.EVENT) {
+      return listener;
+    }
+    let eventListeners = InterceptBindingDirective.#interceptedBindings.get(part.element);
+    if (!eventListeners) {
+      eventListeners = new Map();
+      InterceptBindingDirective.#interceptedBindings.set(part.element, eventListeners);
+    }
+    eventListeners.set(part.name, listener);
+
+    return this.render(listener);
+  }
+
+  /* eslint-disable-next-line @typescript-eslint/no-unsafe-function-type */
+  render(_listener: Function): undefined {
+    return undefined;
+  }
+
+  static attachEventListeners(templateElement: Element, renderedElement: Element): void {
+    const eventListeners = InterceptBindingDirective.#interceptedBindings.get(templateElement);
+    if (!eventListeners) {
+      return;
+    }
+    for (const [name, listener] of eventListeners) {
+      renderedElement.addEventListener(name, listener);
+    }
+  }
+}
+
+export const cloneCustomElement = <T extends HTMLElement>(element: T, deep?: boolean): T => {
+  const clone = document.createElement(element.localName) as T;
+  for (const attribute of element.attributes) {
+    clone.setAttribute(attribute.name, attribute.value);
+  }
+  if (deep) {
+    for (const child of element.childNodes) {
+      clone.appendChild(child.cloneNode(deep));
+    }
+  }
+  return clone;
+};
+
+export class HTMLElementWithLightDOMTemplate extends HTMLElement {
+  readonly #mutationObserver = new MutationObserver(this.#onChange.bind(this));
+  #contentTemplate: HTMLTemplateElement|null = null;
+
+  constructor() {
+    super();
+    this.#mutationObserver.observe(this, {childList: true, attributes: true, subtree: true, characterData: true});
+  }
+
+  static cloneNode(node: Node): Node {
+    const clone = node.cloneNode(false);
+    for (const child of node.childNodes) {
+      clone.appendChild(HTMLElementWithLightDOMTemplate.cloneNode(child));
+    }
+    if (node instanceof Element && clone instanceof Element) {
+      InterceptBindingDirective.attachEventListeners(node, clone);
+    }
+    return clone;
+  }
+
+  private static patchLitTemplate(template: Lit.LitTemplate): void {
+    const wrapper = Lit.Directive.directive(InterceptBindingDirective);
+    if (template === Lit.nothing) {
+      return;
+    }
+    template.values = template.values.map(patchValue);
+
+    function isLitTemplate(value: unknown): value is Lit.TemplateResult<1> {
+      return Boolean(
+          typeof value === 'object' && value && '_$litType$' in value && 'strings' in value && 'values' in value &&
+          value['_$litType$'] === 1);
+    }
+
+    function patchValue(value: unknown): unknown {
+      if (typeof value === 'function') {
+        try {
+          return wrapper(value);
+        } catch {
+          return value;
+        }
+      }
+      if (isLitTemplate(value)) {
+        HTMLElementWithLightDOMTemplate.patchLitTemplate(value);
+        return value;
+      }
+      if (Array.isArray(value)) {
+        return value.map(patchValue);
+      }
+
+      return value;
+    }
+  }
+
+  get templateRoot(): DocumentFragment|HTMLElement {
+    return this.#contentTemplate?.content ?? this;
+  }
+
+  set template(template: Lit.LitTemplate) {
+    if (!this.#contentTemplate) {
+      this.removeChildren();
+      this.#contentTemplate = this.createChild('template');
+      this.#mutationObserver.disconnect();
+      this.#mutationObserver.observe(
+          this.#contentTemplate.content, {childList: true, attributes: true, subtree: true, characterData: true});
+    }
+    HTMLElementWithLightDOMTemplate.patchLitTemplate(template);
+    // eslint-disable-next-line rulesdir/no-lit-render-outside-of-view
+    render(template, this.#contentTemplate.content);
+  }
+
+  #onChange(mutationList: MutationRecord[]): void {
+    this.onChange(mutationList);
+    for (const mutation of mutationList) {
+      this.removeNodes(mutation.removedNodes);
+      this.addNodes(mutation.addedNodes, mutation.nextSibling);
+      this.updateNode(mutation.target, mutation.attributeName);
+    }
+  }
+
+  protected onChange(_mutationList: MutationRecord[]): void {
+  }
+
+  protected updateNode(_node: Node, _attributeName: string|null): void {
+  }
+
+  protected addNodes(_nodes: NodeList|Node[], _nextSibling?: Node|null): void {
+  }
+
+  protected removeNodes(_nodes: NodeList): void {
+  }
+
+  static findCorrespondingElement(
+      sourceElement: HTMLElement, sourceRootElement: HTMLElement, targetRootElement: Element): Element|null {
+    let currentElement = sourceElement;
+    const childIndexesOnPathToRoot: number[] = [];
+    while (currentElement?.parentElement && currentElement !== sourceRootElement) {
+      childIndexesOnPathToRoot.push([...currentElement.parentElement.children].indexOf(currentElement));
+      currentElement = currentElement.parentElement;
+    }
+    if (!currentElement) {
+      return null;
+    }
+    let targetElement = targetRootElement;
+    for (const index of childIndexesOnPathToRoot.reverse()) {
+      targetElement = targetElement.children[index];
+    }
+    return targetElement;
+  }
 }

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -74,56 +74,56 @@ import {WebCustomData} from './WebCustomData.js';
 
 const UIStrings = {
   /**
-   *@description No matches element text content in Styles Sidebar Pane of the Elements panel
+   * @description No matches element text content in Styles Sidebar Pane of the Elements panel
    */
   noMatchingSelectorOrStyle: 'No matching selector or style',
   /**
-  /**
-   *@description Text to announce the result of the filter input in the Styles Sidebar Pane of the Elements panel
+   * /**
+   * @description Text to announce the result of the filter input in the Styles Sidebar Pane of the Elements panel
    */
   visibleSelectors: '{n, plural, =1 {# visible selector listed below} other {# visible selectors listed below}}',
   /**
-   *@description Separator element text content in Styles Sidebar Pane of the Elements panel
-   *@example {scrollbar-corner} PH1
+   * @description Separator element text content in Styles Sidebar Pane of the Elements panel
+   * @example {scrollbar-corner} PH1
    */
   pseudoSElement: 'Pseudo ::{PH1} element',
   /**
-   *@description Text of a DOM element in Styles Sidebar Pane of the Elements panel
+   * @description Text of a DOM element in Styles Sidebar Pane of the Elements panel
    */
   inheritedFroms: 'Inherited from ',
   /**
-   *@description Text of an inherited psuedo element in Styles Sidebar Pane of the Elements panel
-   *@example {highlight} PH1
+   * @description Text of an inherited pseudo element in Styles Sidebar Pane of the Elements panel
+   * @example {highlight} PH1
    */
   inheritedFromSPseudoOf: 'Inherited from ::{PH1} pseudo of ',
   /**
-   *@description Title of  in styles sidebar pane of the elements panel
-   *@example {Ctrl} PH1
-   *@example {Alt} PH2
+   * @description Title of  in styles sidebar pane of the elements panel
+   * @example {Ctrl} PH1
+   * @example {Alt} PH2
    */
   incrementdecrementWithMousewheelOne:
       'Increment/decrement with mousewheel or up/down keys. {PH1}: R ±1, Shift: G ±1, {PH2}: B ±1',
   /**
-   *@description Title of  in styles sidebar pane of the elements panel
-   *@example {Ctrl} PH1
-   *@example {Alt} PH2
+   * @description Title of  in styles sidebar pane of the elements panel
+   * @example {Ctrl} PH1
+   * @example {Alt} PH2
    */
   incrementdecrementWithMousewheelHundred:
       'Increment/decrement with mousewheel or up/down keys. {PH1}: ±100, Shift: ±10, {PH2}: ±0.1',
   /**
-   *@description Tooltip text that appears when hovering over the rendering button in the Styles Sidebar Pane of the Elements panel
+   * @description Tooltip text that appears when hovering over the rendering button in the Styles Sidebar Pane of the Elements panel
    */
   toggleRenderingEmulations: 'Toggle common rendering emulations',
   /**
-   *@description Rendering emulation option for toggling the automatic dark mode
+   * @description Rendering emulation option for toggling the automatic dark mode
    */
   automaticDarkMode: 'Automatic dark mode',
   /**
-   *@description Text displayed on layer separators in the styles sidebar pane.
+   * @description Text displayed on layer separators in the styles sidebar pane.
    */
   layer: 'Layer',
   /**
-   *@description Tooltip text for the link in the sidebar pane layer separators that reveals the layer in the layer tree view.
+   * @description Tooltip text for the link in the sidebar pane layer separators that reveals the layer in the layer tree view.
    */
   clickToRevealLayer: 'Click to reveal layer in layer tree',
 } as const;
@@ -135,9 +135,9 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const FILTER_IDLE_PERIOD = 500;
 // Minimum number of @property rules for the @property section block to be folded initially
 const MIN_FOLDED_SECTIONS_COUNT = 5;
-// Title of the registered properties section
+/** Title of the registered properties section **/
 export const REGISTERED_PROPERTY_SECTION_NAME = '@property';
-// Title of the function section
+/** Title of the function section **/
 export const FUNCTION_SECTION_NAME = '@function';
 
 // Highlightable properties are those that can be hovered in the sidebar to trigger a specific
@@ -170,9 +170,9 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
   private lastFilterChange: number|null = null;
   private visibleSections: number|null = null;
   private noMatchesElement: HTMLElement;
-  private sectionsContainer: HTMLElement;
+  private sectionsContainer: UI.Widget.Widget;
   sectionByElement = new WeakMap<Node, StylePropertiesSection>();
-  private readonly swatchPopoverHelperInternal = new InlineEditor.SwatchPopoverHelper.SwatchPopoverHelper();
+  readonly #swatchPopoverHelper = new InlineEditor.SwatchPopoverHelper.SwatchPopoverHelper();
   readonly linkifier = new Components.Linkifier.Linkifier(MAX_LINK_LENGTH, /* useLinkDecorator */ true);
 
   private readonly decorator: StylePropertyHighlighter;
@@ -180,7 +180,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
   private lastRevealedProperty: SDK.CSSProperty.CSSProperty|null = null;
   private userOperation = false;
   isEditingStyle = false;
-  private filterRegexInternal: RegExp|null = null;
+  #filterRegex: RegExp|null = null;
   private isActivePropertyHighlighted = false;
   private initialUpdateCompleted = false;
   hasMatchedStyles = false;
@@ -209,13 +209,16 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
     this.toolbarPaneElement = this.createStylesSidebarToolbar();
     this.noMatchesElement = this.contentElement.createChild('div', 'gray-info-message hidden');
     this.noMatchesElement.textContent = i18nString(UIStrings.noMatchingSelectorOrStyle);
-    this.sectionsContainer = this.contentElement.createChild('div');
-    UI.ARIAUtils.markAsList(this.sectionsContainer);
-    this.sectionsContainer.addEventListener('keydown', this.sectionsContainerKeyDown.bind(this), false);
-    this.sectionsContainer.addEventListener('focusin', this.sectionsContainerFocusChanged.bind(this), false);
-    this.sectionsContainer.addEventListener('focusout', this.sectionsContainerFocusChanged.bind(this), false);
+    this.sectionsContainer = new UI.Widget.VBox();
+    this.sectionsContainer.show(this.contentElement);
+    UI.ARIAUtils.markAsList(this.sectionsContainer.contentElement);
+    this.sectionsContainer.contentElement.addEventListener('keydown', this.sectionsContainerKeyDown.bind(this), false);
+    this.sectionsContainer.contentElement.addEventListener(
+        'focusin', this.sectionsContainerFocusChanged.bind(this), false);
+    this.sectionsContainer.contentElement.addEventListener(
+        'focusout', this.sectionsContainerFocusChanged.bind(this), false);
 
-    this.swatchPopoverHelperInternal.addEventListener(
+    this.#swatchPopoverHelper.addEventListener(
         InlineEditor.SwatchPopoverHelper.Events.WILL_SHOW_POPOVER, this.hideAllPopovers, this);
     this.decorator = new StylePropertyHighlighter(this);
     this.contentElement.classList.add('styles-pane');
@@ -247,7 +250,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
   }
 
   swatchPopoverHelper(): InlineEditor.SwatchPopoverHelper.SwatchPopoverHelper {
-    return this.swatchPopoverHelperInternal;
+    return this.#swatchPopoverHelper;
   }
 
   setUserOperation(userOperation: boolean): void {
@@ -353,14 +356,14 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
 
   forceUpdate(): void {
     this.needsForceUpdate = true;
-    this.swatchPopoverHelperInternal.hide();
+    this.#swatchPopoverHelper.hide();
     this.#updateAbortController?.abort();
     this.resetCache();
     this.update();
   }
 
   private sectionsContainerKeyDown(event: Event): void {
-    const activeElement = Platform.DOMUtilities.deepActiveElement(this.sectionsContainer.ownerDocument);
+    const activeElement = Platform.DOMUtilities.deepActiveElement(this.sectionsContainer.contentElement.ownerDocument);
     if (!activeElement) {
       return;
     }
@@ -395,7 +398,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
       }
     }
 
-    if (sectionToFocus && this.filterRegexInternal) {
+    if (sectionToFocus && this.#filterRegex) {
       sectionToFocus = sectionToFocus.findCurrentOrNextVisible(/* willIterateForward= */ willIterateForward);
     }
     if (sectionToFocus) {
@@ -473,14 +476,14 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
   private onFilterChanged(event: Common.EventTarget.EventTargetEvent<string>): void {
     const regex = event.data ? new RegExp(Platform.StringUtilities.escapeForRegExp(event.data), 'i') : null;
     this.lastFilterChange = Date.now();
-    this.filterRegexInternal = regex;
+    this.#filterRegex = regex;
     this.updateFilter();
     this.resetFocus();
     setTimeout(() => {
       if (this.lastFilterChange) {
         const stillTyping = Date.now() - this.lastFilterChange < FILTER_IDLE_PERIOD;
         if (!stillTyping) {
-          UI.ARIAUtils.alert(
+          UI.ARIAUtils.LiveAnnouncer.alert(
               this.visibleSections ? i18nString(UIStrings.visibleSelectors, {n: this.visibleSections}) :
                                      i18nString(UIStrings.noMatchingSelectorOrStyle));
         }
@@ -513,7 +516,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
       section.update(section === editedSection);
     }
 
-    if (this.filterRegexInternal) {
+    if (this.#filterRegex) {
       this.updateFilter();
     }
     this.swatchPopoverHelper().reposition();
@@ -547,7 +550,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
         }
         if (!this.initialUpdateCompleted) {
           // the spinner will get automatically removed when innerRebuildUpdate is called
-          this.sectionsContainer.createChild('span', 'spinner');
+          this.sectionsContainer.contentElement.createChild('span', 'spinner');
         }
       }, 200 /* only spin for loading time > 200ms to avoid unpleasant render flashes */);
     }
@@ -620,10 +623,10 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
   }
 
   override onResize(): void {
-    void this.resizeThrottler.schedule(this.innerResize.bind(this));
+    void this.resizeThrottler.schedule(this.#resize.bind(this));
   }
 
-  private innerResize(): Promise<void> {
+  #resize(): Promise<void> {
     const width = this.contentElement.getBoundingClientRect().width + 'px';
     this.allSections().forEach(section => {
       section.propertiesTreeOutline.element.style.width = width;
@@ -919,7 +922,8 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
     const node = this.node();
     this.hasMatchedStyles = matchedStyles !== null && node !== null;
     if (!this.hasMatchedStyles) {
-      this.sectionsContainer.removeChildren();
+      this.sectionsContainer.contentElement.removeChildren();
+      this.sectionsContainer.detachChildWidgets();
       this.noMatchesElement.classList.remove('hidden');
       return;
     }
@@ -948,7 +952,8 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
       }
     }
 
-    this.sectionsContainer.removeChildren();
+    this.sectionsContainer.contentElement.removeChildren();
+    this.sectionsContainer.detachChildWidgets();
     const fragment = document.createDocumentFragment();
 
     let index = 0;
@@ -967,7 +972,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
       }
     }
 
-    this.sectionsContainer.appendChild(fragment);
+    this.sectionsContainer.contentElement.appendChild(fragment);
 
     if (elementToFocus) {
       elementToFocus.focus();
@@ -979,7 +984,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
 
     this.sectionsContainerFocusChanged();
 
-    if (this.filterRegexInternal) {
+    if (this.#filterRegex) {
       this.updateFilter();
     } else {
       this.noMatchesElement.classList.toggle('hidden', this.sectionBlocks.length > 0);
@@ -1231,24 +1236,24 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
       return;
     }
 
-    const text = (await styleSheetHeader.requestContent()).content || '';
-    const lines = text.split('\n');
+    const contentDataOrError = await styleSheetHeader.requestContentData();
+    const lines = TextUtils.ContentData.ContentData.textOr(contentDataOrError, '').split('\n');
     const range = TextUtils.TextRange.TextRange.createFromLocation(lines.length - 1, lines[lines.length - 1].length);
 
     if (this.sectionBlocks && this.sectionBlocks.length > 0) {
-      this.addBlankSection(this.sectionBlocks[0].sections[0], styleSheetHeader.id, range);
+      this.addBlankSection(this.sectionBlocks[0].sections[0], styleSheetHeader, range);
     }
   }
 
   addBlankSection(
-      insertAfterSection: StylePropertiesSection, styleSheetId: Protocol.CSS.StyleSheetId,
+      insertAfterSection: StylePropertiesSection, styleSheetHeader: SDK.CSSStyleSheetHeader.CSSStyleSheetHeader,
       ruleLocation: TextUtils.TextRange.TextRange): void {
     const node = this.node();
     const blankSection = new BlankStylePropertiesSection(
-        this, insertAfterSection.matchedStyles, node ? node.simpleSelector() : '', styleSheetId, ruleLocation,
+        this, insertAfterSection.matchedStyles, node ? node.simpleSelector() : '', styleSheetHeader, ruleLocation,
         insertAfterSection.style(), 0);
 
-    this.sectionsContainer.insertBefore(blankSection.element, insertAfterSection.element.nextSibling);
+    this.sectionsContainer.contentElement.insertBefore(blankSection.element, insertAfterSection.element.nextSibling);
 
     for (const block of this.sectionBlocks) {
       const index = block.sections.indexOf(insertAfterSection);
@@ -1279,7 +1284,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
   }
 
   filterRegex(): RegExp|null {
-    return this.filterRegexInternal;
+    return this.#filterRegex;
   }
 
   private updateFilter(): void {
@@ -1306,7 +1311,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
   }
 
   hideAllPopovers(): void {
-    this.swatchPopoverHelperInternal.hide();
+    this.#swatchPopoverHelper.hide();
     this.imagePreviewPopover.hide();
     if (this.activeCSSAngle) {
       this.activeCSSAngle.minify();
@@ -1487,12 +1492,12 @@ export interface EventTypes {
 const MAX_LINK_LENGTH = 23;
 
 export class SectionBlock {
-  private readonly titleElementInternal: Element|null;
+  readonly #titleElement: Element|null;
   sections: StylePropertiesSection[];
   #expanded = false;
   #icon: IconButton.Icon.Icon|undefined;
   constructor(titleElement: Element|null, expandable?: boolean, expandedByDefault?: boolean) {
-    this.titleElementInternal = titleElement;
+    this.#titleElement = titleElement;
     this.sections = [];
     this.#expanded = expandedByDefault ?? false;
 
@@ -1509,12 +1514,12 @@ export class SectionBlock {
   }
 
   expand(expand: boolean): void {
-    if (!this.titleElementInternal || !this.#icon) {
+    if (!this.#titleElement || !this.#icon) {
       return;
     }
-    this.titleElementInternal.classList.toggle('empty-section', !expand);
+    this.#titleElement.classList.toggle('empty-section', !expand);
     this.#icon.name = expand ? 'triangle-down' : 'triangle-right';
-    UI.ARIAUtils.setExpanded(this.titleElementInternal, expand);
+    UI.ARIAUtils.setExpanded(this.#titleElement, expand);
     this.#expanded = expand;
     this.sections.forEach(section => section.element.classList.toggle('hidden', !expand));
   }
@@ -1626,14 +1631,14 @@ export class SectionBlock {
       numVisibleSections += section.updateFilter() ? 1 : 0;
       hasAnyVisibleSection = section.updateFilter() || hasAnyVisibleSection;
     }
-    if (this.titleElementInternal) {
-      this.titleElementInternal.classList.toggle('hidden', !hasAnyVisibleSection);
+    if (this.#titleElement) {
+      this.#titleElement.classList.toggle('hidden', !hasAnyVisibleSection);
     }
     return numVisibleSections;
   }
 
   titleElement(): Element|null {
-    return this.titleElementInternal;
+    return this.#titleElement;
   }
 }
 
@@ -1950,17 +1955,11 @@ export class CSSPropertyPrompt extends UI.TextPrompt.TextPrompt {
         continue;
       }
       const icon = new IconButton.Icon.Icon();
-      const width = '12.5px';
-      const height = '12.5px';
-      icon.data = {
-        iconName: iconInfo.iconName,
-        width,
-        height,
-        color: 'var(--icon-default)',
-      };
+      icon.name = iconInfo.iconName;
+      icon.classList.add('extra-small');
       icon.style.transform = `rotate(${iconInfo.rotate}deg) scale(${iconInfo.scaleX * 1.1}, ${iconInfo.scaleY * 1.1})`;
-      icon.style.maxHeight = height;
-      icon.style.maxWidth = width;
+      icon.style.maxHeight = 'var(--sys-size-6)';
+      icon.style.maxWidth = 'var(--sys-size-6)';
       result.iconElement = icon;
     }
 

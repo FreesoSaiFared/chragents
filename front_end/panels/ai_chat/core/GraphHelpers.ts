@@ -3,10 +3,11 @@
 // found in the LICENSE file.
 
 import type { getTools } from '../tools/Tools.js';
-import { ChatMessageEntity, type ChatMessage } from '../ui/ChatView.js';
+import { ChatMessageEntity, type ChatMessage } from '../models/ChatTypes.js';
 
 import * as BaseOrchestratorAgent from './BaseOrchestratorAgent.js';
 import { createLogger } from './Logger.js';
+import { LLMConfigurationManager } from './LLMConfigurationManager.js';
 import { enhancePromptWithPageContext } from './PageInfoManager.js';
 import type { AgentState } from './State.js';
 import { NodeType } from './Types.js';
@@ -31,13 +32,20 @@ export function createSystemPrompt(state: AgentState): string {
 export async function createSystemPromptAsync(state: AgentState): Promise<string> {
   const { selectedAgentType } = state;
 
-  // Get base prompt
-  const basePrompt = selectedAgentType ?
-    BaseOrchestratorAgent.getSystemPrompt(selectedAgentType) :
-    BaseOrchestratorAgent.getSystemPrompt('default');
+  // Check if there's a system prompt override from conversation state
+  const configManager = LLMConfigurationManager.getInstance();
+  const config = configManager.getConfiguration();
+
+  // Use override system prompt if available, otherwise use agent type prompt
+  const basePrompt = config.systemPrompt ||
+    (selectedAgentType ?
+      BaseOrchestratorAgent.getSystemPrompt(selectedAgentType) :
+      BaseOrchestratorAgent.getSystemPrompt('default'));
 
   // Use the enhancePromptWithPageContext function to add page info
-  return await enhancePromptWithPageContext(basePrompt);
+  const enhancedPrompt = await enhancePromptWithPageContext(basePrompt);
+
+  return enhancedPrompt;
 }
 
 // Create the appropriate tools for the agent based on agent type

@@ -27,7 +27,7 @@ function createSchemaTest(
 ): TestCase<any> {
   return {
     ...baseConfig,
-    tool: useStreamlined ? 'extract_schema_streamlined' : 'extract_schema_data'
+    tool: useStreamlined ? 'extract_schema_streamlined' : 'extract_data'
   };
 }
 
@@ -88,7 +88,7 @@ const wikipediaTestBase = {
         'Infobox contains key technical details',
         'External links are properly resolved URLs'
       ],
-      model: 'gpt-4.1-mini'
+      
     }
   },
   metadata: {
@@ -122,7 +122,7 @@ export const ecommerceTest: TestCase<SchemaExtractionArgs> = {
   name: 'Extract Amazon Product Details',
   description: 'Extract product information from an Amazon product page',
   url: 'https://www.amazon.com/Obelisk-Climbing-Rustproof-Trellises-Clematis/dp/B0B4SBY6QD/',
-  tool: 'extract_schema_data',
+  tool: 'extract_data',
   input: {
     schema: {
       type: 'object',
@@ -175,7 +175,7 @@ export const ecommerceTest: TestCase<SchemaExtractionArgs> = {
         'Key product features are captured',
         'All URLs are properly resolved (not node IDs)'
       ],
-      model: 'gpt-4.1-mini'
+      
     }
   },
   metadata: {
@@ -194,7 +194,7 @@ export const newsTest: TestCase<SchemaExtractionArgs> = {
   name: 'Extract BBC News Article',
   description: 'Extract article content and metadata from a BBC News page',
   url: 'https://www.bbc.com/news/technology',
-  tool: 'extract_schema_data',
+  tool: 'extract_data',
   input: {
     schema: {
       type: 'object',
@@ -236,7 +236,6 @@ export const newsTest: TestCase<SchemaExtractionArgs> = {
         'Main story is properly identified',
         'All extracted content is in English'
       ],
-      model: 'gpt-4.1-mini',
       includeUrl: true
     }
   },
@@ -256,7 +255,7 @@ export const googleSearchTest: TestCase<SchemaExtractionArgs> = {
   name: 'Extract Google Search Results',
   description: 'Extract search results from Google search page',
   url: 'https://www.google.com/search?q=chrome+devtools+tutorial',
-  tool: 'extract_schema_data',
+  tool: 'extract_data',
   input: {
     schema: {
       type: 'object',
@@ -303,7 +302,7 @@ export const googleSearchTest: TestCase<SchemaExtractionArgs> = {
         'Related searches are extracted if present',
         'Featured snippet is captured when available'
       ],
-      model: 'gpt-4.1-mini'
+      
     }
   },
   metadata: {
@@ -322,7 +321,7 @@ export const bingSearchTest: TestCase<SchemaExtractionArgs> = {
   name: 'Extract Bing Search Results',
   description: 'Extract search results from Bing search page',
   url: 'https://www.bing.com/search?q=web+scraping+best+practices',
-  tool: 'extract_schema_data',
+  tool: 'extract_data',
   input: {
     schema: {
       type: 'object',
@@ -364,7 +363,7 @@ export const bingSearchTest: TestCase<SchemaExtractionArgs> = {
         'Sidebar information is extracted when present',
         'No duplicate results in the list'
       ],
-      model: 'gpt-4.1-mini'
+      
     }
   },
   metadata: {
@@ -383,7 +382,7 @@ export const wikipediaSearchTest: TestCase<SchemaExtractionArgs> = {
   name: 'Extract Wikipedia Search Results',
   description: 'Extract search results from Wikipedia search',
   url: 'https://en.wikipedia.org/w/index.php?search=artificial+intelligence&title=Special:Search',
-  tool: 'extract_schema_data',
+  tool: 'extract_data',
   input: {
     schema: {
       type: 'object',
@@ -430,7 +429,7 @@ export const wikipediaSearchTest: TestCase<SchemaExtractionArgs> = {
         'Snippets contain relevant content highlights',
         'Metadata like word count is extracted when available'
       ],
-      model: 'gpt-4.1-mini'
+      
     }
   },
   metadata: {
@@ -449,7 +448,7 @@ export const homeDepotTest: TestCase<SchemaExtractionArgs> = {
   name: 'Extract Home Depot Product Search',
   description: 'Extract product listings from Home Depot search results',
   url: 'https://www.homedepot.com/s/power%2520drill',
-  tool: 'extract_schema_data',
+  tool: 'extract_data',
   input: {
     schema: {
       type: 'object',
@@ -508,7 +507,7 @@ export const homeDepotTest: TestCase<SchemaExtractionArgs> = {
         'Ratings are on a 5-star scale',
         'Key product features are captured'
       ],
-      model: 'gpt-4.1-mini'
+      
     }
   },
   metadata: {
@@ -527,7 +526,7 @@ export const macysTest: TestCase<SchemaExtractionArgs> = {
   name: 'Extract Macy\'s Product Listings',
   description: 'Extract fashion products from Macy\'s category page',
   url: 'https://www.macys.com/shop/womens-clothing/womens-dresses',
-  tool: 'extract_schema_data',
+  tool: 'extract_data',
   input: {
     schema: {
       type: 'object',
@@ -601,7 +600,7 @@ export const macysTest: TestCase<SchemaExtractionArgs> = {
         'Brand names are accurately extracted',
         'Promotional text is included when present'
       ],
-      model: 'gpt-4.1-mini'
+      
     }
   },
   metadata: {
@@ -620,7 +619,7 @@ export const googleFlightsTest: TestCase<SchemaExtractionArgs> = {
   name: 'Extract Google Flights Search Results',
   description: 'Extract flight options from Google Flights search',
   url: 'https://www.google.com/travel/flights/search?tfs=CBwQAhojEgoyMDI1LTEyLTI0agwIAhIIL20vMGQ5anJyBwgBEgNTRk8aIxIKMjAyNS0xMi0zMWoHCAESA1NGT3IMCAISCC9tLzBkOWpyQAFIAXABggELCP___________wGYAQE',
-  tool: 'extract_schema_data',
+  tool: 'extract_data',
   input: {
     schema: {
       type: 'object',
@@ -689,7 +688,7 @@ export const googleFlightsTest: TestCase<SchemaExtractionArgs> = {
         'Stop information is correctly identified',
         'Duration is in readable format'
       ],
-      model: 'gpt-4.1-mini'
+      
     }
   },
   metadata: {
@@ -708,7 +707,7 @@ export const simpleTest: TestCase<SchemaExtractionArgs> = {
   name: 'Extract GitHub Repository Info',
   description: 'Extract basic repository information from a GitHub page',
   url: 'https://github.com/microsoft/TypeScript',
-  tool: 'extract_schema_data',
+  tool: 'extract_data',
   input: {
     schema: {
       type: 'object',
@@ -747,7 +746,7 @@ export const simpleTest: TestCase<SchemaExtractionArgs> = {
         'Programming language is correctly identified',
         'Topic tags are relevant to the project'
       ],
-      model: 'gpt-4.1-mini'
+      
     }
   },
   metadata: {
@@ -804,7 +803,7 @@ export const simpleStreamlinedTest: TestCase<StreamlinedSchemaExtractionArgs> = 
         'Programming language is correctly identified',
         'Topic tags are relevant to the project'
       ],
-      model: 'gpt-4.1-mini'
+      
     }
   },
   metadata: {

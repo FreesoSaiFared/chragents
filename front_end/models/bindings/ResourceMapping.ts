@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -526,10 +526,6 @@ class Binding implements TextUtils.ContentProvider.ContentProvider {
 
   contentType(): Common.ResourceType.ResourceType {
     return this.firstResource().contentType();
-  }
-
-  requestContent(): Promise<TextUtils.ContentProvider.DeferredContent> {
-    return this.firstResource().requestContent();
   }
 
   requestContentData(): Promise<TextUtils.ContentData.ContentDataOrError> {

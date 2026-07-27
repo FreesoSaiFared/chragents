@@ -1,30 +1,36 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import * as Protocol from '../../generated/protocol.js';
+import type * as CodeMirror from '../../third_party/codemirror.next/codemirror.next.js';
 import * as Platform from '../platform/platform.js';
 
 import {CSSMetadata, cssMetadata, CSSWideKeyword} from './CSSMetadata.js';
 import type {CSSModel} from './CSSModel.js';
 import {CSSProperty} from './CSSProperty.js';
 import * as PropertyParser from './CSSPropertyParser.js';
-import type {Match, Matcher} from './CSSPropertyParser.js';
+import type {Match, Matcher, SyntaxTree} from './CSSPropertyParser.js';
 import {
   AnchorFunctionMatcher,
   AngleMatcher,
+  AttributeMatcher,
   AutoBaseMatcher,
   BaseVariableMatcher,
   BezierMatcher,
   BinOpMatcher,
   ColorMatcher,
   ColorMixMatcher,
+  CustomFunctionMatcher,
+  defaultValueForCSSType,
+  EnvFunctionMatcher,
   FlexGridMatcher,
   GridTemplateMatcher,
   LengthMatcher,
   LightDarkColorMatcher,
   LinearGradientMatcher,
   LinkableNameMatcher,
+  localEvalCSS,
   MathFunctionMatcher,
   PositionAnchorMatcher,
   PositionTryMatcher,
@@ -37,6 +43,7 @@ import {
 import {
   CSSFontPaletteValuesRule,
   CSSFunctionRule,
+  CSSKeyframeRule,
   CSSKeyframesRule,
   CSSPositionTryRule,
   CSSPropertyRule,
@@ -210,6 +217,11 @@ export interface CSSMatchedStylesPayload {
   functionRules: Protocol.CSS.CSSFunctionRule[];
 }
 
+export interface CSSType {
+  type: string;
+  isCSSTokens: boolean;
+}
+
 export class CSSRegisteredProperty {
   #registration: Protocol.CSS.CSSPropertyRegistration|CSSPropertyRule;
   #cssModel: CSSModel;
@@ -276,14 +288,14 @@ export class CSSRegisteredProperty {
 }
 
 export class CSSMatchedStyles {
-  #cssModelInternal: CSSModel;
-  #nodeInternal: DOMNode;
+  #cssModel: CSSModel;
+  #node: DOMNode;
   #addedStyles = new Map<CSSStyleDeclaration, DOMNode>();
   #matchingSelectors = new Map<number, Map<string, boolean>>();
-  #keyframesInternal: CSSKeyframesRule[] = [];
+  #keyframes: CSSKeyframesRule[] = [];
   #registeredProperties: CSSRegisteredProperty[];
   #registeredPropertyMap = new Map<string, CSSRegisteredProperty>();
-  #nodeForStyleInternal = new Map<CSSStyleDeclaration, DOMNode|null>();
+  #nodeForStyle = new Map<CSSStyleDeclaration, DOMNode|null>();
   #inheritedStyles = new Set<CSSStyleDeclaration>();
   #styleToDOMCascade = new Map<CSSStyleDeclaration, DOMInheritanceCascade>();
   #parentLayoutNodeId: Protocol.DOM.NodeId|undefined;
@@ -295,6 +307,7 @@ export class CSSMatchedStyles {
   #functionRules: CSSFunctionRule[];
   #functionRuleMap = new Map<string, CSSFunctionRule>();
   readonly #fontPaletteValuesRule: CSSFontPaletteValuesRule|undefined;
+  #environmentVariables: Record<string, string> = {};
 
   static async create(payload: CSSMatchedStylesPayload): Promise<CSSMatchedStyles> {
     const cssMatchedStyles = new CSSMatchedStyles(payload);
@@ -314,14 +327,14 @@ export class CSSMatchedStyles {
     activePositionFallbackIndex,
     functionRules,
   }: CSSMatchedStylesPayload) {
-    this.#cssModelInternal = cssModel;
-    this.#nodeInternal = node;
+    this.#cssModel = cssModel;
+    this.#node = node;
     this.#registeredProperties = [
       ...propertyRules.map(rule => new CSSPropertyRule(cssModel, rule)),
       ...cssPropertyRegistrations,
     ].map(r => new CSSRegisteredProperty(cssModel, r));
     if (animationsPayload) {
-      this.#keyframesInternal = animationsPayload.map(rule => new CSSKeyframesRule(cssModel, rule));
+      this.#keyframes = animationsPayload.map(rule => new CSSKeyframesRule(cssModel, rule));
     }
     this.#positionTryRules = positionTryRules.map(rule => new CSSPositionTryRule(cssModel, rule));
     this.#parentLayoutNodeId = parentLayoutNodeId;
@@ -347,6 +360,8 @@ export class CSSMatchedStyles {
     for (const inheritedResult of inheritedPayload) {
       inheritedResult.matchedCSSRules = cleanUserAgentPayload(inheritedResult.matchedCSSRules);
     }
+
+    this.#environmentVariables = await this.cssModel().getEnvironmentVariales();
 
     this.#mainDOMCascade = await this.buildMainCascade(
         inlinePayload, attributesPayload, matchedPayload, inheritedPayload, animationStylesPayload,
@@ -388,45 +403,45 @@ export class CSSMatchedStyles {
       if (!attributesPayload) {
         return;
       }
-      const style = new CSSStyleDeclaration(this.#cssModelInternal, null, attributesPayload, Type.Attributes);
-      this.#nodeForStyleInternal.set(style, this.#nodeInternal);
+      const style = new CSSStyleDeclaration(this.#cssModel, null, attributesPayload, Type.Attributes);
+      this.#nodeForStyle.set(style, this.#node);
       nodeStyles.push(style);
     }
 
     // Transition styles take precedence over animation styles & inline styles.
     if (transitionsStylePayload) {
-      const style = new CSSStyleDeclaration(this.#cssModelInternal, null, transitionsStylePayload, Type.Transition);
-      this.#nodeForStyleInternal.set(style, this.#nodeInternal);
+      const style = new CSSStyleDeclaration(this.#cssModel, null, transitionsStylePayload, Type.Transition);
+      this.#nodeForStyle.set(style, this.#node);
       nodeStyles.push(style);
     }
 
     // Animation styles take precedence over inline styles.
     for (const animationsStyle of animationStylesPayload) {
-      const style = new CSSStyleDeclaration(
-          this.#cssModelInternal, null, animationsStyle.style, Type.Animation, animationsStyle.name);
-      this.#nodeForStyleInternal.set(style, this.#nodeInternal);
+      const style =
+          new CSSStyleDeclaration(this.#cssModel, null, animationsStyle.style, Type.Animation, animationsStyle.name);
+      this.#nodeForStyle.set(style, this.#node);
       nodeStyles.push(style);
     }
 
     // Inline style takes precedence over regular and inherited rules.
-    if (inlinePayload && this.#nodeInternal.nodeType() === Node.ELEMENT_NODE) {
-      const style = new CSSStyleDeclaration(this.#cssModelInternal, null, inlinePayload, Type.Inline);
-      this.#nodeForStyleInternal.set(style, this.#nodeInternal);
+    if (inlinePayload && this.#node.nodeType() === Node.ELEMENT_NODE) {
+      const style = new CSSStyleDeclaration(this.#cssModel, null, inlinePayload, Type.Inline);
+      this.#nodeForStyle.set(style, this.#node);
       nodeStyles.push(style);
     }
 
     // Add rules in reverse order to match the cascade order.
     let addedAttributesStyle;
     for (let i = matchedPayload.length - 1; i >= 0; --i) {
-      const rule = new CSSStyleRule(this.#cssModelInternal, matchedPayload[i].rule);
+      const rule = new CSSStyleRule(this.#cssModel, matchedPayload[i].rule);
       if ((rule.isInjected() || rule.isUserAgent()) && !addedAttributesStyle) {
         // Show element's Style Attributes after all author rules.
         addedAttributesStyle = true;
         addAttributesStyle.call(this);
       }
-      this.#nodeForStyleInternal.set(rule.style, this.#nodeInternal);
+      this.#nodeForStyle.set(rule.style, this.#node);
       nodeStyles.push(rule.style);
-      this.addMatchingSelectors(this.#nodeInternal, rule, matchedPayload[i].matchingSelectors);
+      this.addMatchingSelectors(this.#node, rule, matchedPayload[i].matchingSelectors);
     }
 
     if (!addedAttributesStyle) {
@@ -435,7 +450,7 @@ export class CSSMatchedStyles {
     nodeCascades.push(new NodeCascade(this, nodeStyles, false /* #isInherited */));
 
     // Walk the node structure and identify styles with inherited properties.
-    let parentNode: (DOMNode|null) = this.#nodeInternal.parentNode;
+    let parentNode: (DOMNode|null) = this.#node.parentNode;
     const traverseParentInFlatTree = async(node: DOMNode): Promise<DOMNode|null> => {
       if (node.hasAssignedSlot()) {
         return await node.assignedSlot?.deferredNode.resolvePromise() ?? null;
@@ -449,19 +464,19 @@ export class CSSMatchedStyles {
       const entryPayload = inheritedPayload[i];
       const inheritedAnimatedEntryPayload = inheritedAnimatedPayload[i];
       const inheritedInlineStyle = entryPayload.inlineStyle ?
-          new CSSStyleDeclaration(this.#cssModelInternal, null, entryPayload.inlineStyle, Type.Inline) :
+          new CSSStyleDeclaration(this.#cssModel, null, entryPayload.inlineStyle, Type.Inline) :
           null;
       const inheritedTransitionsStyle = inheritedAnimatedEntryPayload?.transitionsStyle ?
           new CSSStyleDeclaration(
-              this.#cssModelInternal, null, inheritedAnimatedEntryPayload?.transitionsStyle, Type.Transition) :
+              this.#cssModel, null, inheritedAnimatedEntryPayload?.transitionsStyle, Type.Transition) :
           null;
       const inheritedAnimationStyles =
           inheritedAnimatedEntryPayload?.animationStyles?.map(
               animationStyle => new CSSStyleDeclaration(
-                  this.#cssModelInternal, null, animationStyle.style, Type.Animation, animationStyle.name)) ??
+                  this.#cssModel, null, animationStyle.style, Type.Animation, animationStyle.name)) ??
           [];
       if (inheritedTransitionsStyle && containsInherited(inheritedTransitionsStyle)) {
-        this.#nodeForStyleInternal.set(inheritedTransitionsStyle, parentNode);
+        this.#nodeForStyle.set(inheritedTransitionsStyle, parentNode);
         inheritedStyles.push(inheritedTransitionsStyle);
         this.#inheritedStyles.add(inheritedTransitionsStyle);
       }
@@ -471,20 +486,20 @@ export class CSSMatchedStyles {
           continue;
         }
 
-        this.#nodeForStyleInternal.set(inheritedAnimationsStyle, parentNode);
+        this.#nodeForStyle.set(inheritedAnimationsStyle, parentNode);
         inheritedStyles.push(inheritedAnimationsStyle);
         this.#inheritedStyles.add(inheritedAnimationsStyle);
       }
 
       if (inheritedInlineStyle && containsInherited(inheritedInlineStyle)) {
-        this.#nodeForStyleInternal.set(inheritedInlineStyle, parentNode);
+        this.#nodeForStyle.set(inheritedInlineStyle, parentNode);
         inheritedStyles.push(inheritedInlineStyle);
         this.#inheritedStyles.add(inheritedInlineStyle);
       }
 
       const inheritedMatchedCSSRules = entryPayload.matchedCSSRules || [];
       for (let j = inheritedMatchedCSSRules.length - 1; j >= 0; --j) {
-        const inheritedRule = new CSSStyleRule(this.#cssModelInternal, inheritedMatchedCSSRules[j].rule);
+        const inheritedRule = new CSSStyleRule(this.#cssModel, inheritedMatchedCSSRules[j].rule);
         this.addMatchingSelectors(parentNode, inheritedRule, inheritedMatchedCSSRules[j].matchingSelectors);
         if (!containsInherited(inheritedRule.style)) {
           continue;
@@ -495,7 +510,7 @@ export class CSSMatchedStyles {
             continue;
           }
         }
-        this.#nodeForStyleInternal.set(inheritedRule.style, parentNode);
+        this.#nodeForStyle.set(inheritedRule.style, parentNode);
         inheritedStyles.push(inheritedRule.style);
         this.#inheritedStyles.add(inheritedRule.style);
       }
@@ -503,7 +518,7 @@ export class CSSMatchedStyles {
       nodeCascades.push(new NodeCascade(this, inheritedStyles, true /* #isInherited */));
     }
 
-    return new DOMInheritanceCascade(nodeCascades, this.#registeredProperties);
+    return new DOMInheritanceCascade(this, nodeCascades, this.#registeredProperties);
   }
 
   /**
@@ -524,8 +539,8 @@ export class CSSMatchedStyles {
       const highlightNamesToMatchingSelectorIndices = customHighlightNamesToMatchingSelectorIndices(rules[j]);
 
       for (const [highlightName, matchingSelectors] of highlightNamesToMatchingSelectorIndices) {
-        const pseudoRule = new CSSStyleRule(this.#cssModelInternal, rules[j].rule);
-        this.#nodeForStyleInternal.set(pseudoRule.style, node);
+        const pseudoRule = new CSSStyleRule(this.#cssModel, rules[j].rule);
+        this.#nodeForStyle.set(pseudoRule.style, node);
         if (isInherited) {
           this.#inheritedStyles.add(pseudoRule.style);
         }
@@ -566,20 +581,20 @@ export class CSSMatchedStyles {
     for (let i = 0; i < pseudoPayload.length; ++i) {
       const entryPayload = pseudoPayload[i];
       // PseudoElement nodes are not created unless "content" css property is set.
-      const pseudoElement = this.#nodeInternal.pseudoElements().get(entryPayload.pseudoType)?.at(-1) || null;
+      const pseudoElement = this.#node.pseudoElements().get(entryPayload.pseudoType)?.at(-1) || null;
       const pseudoStyles = [];
       const rules = entryPayload.matches || [];
 
       if (entryPayload.pseudoType === Protocol.DOM.PseudoType.Highlight) {
         this.buildSplitCustomHighlightCascades(
-            rules, this.#nodeInternal, false /* #isInherited */, customHighlightPseudoCascades);
+            rules, this.#node, false /* #isInherited */, customHighlightPseudoCascades);
       } else {
         for (let j = rules.length - 1; j >= 0; --j) {
-          const pseudoRule = new CSSStyleRule(this.#cssModelInternal, rules[j].rule);
+          const pseudoRule = new CSSStyleRule(this.#cssModel, rules[j].rule);
           pseudoStyles.push(pseudoRule.style);
           const nodeForStyle =
-              cssMetadata().isHighlightPseudoType(entryPayload.pseudoType) ? this.#nodeInternal : pseudoElement;
-          this.#nodeForStyleInternal.set(pseudoRule.style, nodeForStyle);
+              cssMetadata().isHighlightPseudoType(entryPayload.pseudoType) ? this.#node : pseudoElement;
+          this.#nodeForStyle.set(pseudoRule.style, nodeForStyle);
           if (nodeForStyle) {
             this.addMatchingSelectors(nodeForStyle, pseudoRule, rules[j].matchingSelectors);
           }
@@ -592,7 +607,7 @@ export class CSSMatchedStyles {
     }
 
     if (inheritedPseudoPayload) {
-      let parentNode: (DOMNode|null) = this.#nodeInternal.parentNode;
+      let parentNode: (DOMNode|null) = this.#node.parentNode;
       for (let i = 0; parentNode && i < inheritedPseudoPayload.length; ++i) {
         const inheritedPseudoMatches = inheritedPseudoPayload[i].pseudoElements;
         for (let j = 0; j < inheritedPseudoMatches.length; ++j) {
@@ -605,9 +620,9 @@ export class CSSMatchedStyles {
           } else {
             const pseudoStyles = [];
             for (let k = rules.length - 1; k >= 0; --k) {
-              const pseudoRule = new CSSStyleRule(this.#cssModelInternal, rules[k].rule);
+              const pseudoRule = new CSSStyleRule(this.#cssModel, rules[k].rule);
               pseudoStyles.push(pseudoRule.style);
-              this.#nodeForStyleInternal.set(pseudoRule.style, parentNode);
+              this.#nodeForStyle.set(pseudoRule.style, parentNode);
               this.#inheritedStyles.add(pseudoRule.style);
               this.addMatchingSelectors(parentNode, pseudoRule, rules[k].matchingSelectors);
             }
@@ -631,12 +646,13 @@ export class CSSMatchedStyles {
     // Now that we've built the arrays of NodeCascades for each pseudo type, convert them into
     // DOMInheritanceCascades.
     for (const [pseudoType, nodeCascade] of pseudoCascades.entries()) {
-      pseudoInheritanceCascades.set(pseudoType, new DOMInheritanceCascade(nodeCascade, this.#registeredProperties));
+      pseudoInheritanceCascades.set(
+          pseudoType, new DOMInheritanceCascade(this, nodeCascade, this.#registeredProperties));
     }
 
     for (const [highlightName, nodeCascade] of customHighlightPseudoCascades.entries()) {
       customHighlightPseudoInheritanceCascades.set(
-          highlightName, new DOMInheritanceCascade(nodeCascade, this.#registeredProperties));
+          highlightName, new DOMInheritanceCascade(this, nodeCascade, this.#registeredProperties));
     }
 
     return [pseudoInheritanceCascades, customHighlightPseudoInheritanceCascades];
@@ -653,11 +669,11 @@ export class CSSMatchedStyles {
   }
 
   node(): DOMNode {
-    return this.#nodeInternal;
+    return this.#node;
   }
 
   cssModel(): CSSModel {
-    return this.#cssModelInternal;
+    return this.#cssModel;
   }
 
   hasMatchingSelectors(rule: CSSStyleRule): boolean {
@@ -714,7 +730,7 @@ export class CSSMatchedStyles {
       if (typeof ownerDocument.id !== 'number') {
         return;
       }
-      const matchingNodeIds = await this.#nodeInternal.domModel().querySelectorAll(ownerDocument.id, selectorText);
+      const matchingNodeIds = await this.#node.domModel().querySelectorAll(ownerDocument.id, selectorText);
 
       if (matchingNodeIds) {
         if (typeof node.id === 'number') {
@@ -784,7 +800,7 @@ export class CSSMatchedStyles {
   }
 
   keyframes(): CSSKeyframesRule[] {
-    return this.#keyframesInternal;
+    return this.#keyframes;
   }
 
   positionTryRules(): CSSPositionTryRule[] {
@@ -818,7 +834,7 @@ export class CSSMatchedStyles {
   }
 
   nodeForStyle(style: CSSStyleDeclaration): DOMNode|null {
-    return this.#addedStyles.get(style) || this.#nodeForStyleInternal.get(style) || null;
+    return this.#addedStyles.get(style) || this.#nodeForStyle.get(style) || null;
   }
 
   availableCSSVariables(style: CSSStyleDeclaration): string[] {
@@ -827,12 +843,52 @@ export class CSSMatchedStyles {
   }
 
   computeCSSVariable(style: CSSStyleDeclaration, variableName: string): CSSVariableValue|null {
+    if (style.parentRule instanceof CSSKeyframeRule) {
+      // The resolution of the variables inside of a CSS keyframe rule depends on where this keyframe rule is used.
+      // So, we need to find the style with active CSS property `animation-name` that equals to the keyframe's name.
+      const keyframeName = style.parentRule.parentRuleName();
+      const activeStyle = this.#mainDOMCascade?.styles().find(searchStyle => {
+        return searchStyle.allProperties().some(
+            property => property.name === 'animation-name' && property.value === keyframeName &&
+                this.#mainDOMCascade?.propertyState(property) === PropertyState.ACTIVE);
+      });
+
+      if (!activeStyle) {
+        return null;
+      }
+
+      style = activeStyle;
+    }
+
     const domCascade = this.#styleToDOMCascade.get(style);
     return domCascade ? domCascade.computeCSSVariable(style, variableName) : null;
   }
 
-  resolveProperty(name: string, startingPoint: CSSStyleDeclaration): CSSProperty|null {
-    return this.#styleToDOMCascade.get(startingPoint)?.resolveProperty(name, startingPoint) ?? null;
+  computeAttribute(style: CSSStyleDeclaration, attributeName: string, type: CSSType): string|null {
+    const domCascade = this.#styleToDOMCascade.get(style);
+    return domCascade ? domCascade.computeAttribute(style, attributeName, type) : null;
+  }
+
+  originatingNodeForStyle(style: CSSStyleDeclaration): DOMNode|null {
+    let node: DOMNode|null = this.nodeForStyle(style) ?? this.node();
+
+    // If it's a pseudo-element, we need to find the originating element.
+    while (node?.pseudoType()) {
+      node = node.parentNode;
+    }
+    return node;
+  }
+
+  rawAttributeValueFromStyle(style: CSSStyleDeclaration, attributeName: string): string|null {
+    const node = this.originatingNodeForStyle(style);
+    if (!node) {
+      return null;
+    }
+    return node.getAttribute(attributeName) ?? null;
+  }
+
+  resolveProperty(name: string, ownerStyle: CSSStyleDeclaration): CSSProperty|null {
+    return this.#styleToDOMCascade.get(ownerStyle)?.resolveProperty(name, ownerStyle) ?? null;
   }
 
   resolveGlobalKeyword(property: CSSProperty, keyword: CSSWideKeyword): CSSValueSource|null {
@@ -883,10 +939,17 @@ export class CSSMatchedStyles {
       new PositionTryMatcher(),
       new LengthMatcher(),
       new MathFunctionMatcher(),
+      new CustomFunctionMatcher(),
       new AutoBaseMatcher(),
       new BinOpMatcher(),
       new RelativeColorChannelMatcher(),
+      new AttributeMatcher(this, style),
+      new EnvFunctionMatcher(this),
     ];
+  }
+
+  environmentVariable(name: string): string|undefined {
+    return this.#environmentVariables[name];
   }
 }
 
@@ -1003,6 +1066,10 @@ export interface CSSVariableValue {
   declaration: CSSValueSource;
 }
 
+interface CSSAttributeValue {
+  value: string;
+}
+
 class SCCRecordEntry {
   private rootDiscoveryTime: number;
   get isRootEntry(): boolean {
@@ -1059,25 +1126,19 @@ function* forEach<T>(array: T[], startAfter?: T): Generator<T> {
   }
 }
 
-function* forEachInclusive<T>(array: T[], startAt?: T): Generator<T> {
-  if (startAt === undefined || array.includes(startAt)) {
-    if (startAt !== undefined) {
-      yield startAt;
-    }
-    yield* forEach(array, startAt);
-  }
-}
-
 class DOMInheritanceCascade {
   readonly #propertiesState = new Map<CSSProperty, PropertyState>();
   readonly #availableCSSVariables = new Map<NodeCascade, Map<string, CSSVariableValue|null>>();
-  readonly #computedCSSVariables = new Map<NodeCascade, Map<string, CSSVariableValue|null>>();
+  readonly #computedCSSVariables = new Map<NodeCascade, Map<string, CSSVariableValue|CSSAttributeValue|null>>();
   readonly #styleToNodeCascade = new Map<CSSStyleDeclaration, NodeCascade>();
   #initialized = false;
   readonly #nodeCascades: NodeCascade[];
   #registeredProperties: CSSRegisteredProperty[];
-  constructor(nodeCascades: NodeCascade[], registeredProperties: CSSRegisteredProperty[]) {
+  readonly #matchedStyles: CSSMatchedStyles;
+  constructor(
+      matchedStyles: CSSMatchedStyles, nodeCascades: NodeCascade[], registeredProperties: CSSRegisteredProperty[]) {
     this.#nodeCascades = nodeCascades;
+    this.#matchedStyles = matchedStyles;
     this.#registeredProperties = registeredProperties;
 
     for (const nodeCascade of nodeCascades) {
@@ -1116,20 +1177,20 @@ class DOMInheritanceCascade {
     return null;
   }
 
-  resolveProperty(name: string, startAt: CSSStyleDeclaration): CSSProperty|null {
-    const cascade = this.#styleToNodeCascade.get(startAt);
+  resolveProperty(name: string, ownerStyle: CSSStyleDeclaration): CSSProperty|null {
+    const cascade = this.#styleToNodeCascade.get(ownerStyle);
     if (!cascade) {
       return null;
     }
 
-    for (const style of forEachInclusive(cascade.styles, startAt)) {
+    for (const style of cascade.styles) {
       const candidate = style.allProperties().findLast(candidate => candidate.name === name);
       if (candidate) {
         return candidate;
       }
     }
 
-    return this.#findPropertyInParentCascadeIfInherited({name, ownerStyle: startAt});
+    return this.#findPropertyInParentCascadeIfInherited({name, ownerStyle});
   }
 
   #findPropertyInParentCascade(property: {name: string, ownerStyle: CSSStyleDeclaration}): CSSProperty|null {
@@ -1203,16 +1264,16 @@ class DOMInheritanceCascade {
   }
 
   computeCSSVariable(style: CSSStyleDeclaration, variableName: string): CSSVariableValue|null {
+    this.ensureInitialized();
     const nodeCascade = this.#styleToNodeCascade.get(style);
     if (!nodeCascade) {
       return null;
     }
-    this.ensureInitialized();
-    return this.innerComputeCSSVariable(nodeCascade, variableName);
+    return this.#computeCSSVariable(nodeCascade, variableName);
   }
 
-  private innerComputeCSSVariable(nodeCascade: NodeCascade, variableName: string, sccRecord = new SCCRecord()):
-      CSSVariableValue|null {
+  #computeCSSVariable(nodeCascade: NodeCascade, variableName: string, sccRecord = new SCCRecord()): CSSVariableValue
+      |null {
     const availableCSSVariables = this.#availableCSSVariables.get(nodeCascade);
     const computedCSSVariables = this.#computedCSSVariables.get(nodeCascade);
     if (!computedCSSVariables || !availableCSSVariables?.has(variableName)) {
@@ -1220,7 +1281,7 @@ class DOMInheritanceCascade {
     }
 
     if (computedCSSVariables?.has(variableName)) {
-      return computedCSSVariables.get(variableName) || null;
+      return (computedCSSVariables.get(variableName) as CSSVariableValue | null | undefined) || null;
     }
 
     let definedValue = availableCSSVariables.get(variableName);
@@ -1248,7 +1309,63 @@ class DOMInheritanceCascade {
       return null;
     }
 
-    // While computing CSS variable values we need to detect declaration cycles. Every declaration on the cycle is
+    return this.#walkTree(
+               nodeCascade, ast, definedValue.declaration.style, variableName, sccRecord, definedValue.declaration) as
+        CSSVariableValue |
+        null;
+  }
+
+  computeAttribute(style: CSSStyleDeclaration, attributeName: string, type: CSSType): string|null {
+    this.ensureInitialized();
+    const nodeCascade = this.#styleToNodeCascade.get(style);
+    if (!nodeCascade) {
+      return null;
+    }
+    return this.#computeAttribute(nodeCascade, style, attributeName, type, new SCCRecord());
+  }
+
+  private attributeValueAsType(style: CSSStyleDeclaration, attributeName: string, type: string): string|null {
+    const rawValue = this.#matchedStyles.rawAttributeValueFromStyle(style, attributeName);
+    if (rawValue === null) {
+      return null;
+    }
+    return localEvalCSS(rawValue, type);
+  }
+
+  private attributeValueWithSubstitutions(
+      nodeCascade: NodeCascade, style: CSSStyleDeclaration, attributeName: string, sccRecord: SCCRecord): string|null {
+    const rawValue = this.#matchedStyles.rawAttributeValueFromStyle(style, attributeName);
+    if (rawValue === null) {
+      return null;
+    }
+    const ast = PropertyParser.tokenizeDeclaration('--property', rawValue);
+    if (!ast) {
+      return null;
+    }
+    return this.#walkTree(nodeCascade, ast, style, `attr(${attributeName})`, sccRecord)?.value ?? null;
+  }
+
+  #computeAttribute(
+      nodeCascade: NodeCascade, style: CSSStyleDeclaration, attributeName: string, type: CSSType,
+      sccRecord = new SCCRecord()): string|null {
+    if (type.isCSSTokens) {
+      const value = this.attributeValueWithSubstitutions(nodeCascade, style, attributeName, sccRecord);
+      if (value !== null && localEvalCSS(value, type.type) !== null) {
+        return value;
+      }
+      return null;
+    }
+    return this.attributeValueAsType(style, attributeName, type.type);
+  }
+
+  #walkTree(
+      outerNodeCascade: NodeCascade, ast: SyntaxTree, parentStyle: CSSStyleDeclaration, substitutionName: string,
+      sccRecord: SCCRecord, declaration?: CSSValueSource): CSSVariableValue|CSSAttributeValue|null {
+    const record = sccRecord.add(outerNodeCascade, substitutionName);
+    const computedCSSVariablesMap = this.#computedCSSVariables;
+    const innerNodeCascade = this.#styleToNodeCascade.get(parentStyle);
+
+    // While computing CSS variable and attribute values we need to detect declaration cycles. Every declaration on the cycle is
     // invalid. However, var()s outside of the cycle that reference a property on the cycle are not automatically
     // invalid, but rather use the fallback value. We use a version of Tarjan's algorithm to detect cycles, which are
     // SCCs on the custom property dependency graph. Computing variable values is DFS. When encountering a previously
@@ -1256,47 +1373,65 @@ class DOMInheritanceCascade {
     // find a reference to a variable already on the stack. For each node we also keep track of the "root" of the
     // corresponding SCC, which is the node in that component with the smallest discovery time. This is determined by
     // bubbling up the minimum discovery time whenever we close a cycle.
-    const record = sccRecord.add(nodeCascade, variableName);
+    const matching = PropertyParser.BottomUpTreeMatching.walk(ast, [
+      new BaseVariableMatcher(match => {
+        const {value, mayFallback} = recurseWithCycleDetection(
+            match.name, nodeCascade => this.#computeCSSVariable(nodeCascade, match.name, sccRecord)?.value ?? null);
+        if (!mayFallback || value !== null) {
+          return value;
+        }
 
-    const matching = PropertyParser.BottomUpTreeMatching.walk(
-        ast, [new BaseVariableMatcher(match => {
-          const parentStyle = definedValue.declaration.style;
-          const nodeCascade = this.#styleToNodeCascade.get(parentStyle);
-          if (!nodeCascade) {
-            return null;
-          }
-          const childRecord = sccRecord.get(nodeCascade, match.name);
-          if (childRecord) {
-            if (sccRecord.isInInProgressSCC(childRecord)) {
-              // Cycle detected, update the root.
-              record.updateRoot(childRecord);
-              return null;
+        // Variable reference is not resolved, use the fallback.
+        if (!match.fallback) {
+          return null;
+        }
+        return evaluateFallback(match.fallback, match.matching);
+      }),
+      new EnvFunctionMatcher(this.#matchedStyles),
+      new AttributeMatcher(
+          this.#matchedStyles, parentStyle,
+          match => {
+            const recordName = `attr(${match.name})`;
+            let attributeValue = null;
+            if (!match.isCSSTokens) {
+              const {value, mayFallback} = recurseWithCycleDetection(
+                  recordName, () => this.attributeValueAsType(parentStyle, match.name, match.cssType()));
+              if (value === null && !mayFallback) {
+                return null;
+              }
+              attributeValue = value;
+            } else {
+              const {value, mayFallback} = recurseWithCycleDetection(
+                  recordName,
+                  nodeCascade => this.attributeValueWithSubstitutions(nodeCascade, parentStyle, match.name, sccRecord));
+              if (value === null && !mayFallback) {
+                return null;
+              }
+              if (value !== null && localEvalCSS(value, match.cssType()) !== null) {
+                attributeValue = value;
+              }
             }
 
-            // We've seen the variable before, so we can look up the text directly.
-            return this.#computedCSSVariables.get(nodeCascade)?.get(match.name)?.value ?? null;
-          }
-
-          const cssVariableValue = this.innerComputeCSSVariable(nodeCascade, match.name, sccRecord);
-          // Variable reference is resolved, so return it.
-          const newChildRecord = sccRecord.get(nodeCascade, match.name);
-          // The SCC record for the referenced variable may not exist if the var was already computed in a previous
-          // iteration. That means it's in a different SCC.
-          newChildRecord && record.updateRoot(newChildRecord);
-          if (cssVariableValue?.value !== undefined) {
-            return cssVariableValue.value;
-          }
-
-          // Variable reference is not resolved, use the fallback.
-          if (match.fallback.length === 0 ||
-              match.matching.hasUnresolvedVarsRange(match.fallback[0], match.fallback[match.fallback.length - 1])) {
-            return null;
-          }
-          return match.matching.getComputedTextRange(match.fallback[0], match.fallback[match.fallback.length - 1]);
-        })]);
-
+            if (attributeValue !== null) {
+              return attributeValue;
+            }
+            // Variable reference is not resolved, use the fallback.
+            if (!match.fallback || !match.isValidType) {
+              // Except in this case, we use the default value for the type.
+              return defaultValueForCSSType(match.type);
+            }
+            return evaluateFallback(match.fallback, match.matching);
+          })
+    ]);
     const decl = PropertyParser.ASTUtils.siblings(PropertyParser.ASTUtils.declValue(matching.ast.tree));
-    const computedText = decl.length > 0 ? matching.getComputedTextRange(decl[0], decl[decl.length - 1]) : '';
+    const declText = decl.length > 0 ? matching.getComputedTextRange(decl[0], decl[decl.length - 1]) : '';
+    const hasUnresolvedSubstitutions =
+        decl.length > 0 && matching.hasUnresolvedSubstitutionsRange(decl[0], decl[decl.length - 1]);
+    const computedText = hasUnresolvedSubstitutions ? null : declText;
+    const outerComputedCSSVariables = computedCSSVariablesMap.get(outerNodeCascade);
+    if (!outerComputedCSSVariables) {
+      return null;
+    }
 
     if (record.isRootEntry) {
       // Variables are kept on the stack until all descendents in the same SCC have been visited. That's the case when
@@ -1304,20 +1439,61 @@ class DOMInheritanceCascade {
       const scc = sccRecord.finishSCC(record);
       if (scc.length > 1) {
         for (const entry of scc) {
-          console.assert(entry.nodeCascade === nodeCascade, 'Circles should be within the cascade');
-          computedCSSVariables.set(entry.name, null);
+          console.assert(entry.nodeCascade === outerNodeCascade, 'Circles should be within the cascade');
+          outerComputedCSSVariables.set(entry.name, null);
         }
         return null;
       }
     }
-    if (decl.length > 0 && matching.hasUnresolvedVarsRange(decl[0], decl[decl.length - 1])) {
-      computedCSSVariables.set(variableName, null);
+    if (computedText === null) {
+      outerComputedCSSVariables.set(substitutionName, null);
       return null;
     }
 
-    const cssVariableValue = {value: computedText, declaration: definedValue.declaration};
-    computedCSSVariables.set(variableName, cssVariableValue);
+    const cssVariableValue = {value: computedText, declaration};
+    outerComputedCSSVariables.set(substitutionName, cssVariableValue);
     return cssVariableValue;
+
+    function recurseWithCycleDetection(
+        recordName: string, func: (nc: NodeCascade) => string | null): {value: string|null, mayFallback: boolean} {
+      if (!innerNodeCascade) {
+        return {value: null, mayFallback: false};
+      }
+
+      const childRecord = sccRecord.get(innerNodeCascade, recordName);
+      if (childRecord) {
+        if (sccRecord.isInInProgressSCC(childRecord)) {
+          // Cycle detected, update the root.
+          record.updateRoot(childRecord);
+          return {value: null, mayFallback: false};
+        }
+
+        // We've seen the variable before, so we can look up the text directly.
+        return {
+          value: computedCSSVariablesMap.get(innerNodeCascade)?.get(recordName)?.value ?? null,
+          mayFallback: false
+        };
+      }
+
+      const value = func(innerNodeCascade);
+      // Variable reference is resolved, so return it.
+      const newChildRecord = sccRecord.get(innerNodeCascade, recordName);
+      // The SCC record for the referenced variable may not exist if the var was already computed in a previous
+      // iteration. That means it's in a different SCC.
+      newChildRecord && record.updateRoot(newChildRecord);
+      return {value, mayFallback: true};
+    }
+
+    function evaluateFallback(fallback: CodeMirror.SyntaxNode[], matching: PropertyParser.BottomUpTreeMatching): string|
+        null {
+      if (fallback.length === 0) {
+        return '';
+      }
+      if (matching.hasUnresolvedSubstitutionsRange(fallback[0], fallback[fallback.length - 1])) {
+        return null;
+      }
+      return matching.getComputedTextRange(fallback[0], fallback[fallback.length - 1]);
+    }
   }
 
   styles(): CSSStyleDeclaration[] {
@@ -1411,7 +1587,7 @@ class DOMInheritanceCascade {
       for (const variableName of variableNames) {
         const prevValue = accumulatedCSSVariables.get(variableName);
         accumulatedCSSVariables.delete(variableName);
-        const computedValue = this.innerComputeCSSVariable(nodeCascade, variableName);
+        const computedValue = this.#computeCSSVariable(nodeCascade, variableName);
         if (prevValue && computedValue?.value === prevValue.value) {
           computedValue.declaration = prevValue.declaration;
         }

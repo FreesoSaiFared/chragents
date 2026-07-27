@@ -24,11 +24,12 @@ export class NetworkManager extends EventEmitter {
     #credentials = null;
     #attemptedAuthentications = new Set();
     #userRequestInterceptionEnabled = false;
-    #protocolRequestInterceptionEnabled = false;
+    #protocolRequestInterceptionEnabled;
     #userCacheDisabled;
     #emulatedNetworkConditions;
     #userAgent;
     #userAgentMetadata;
+    #platform;
     #handlers = [
         ['Fetch.requestPaused', this.#onRequestPaused],
         ['Fetch.authRequired', this.#onAuthRequired],
@@ -41,12 +42,18 @@ export class NetworkManager extends EventEmitter {
         [CDPSessionEvent.Disconnected, this.#removeClient],
     ];
     #clients = new Map();
-    constructor(frameManager) {
+    #networkEnabled = true;
+    constructor(frameManager, networkEnabled) {
         super();
         this.#frameManager = frameManager;
+        this.#networkEnabled = networkEnabled ?? true;
+    }
+    #canIgnoreError(error) {
+        return (isErrorLike(error) &&
+            (isTargetClosedError(error) || error.message.includes('Not supported')));
     }
     async addClient(client) {
-        if (this.#clients.has(client)) {
+        if (!this.#networkEnabled || this.#clients.has(client)) {
             return;
         }
         const subscriptions = new DisposableStack();
@@ -68,7 +75,7 @@ export class NetworkManager extends EventEmitter {
             ]);
         }
         catch (error) {
-            if (isErrorLike(error) && isTargetClosedError(error)) {
+            if (this.#canIgnoreError(error)) {
                 return;
             }
             throw error;
@@ -106,7 +113,7 @@ export class NetworkManager extends EventEmitter {
             });
         }
         catch (error) {
-            if (isErrorLike(error) && isTargetClosedError(error)) {
+            if (this.#canIgnoreError(error)) {
                 return;
             }
             throw error;
@@ -133,7 +140,7 @@ export class NetworkManager extends EventEmitter {
     async emulateNetworkConditions(networkConditions) {
         if (!this.#emulatedNetworkConditions) {
             this.#emulatedNetworkConditions = {
-                offline: false,
+                offline: networkConditions?.offline ?? false,
                 upload: -1,
                 download: -1,
                 latency: 0,
@@ -148,6 +155,8 @@ export class NetworkManager extends EventEmitter {
         this.#emulatedNetworkConditions.latency = networkConditions
             ? networkConditions.latency
             : 0;
+        this.#emulatedNetworkConditions.offline =
+            networkConditions?.offline ?? false;
         await this.#applyToAllClients(this.#applyNetworkConditions.bind(this));
     }
     async #applyToAllClients(fn) {
@@ -168,15 +177,16 @@ export class NetworkManager extends EventEmitter {
             });
         }
         catch (error) {
-            if (isErrorLike(error) && isTargetClosedError(error)) {
+            if (this.#canIgnoreError(error)) {
                 return;
             }
             throw error;
         }
     }
-    async setUserAgent(userAgent, userAgentMetadata) {
+    async setUserAgent(userAgent, userAgentMetadata, platform) {
         this.#userAgent = userAgent;
         this.#userAgentMetadata = userAgentMetadata;
+        this.#platform = platform;
         await this.#applyToAllClients(this.#applyUserAgent.bind(this));
     }
     async #applyUserAgent(client) {
@@ -187,10 +197,11 @@ export class NetworkManager extends EventEmitter {
             await client.send('Network.setUserAgentOverride', {
                 userAgent: this.#userAgent,
                 userAgentMetadata: this.#userAgentMetadata,
+                platform: this.#platform,
             });
         }
         catch (error) {
-            if (isErrorLike(error) && isTargetClosedError(error)) {
+            if (this.#canIgnoreError(error)) {
                 return;
             }
             throw error;
@@ -210,6 +221,9 @@ export class NetworkManager extends EventEmitter {
         await this.#applyToAllClients(this.#applyProtocolRequestInterception.bind(this));
     }
     async #applyProtocolRequestInterception(client) {
+        if (this.#protocolRequestInterceptionEnabled === undefined) {
+            return;
+        }
         if (this.#userCacheDisabled === undefined) {
             this.#userCacheDisabled = false;
         }
@@ -231,7 +245,7 @@ export class NetworkManager extends EventEmitter {
             }
         }
         catch (error) {
-            if (isErrorLike(error) && isTargetClosedError(error)) {
+            if (this.#canIgnoreError(error)) {
                 return;
             }
             throw error;
@@ -247,7 +261,7 @@ export class NetworkManager extends EventEmitter {
             });
         }
         catch (error) {
-            if (isErrorLike(error) && isTargetClosedError(error)) {
+            if (this.#canIgnoreError(error)) {
                 return;
             }
             throw error;

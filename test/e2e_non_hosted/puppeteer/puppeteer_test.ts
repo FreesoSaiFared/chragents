@@ -1,13 +1,16 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Copyright 2021 Google LLC. All rights reserved.
-
 import {assert} from 'chai';
+
+import {expectError} from '../../conductor/events.js';
 
 describe('Puppeteer', () => {
   it('should connect to the browser via DevTools own connection', async ({browser, devToolsPage}) => {
+    expectError(/Protocol Error: the message with wrong session id/);
+    expectError(/Protocol Error: the message with wrong session id/);
+
     const version = await browser.browser.version();
     const result = await devToolsPage.evaluate(`(async () => {
       const puppeteer = await import('./third_party/puppeteer/puppeteer.js');
@@ -52,8 +55,10 @@ describe('Puppeteer', () => {
          * @param {() => void} cb
          */
         set onclose(cb) {
+          const prev = this._connection.getOnDisconnect();
           this._connection.setOnDisconnect(() => {
-            cb()
+            prev?.();
+            cb?.();
           });
         }
       }

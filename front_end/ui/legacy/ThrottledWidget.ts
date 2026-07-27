@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ export class ThrottledWidget extends VBox {
   protected lastUpdatePromise: Promise<void> = Promise.resolve();
 
   constructor(useShadowDom?: boolean, timeout?: number) {
-    super(useShadowDom);
+    super({useShadowDom});
     this.updateThrottler = new Common.Throttler.Throttler(timeout === undefined ? 100 : timeout);
     this.updateWhenVisible = false;
   }

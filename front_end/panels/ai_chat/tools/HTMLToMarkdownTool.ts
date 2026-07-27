@@ -2,15 +2,34 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as SDK from '../../../core/sdk/sdk.js';
 import * as Protocol from '../../../generated/protocol.js';
-import * as Utils from '../common/utils.js';
-import { AgentService } from '../core/AgentService.js';
+import * as UtilsUniversal from '../common/utils-universal.js';
 import { createLogger } from '../core/Logger.js';
-import { LLMClient } from '../LLM/LLMClient.js';
-import { AIChatPanel } from '../ui/AIChatPanel.js';
+import { callLLMWithTracing } from './LLMTracingWrapper.js';
+import { type Tool, type LLMContext } from './Tools.js';
+import type { LLMProvider } from '../LLM/LLMTypes.js';
+import { ContentChunker } from '../utils/ContentChunker.js';
+import { getAdapter } from '../cdp/getAdapter.js';
+import type { CDPSessionAdapter } from '../cdp/CDPSessionAdapter.js';
 
-import { waitForPageLoad, type Tool } from './Tools.js';
+// Detect if we're in a Node.js environment (eval runner, tests)
+const isNodeEnvironment = typeof window === 'undefined' || typeof document === 'undefined';
+
+// Lazy-loaded browser-only dependencies for API key fallback
+let AgentService: typeof import('../core/AgentService.js').AgentService | null = null;
+let agentServiceLoaded = false;
+
+async function ensureAgentService(): Promise<boolean> {
+  if (isNodeEnvironment) return false;
+  if (!agentServiceLoaded) {
+    agentServiceLoaded = true;
+    try {
+      const agentServiceModule = await import('../core/AgentService.js');
+      AgentService = agentServiceModule.AgentService;
+    } catch { return false; }
+  }
+  return AgentService !== null;
+}
 
 const logger = createLogger('Tool:HTMLToMarkdown');
 
@@ -35,36 +54,16 @@ export interface HTMLToMarkdownArgs {
  * Tool for extracting the main article content from a webpage and converting it to Markdown
  */
 export class HTMLToMarkdownTool implements Tool<HTMLToMarkdownArgs, HTMLToMarkdownResult> {
-  name = 'html_to_markdown';
-  description = 'Extracts the main article content from a webpage and converts it to well-formatted Markdown, removing ads, navigation, and other distracting elements.';
+  // Chunking configuration
+  private readonly TOKEN_LIMIT_FOR_CHUNKING = 65000; // Auto-chunk if tree exceeds this (~260k chars)
+  private readonly CHUNK_TOKEN_LIMIT = 40000; // Max tokens per chunk (~160k chars)
+  private readonly CHARS_PER_TOKEN = 4; // Conservative estimate
 
-  private async createToolTracingObservation(toolName: string, args: any): Promise<void> {
-    try {
-      const { getCurrentTracingContext, createTracingProvider } = await import('../tracing/TracingConfig.js');
-      const context = getCurrentTracingContext();
-      if (context) {
-        const tracingProvider = createTracingProvider();
-        await tracingProvider.createObservation({
-          id: `event-tool-execute-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          name: `Tool Execute: ${toolName}`,
-          type: 'event',
-          startTime: new Date(),
-          input: { 
-            toolName, 
-            toolArgs: args,
-            contextInfo: `Direct tool execution in ${toolName}`
-          },
-          metadata: {
-            executionPath: 'direct-tool',
-            toolName
-          }
-        }, context.traceId);
-      }
-    } catch (tracingError) {
-      // Don't fail tool execution due to tracing errors
-      console.error(`[TRACING ERROR in ${toolName}]`, tracingError);
-    }
-  }
+  private contentChunker = new ContentChunker();
+
+  name = 'html_to_markdown';
+  description = 'Extracts the main article content from a webpage and converts it to well-formatted Markdown, removing ads, navigation, and other distracting elements. Automatically chunks large pages for efficient processing.';
+
 
   schema = {
     type: 'object',
@@ -85,15 +84,27 @@ export class HTMLToMarkdownTool implements Tool<HTMLToMarkdownArgs, HTMLToMarkdo
   /**
    * Execute the HTML to Markdown extraction
    */
-  async execute(args: HTMLToMarkdownArgs): Promise<HTMLToMarkdownResult> {
-    await this.createToolTracingObservation(this.name, args);
+  async execute(args: HTMLToMarkdownArgs, ctx?: LLMContext): Promise<HTMLToMarkdownResult> {
     logger.info('Executing with args', { args });
     const { instruction } = args;
-    const agentService = AgentService.getInstance();
-    const apiKey = agentService.getApiKey();
     const READINESS_TIMEOUT_MS = 15000; // 15 seconds timeout for page readiness
 
-    if (!apiKey) {
+    // Get API key from context first, fallback to AgentService in browser
+    let apiKey = ctx?.apiKey;
+    if (!apiKey && !isNodeEnvironment) {
+      await ensureAgentService();
+      if (AgentService) {
+        apiKey = AgentService.getInstance().getApiKey() ?? undefined;
+      }
+    }
+
+    // Get provider from context
+    const provider = ctx?.provider;
+
+    // LiteLLM and BrowserOperator have optional API keys
+    const requiresApiKey = provider !== 'litellm' && provider !== 'browseroperator';
+
+    if (requiresApiKey && !apiKey) {
       return {
         success: false,
         markdownContent: null,
@@ -102,22 +113,19 @@ export class HTMLToMarkdownTool implements Tool<HTMLToMarkdownArgs, HTMLToMarkdo
     }
 
     try {
-      // *** Add wait for page load ***
-      const target = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
-      if (!target) {
-        throw new Error('No page target available');
-      }
-      try {
-        logger.info('Checking page readiness', { timeoutMs: READINESS_TIMEOUT_MS });
-        await waitForPageLoad(target, READINESS_TIMEOUT_MS);
-        logger.info('Page is ready or timeout reached');
-      } catch (readinessError: any) {
-         logger.error('Page readiness check failed', { error: readinessError.message, stack: readinessError.stack });
+      // Get CDP adapter (works in both DevTools and eval runner)
+      const adapter = await getAdapter(ctx);
+      if (!adapter) {
+        return {
+          success: false,
+          markdownContent: null,
+          error: 'No browser connection available'
+        };
       }
 
       // Get the page content from the accessibility tree
       logger.info('Getting page content from accessibility tree');
-      const content = await this.getPageContent(target);
+      const content = await this.getPageContent(adapter);
 
       if (!content) {
         return {
@@ -129,24 +137,51 @@ export class HTMLToMarkdownTool implements Tool<HTMLToMarkdownArgs, HTMLToMarkdo
 
       logger.info('Retrieved page content', { contentLength: content.length });
 
-      // Create prompts for the LLM
-      const systemPrompt = this.createSystemPrompt();
-      const userPrompt = this.createUserPrompt(content, instruction);
+      // Check if we need to chunk the content
+      const estimatedTokens = Math.ceil(content.length / this.CHARS_PER_TOKEN);
+      logger.info('Estimated token count', { estimatedTokens });
 
-      // Call the LLM for extraction
-      logger.info('Calling LLM for extraction');
-      const extractionResult = await this.callExtractionLLM({
-        systemPrompt,
-        userPrompt,
-        apiKey,
-      });
+      if (!ctx?.provider || !ctx.nanoModel) {
+        return {
+          success: false,
+          markdownContent: null,
+          error: 'Missing LLM context (provider/nanoModel) for HTMLToMarkdownTool'
+        };
+      }
+
+      let markdownContent: string;
+
+      // If content is too large, use chunking
+      if (estimatedTokens > this.TOKEN_LIMIT_FOR_CHUNKING) {
+        logger.info('Content exceeds token limit, using chunked processing', {
+          estimatedTokens,
+          limit: this.TOKEN_LIMIT_FOR_CHUNKING
+        });
+
+        markdownContent = await this.processWithChunking(content, instruction, apiKey || '', ctx.provider, ctx.nanoModel);
+      } else {
+        // Normal processing for smaller content
+        logger.info('Using standard processing');
+        const systemPrompt = this.createSystemPrompt();
+        const userPrompt = this.createUserPrompt(content, instruction);
+
+        const extractionResult = await this.callExtractionLLM({
+          systemPrompt,
+          userPrompt,
+          apiKey: apiKey || '',
+          provider: ctx.provider,
+          model: ctx.nanoModel,
+        });
+
+        markdownContent = extractionResult.markdownContent;
+      }
 
       logger.info('Extraction completed successfully');
 
       // Return the result
       return {
         success: true,
-        markdownContent: extractionResult.markdownContent
+        markdownContent
       };
 
     } catch (error: any) {
@@ -162,13 +197,9 @@ export class HTMLToMarkdownTool implements Tool<HTMLToMarkdownArgs, HTMLToMarkdo
   /**
    * Get page content from the accessibility tree
    */
-  private async getPageContent(target: SDK.Target.Target): Promise<string> {
-    if (!target) {
-      throw new Error('No page target available');
-    }
-
-    // Get accessibility tree using existing utility
-    const processedTreeResult = await Utils.getAccessibilityTree(target);
+  private async getPageContent(adapter: CDPSessionAdapter): Promise<string> {
+    // Get accessibility tree using universal utility
+    const processedTreeResult = await UtilsUniversal.getAccessibilityTree(adapter);
     return processedTreeResult.simplified;
   }
 
@@ -338,28 +369,125 @@ ${instruction}
   }
 
   /**
+   * Process large content by chunking the raw accessibility tree
+   * and extracting markdown from each chunk separately
+   */
+  private async processWithChunking(
+    content: string,
+    instruction: string | undefined,
+    apiKey: string,
+    provider: LLMProvider,
+    model: string
+  ): Promise<string> {
+    // Chunk the raw accessibility tree content
+    logger.info('Chunking raw accessibility tree content');
+    const chunks = this.contentChunker.chunk(content, {
+      maxTokensPerChunk: this.CHUNK_TOKEN_LIMIT,
+      strategy: 'accessibility-tree', // Split on [nodeId] boundaries
+      preserveContext: false
+    });
+
+    logger.info('Created chunks from accessibility tree', { chunkCount: chunks.length });
+
+    // Extract markdown from each accessibility tree chunk in parallel (4 at a time)
+    const markdownChunks: string[] = new Array(chunks.length);
+    const BATCH_SIZE = 4; // Process 4 chunks concurrently
+
+    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+      const batchPromises: Promise<string>[] = [];
+
+      // Create batch of up to 4 promises
+      for (let j = 0; j < BATCH_SIZE && i + j < chunks.length; j++) {
+        const chunkIndex = i + j;
+        const chunk = chunks[chunkIndex];
+
+        logger.info(`Processing chunk ${chunkIndex + 1}/${chunks.length} in parallel batch`, {
+          batchStart: i + 1,
+          batchEnd: Math.min(i + BATCH_SIZE, chunks.length),
+          tokenEstimate: chunk.tokenEstimate
+        });
+
+        const systemPrompt = this.createSystemPrompt();
+        const userPrompt = this.createUserPrompt(chunk.content, instruction);
+
+        // Create promise and handle errors per chunk
+        const promise = this.callExtractionLLM({
+          systemPrompt,
+          userPrompt,
+          apiKey,
+          provider,
+          model,
+        }).then(result => {
+          // Store result at correct index to maintain order
+          markdownChunks[chunkIndex] = result.markdownContent;
+          return result.markdownContent;
+        }).catch(error => {
+          logger.error(`Error processing chunk ${chunkIndex + 1}`, { error });
+          // Store empty string on error to maintain order
+          markdownChunks[chunkIndex] = '';
+          return '';
+        });
+
+        batchPromises.push(promise);
+      }
+
+      // Wait for current batch to complete before starting next batch
+      logger.info(`Waiting for batch to complete`, {
+        batchStart: i + 1,
+        batchSize: batchPromises.length
+      });
+      await Promise.all(batchPromises);
+      logger.info(`Batch completed`, {
+        batchStart: i + 1,
+        completedChunks: i + batchPromises.length
+      });
+    }
+
+    // Combine markdown results
+    const mergedMarkdown = markdownChunks.join('\n\n');
+    logger.info('Combined markdown from all chunks', {
+      totalChunks: chunks.length,
+      finalLength: mergedMarkdown.length
+    });
+
+    return mergedMarkdown;
+  }
+
+  /**
    * Call LLM for extraction
    */
   private async callExtractionLLM(params: {
     systemPrompt: string,
     userPrompt: string,
     apiKey: string,
+    provider: LLMProvider,
+    model: string,
   }): Promise<{
     markdownContent: string,
   }> {
-    // Call LLM using the unified client
-    const { model, provider } = AIChatPanel.getNanoModelWithProvider();
-    const llm = LLMClient.getInstance();
-    const llmResponse = await llm.call({
-      provider,
-      model,
-      messages: [
-        { role: 'system', content: params.systemPrompt },
-        { role: 'user', content: params.userPrompt }
-      ],
-      systemPrompt: params.systemPrompt,
-      temperature: 0.2 // Lower temperature for more deterministic results
-    });
+    // Call LLM using the unified client with tracing
+    const provider = params.provider;
+    const model = params.model;
+    const llmResponse = await callLLMWithTracing(
+      {
+        provider,
+        model,
+        messages: [
+          { role: 'system', content: params.systemPrompt },
+          { role: 'user', content: params.userPrompt }
+        ],
+        systemPrompt: params.systemPrompt,
+        temperature: 0.2 // Lower temperature for more deterministic results
+      },
+      {
+        toolName: this.name,
+        operationName: 'html_to_markdown',
+        context: 'content_extraction',
+        additionalMetadata: {
+          promptLength: params.userPrompt.length
+        }
+      }
+    );
     const response = llmResponse.text;
 
     // Process the response - UnifiedLLMClient returns string directly

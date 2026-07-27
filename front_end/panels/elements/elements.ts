@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,7 +26,6 @@ import './CSSRuleValidator.js';
 import './ElementsPanel.js';
 import './ClassesPaneWidget.js';
 import './ElementStatePaneWidget.js';
-import './ElementsTreeElementHighlighter.js';
 import './AccessibilityTreeUtils.js';
 import './AccessibilityTreeView.js';
 
@@ -44,8 +43,8 @@ import * as ElementsPanel from './ElementsPanel.js';
 import * as ElementsSidebarPane from './ElementsSidebarPane.js';
 import * as ElementStatePaneWidget from './ElementStatePaneWidget.js';
 import * as ElementsTreeElement from './ElementsTreeElement.js';
-import * as ElementsTreeElementHighlighter from './ElementsTreeElementHighlighter.js';
 import * as ElementsTreeOutline from './ElementsTreeOutline.js';
+import * as ElementsTreeOutlineRenderer from './ElementsTreeOutlineRenderer.js';
 import * as EventListenersWidget from './EventListenersWidget.js';
 import * as InspectElementModeController from './InspectElementModeController.js';
 import * as LayersWidget from './LayersWidget.js';
@@ -80,8 +79,8 @@ export {
   ElementsSidebarPane,
   ElementStatePaneWidget,
   ElementsTreeElement,
-  ElementsTreeElementHighlighter,
   ElementsTreeOutline,
+  ElementsTreeOutlineRenderer,
   EventListenersWidget,
   InspectElementModeController,
   LayersWidget,

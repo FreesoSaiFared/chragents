@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,10 @@ new RuleTester().run('no-new-lit-element-components', rule, {
     {
       code: 'class A extends LitElement {}',
       filename: 'front_end/panels/recorder/test.ts',
+    },
+    {
+      code: 'class A extends LitElement {}',
+      filename: '/usr/local/domain/home/user/devtools/devtools-frontend/front_end/panels/recorder/test.ts',
     },
   ],
   invalid: [

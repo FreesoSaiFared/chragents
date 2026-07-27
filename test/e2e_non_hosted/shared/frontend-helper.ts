@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,8 @@ import {installPageErrorHandlers} from '../../conductor/events.js';
 import {platform} from '../../conductor/platform.js';
 import {TestConfig} from '../../conductor/test_config.js';
 
-import type {BrowserWrapper} from './browser-helper.js';
 import {PageWrapper} from './page-wrapper.js';
+import type {InspectedPage} from './target-helper.js';
 
 export type Action = (element: puppeteer.ElementHandle) => Promise<void>;
 
@@ -21,7 +21,6 @@ export interface ClickOptions {
   maxPixelsFromLeft?: number;
 }
 
-const envThrottleRate = process.env['STRESS'] ? 3 : 1;
 const envLatePromises = process.env['LATE_PROMISES'] !== undefined ?
     ['true', ''].includes(process.env['LATE_PROMISES'].toLowerCase()) ? 10 : Number(process.env['LATE_PROMISES']) :
     0;
@@ -31,12 +30,26 @@ type DeducedElementType<ElementType extends Element|null, Selector extends strin
 
 const CONTROL_OR_META = platform === 'mac' ? 'Meta' : 'Control';
 
-// TODO: Remove once Chromium updates its version of Node.js to 12+.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const globalThis: any = global;
 
+interface DevToolsReloadParams {
+  canDock?: boolean;
+  panel?: string;
+}
+
 export class DevToolsPage extends PageWrapper {
+  screenshotLog: Record<string, string> = {};
   #currentHighlightedElement?: HighlightedElement;
+  #cdpSession?: puppeteer.CDPSession;
+
+  constructor(page: puppeteer.Page) {
+    super(page);
+    if (!TestConfig.debug) {
+      // Timeout here is not useful if we pause the DevTools page
+      this.#startHeartbeat();
+    }
+  }
 
   async delayPromisesIfRequired(): Promise<void> {
     if (envLatePromises === 0) {
@@ -57,25 +70,103 @@ export class DevToolsPage extends PageWrapper {
     }, envLatePromises);
   }
 
+  #heartbeatInterval: ReturnType<typeof setInterval> = -1 as unknown as ReturnType<typeof setInterval>;
+  /**
+   * Evaluates a script in the page every second
+   * to detect possible timeouts.
+   */
+  #startHeartbeat(): void {
+    const url = this.page.url();
+    this.#heartbeatInterval = setInterval(async () => {
+      // 1 - success, -1 - eval error, -2 - eval timeout.
+      const status = await Promise.race([
+        this.page.evaluate(() => 1).catch(() => {
+          return -1;
+        }),
+        new Promise<number>(resolve => setTimeout(() => resolve(-2), 1000))
+      ]);
+      if (status <= 0) {
+        clearInterval(this.#heartbeatInterval);
+      }
+      if (status === -2) {
+        console.error(`heartbeat(${url}): failed with ${status}`);
+      }
+    }, 2000);
+  }
+
   async throttleCPUIfRequired(): Promise<void> {
-    if (envThrottleRate === 1) {
+    if (TestConfig.cpuThrottle === 1) {
       return;
     }
     /* eslint-disable-next-line no-console */
-    console.log(`Throttling CPU: ${envThrottleRate}x slowdown`);
-    const client = await this.page.createCDPSession();
+    console.log(`Throttling CPU: ${TestConfig.cpuThrottle}x slowdown`);
+    const client = await this.#getCDPSession();
     await client.send('Emulation.setCPUThrottlingRate', {
-      rate: envThrottleRate,
+      rate: TestConfig.cpuThrottle,
     });
   }
 
+  override async reload(options?: puppeteer.WaitForOptions) {
+    await super.reload(options);
+    await this.ensureReadyForTesting();
+  }
+
+  /**
+   * Use the Runtime.setQueryParamForTesting to mock the parameter before
+   * DevTools is loaded.
+   *
+   * Important information for the implementation:
+   * Trying to change the url and then reload or navigate to the new one will
+   * hit this check in the back end:
+   * https://crsrc.org/c/chrome/browser/devtools/devtools_ui_bindings.cc;l=406?q=devtools_ui_b&ss=chromium
+   *
+   * @param panel Mocks DevTools URL search params to make it open a specific panel on load.
+   * @param canDock Mocks DevTools URL search params to make it think whether it can dock or not.
+   * This does not control whether or not the panel can actually dock or not.
+   * @param persistReloads If this is true running {@link DevToolsPage.reload} will reloading with
+   * the provided options
+   */
+  async reloadWithParams({panel, canDock}: DevToolsReloadParams, persistReloads = false) {
+    if (!panel && !canDock) {
+      await this.reload();
+      return;
+    }
+
+    // evaluateOnNewDocument is ran before all other JS is loaded
+    // ES Modules are only resolved once and always resolved asynchronously
+    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules#other_differences_between_modules_and_classic_scripts
+    // This means this will always resolve before DevTools tries to read the values
+    const token = await this.page.evaluateOnNewDocument(async (panelName, canDockDevTools) => {
+      // @ts-expect-error Evaluated in DevTools context
+      const Root = await import('./core/root/root.js');
+      if (panelName) {
+        Root.Runtime.Runtime.setQueryParamForTesting('panel', panelName);
+      }
+      if (canDockDevTools) {
+        Root.Runtime.Runtime.setQueryParamForTesting('can_dock', `${canDockDevTools}`);
+      }
+    }, panel, canDock);
+
+    await this.reload();
+    if (!persistReloads) {
+      await this.page.removeScriptToEvaluateOnNewDocument(token.identifier);
+    }
+    if (panel) {
+      await this.waitFor(`.panel.${panel}`);
+    }
+  }
+
   async ensureReadyForTesting() {
-    await this.page.waitForFunction(`
-      (async function() {
+    const devToolsVeLogging = {enabled: true, testing: true};
+    await this.evaluateOnNewDocument(`globalThis.hostConfigForTesting = ${JSON.stringify({devToolsVeLogging})};`);
+    await this.waitForFunction(async () => {
+      const result = await this.page.evaluate(`(async function() {
         const Main = await import('./entrypoints/main/main.js');
         return Main.MainImpl.MainImpl.instanceForTest !== null;
-        })()
-        `);
+      })()`);
+      return result;
+    });
+
     await this.evaluate(`
       (async function() {
         const Main = await import('./entrypoints/main/main.js');
@@ -85,7 +176,10 @@ export class DevToolsPage extends PageWrapper {
   }
 
   async useSoftMenu() {
-    await this.page.evaluate('window.DevToolsAPI.setUseSoftMenu(true)');
+    await this.evaluate(() => {
+      // @ts-expect-error different context
+      DevToolsAPI.setUseSoftMenu(true);
+    });
   }
 
   /**
@@ -361,10 +455,27 @@ export class DevToolsPage extends PageWrapper {
   async waitForMany<ElementType extends Element|null = null, Selector extends string = string>(
       selector: Selector, count: number, root?: puppeteer.ElementHandle, asyncScope = new AsyncScope(),
       handler?: string) {
-    return await asyncScope.exec(() => this.waitForFunction(async () => {
-      const elements = await this.$$<ElementType, typeof selector>(selector, root, handler);
-      return elements.length >= count ? elements : undefined;
-    }, asyncScope), `Waiting for ${count} elements to match selector '${handler ? `${handler}/` : ''}${selector}'`);
+    return await asyncScope.exec(
+        () => this.waitForFunction(
+            async () => {
+              const elements = await this.$$<ElementType, typeof selector>(selector, root, handler);
+              return elements.length >= count ? elements : undefined;
+            },
+            asyncScope, undefined),
+        `Waiting for ${count} elements to match selector '${handler ? `${handler}/` : ''}${selector}'`);
+  }
+
+  async waitForManyWithTries<ElementType extends Element|null = null, Selector extends string = string>(
+      selector: Selector, count: number, tries: number, root?: puppeteer.ElementHandle, asyncScope = new AsyncScope(),
+      handler?: string) {
+    return await asyncScope.exec(
+        () => this.waitForFunctionWithTries(
+            async () => {
+              const elements = await this.$$<ElementType, typeof selector>(selector, root, handler);
+              return elements.length >= count ? elements : undefined;
+            },
+            {tries}, asyncScope),
+        `Waiting for ${count} elements to match selector '${handler ? `${handler}/` : ''}${selector}'`);
   }
 
   waitForAriaNone = (selector: string, root?: puppeteer.ElementHandle, asyncScope = new AsyncScope()) => {
@@ -466,7 +577,7 @@ export class DevToolsPage extends PageWrapper {
   }
 
   async clickMoreTabsButton(root?: puppeteer.ElementHandle<Element>) {
-    await this.click('aria/More tabs', {root});
+    await this.click('.tabbed-pane-header-tabs-drop-down-container', {root});
   }
 
   async closePanelTab(panelTabSelector: string) {
@@ -584,51 +695,152 @@ export class DevToolsPage extends PageWrapper {
     await this.pressKey('f', {control: true});
   }
 
-  async readClipboard(browserWrapper: BrowserWrapper) {
-    await browserWrapper.browser.defaultBrowserContext().overridePermissions(this.page.url(), ['clipboard-read']);
+  async readClipboard() {
+    await this.page.browserContext().overridePermissions(this.page.url(), ['clipboard-read', 'clipboard-write']);
     const clipboard = await this.page.evaluate(async () => await navigator.clipboard.readText());
-    await browserWrapper.browser.defaultBrowserContext().clearPermissionOverrides();
+    await this.page.browserContext().clearPermissionOverrides();
     return clipboard;
+  }
+
+  async setupOverridesFSMocks() {
+    await this.evaluateOnNewDocument(`
+      Object.defineProperty(window, 'InspectorFrontendHost', {
+        configurable: true,
+        enumerable: true,
+        get() {
+            return this._InspectorFrontendHost;
+        },
+        set(value) {
+            this._InspectorFrontendHost = value;
+            this._InspectorFrontendHost.fileSystem = null;
+            this._InspectorFrontendHost.addFileSystem = (type) => {
+              const onFileSystem = (fs) => {
+                this._InspectorFrontendHost.fileSystem = fs;
+                const fileSystem = {
+                  fileSystemName: 'sandboxedRequestedFileSystem',
+                  fileSystemPath: '/overrides',
+                  rootURL: 'filesystem:devtools://devtools/isolated/',
+                  type: 'overrides',
+                };
+                this._InspectorFrontendHost.events.dispatchEventToListeners('fileSystemAdded', {fileSystem});
+              };
+              window.webkitRequestFileSystem(window.TEMPORARY, 1024 * 1024, onFileSystem);
+            };
+            this._InspectorFrontendHost.removeFileSystem = (fileSystemPath) => {
+              const removalCallback = (entries) => {
+                entries.forEach(entry => {
+                  if (entry.isDirectory) {
+                    entry.removeRecursively(() => {});
+                  } else if (entry.isFile) {
+                    entry.remove(() => {});
+                  }
+                });
+              };
+
+              if (this._InspectorFrontendHost.fileSystem) {
+                this._InspectorFrontendHost.fileSystem.root.createReader().readEntries(removalCallback);
+              }
+
+              this._InspectorFrontendHost.fileSystem = null;
+              this._InspectorFrontendHost.events.dispatchEventToListeners('fileSystemRemoved', '/overrides');
+            }
+            this._InspectorFrontendHost.isolatedFileSystem = (_fileSystemId, _registeredName) => {
+              return this._InspectorFrontendHost.fileSystem;
+            };
+        }
+      });
+    `);
+    await this.reload();
+  }
+
+  async #getCDPSession() {
+    if (!this.#cdpSession) {
+      this.#cdpSession = await this.page.createCDPSession();
+    }
+    return this.#cdpSession;
+  }
+
+  async disableAnimations() {
+    const session = await this.#getCDPSession();
+    await session.send('Animation.enable');
+    await session.send('Animation.setPlaybackRate', {playbackRate: 30_000});
+  }
+
+  async enableAnimations() {
+    const session = await this.#getCDPSession();
+    await session.send('Animation.setPlaybackRate', {playbackRate: 1});
+  }
+
+  // Debugging utility to be used around flaky code and hopefully reveal visual glitches.
+  // Use it with the rdb wrapper to inspect the collected screenshots after a test failure.
+  async captureScreenshot(name?: string) {
+    const index = Object.keys(this.screenshotLog).length + 1;
+    const fullName = index + ' ' + (name ?? 'screenshot');
+    this.screenshotLog[fullName] = await this.screenshot();
   }
 }
 
 export interface DevtoolsSettings {
   enabledDevToolsExperiments: string[];
-  devToolsSettings: Record<string, string|boolean>;
-  // front_end/ui/legacy/DockController.ts DockState
+  disabledDevToolsExperiments: string[];
+  devToolsSettings: Record<string, unknown>;
+  /**
+   * Defined in front_end/ui/legacy/DockController.ts DockState
+   */
   dockingMode: 'bottom'|'right'|'left'|'undocked';
+  // DevTools panel to open on load
+  /**
+   * The name of the panel to be loaded initially
+   * This persist after {@link DevToolsPage.reload}
+   *
+   * To reload into a panel use {@link DevToolsPage.reloadWithParams}
+   */
+  panel: string|undefined;
 }
 
 export const DEFAULT_DEVTOOLS_SETTINGS: DevtoolsSettings = {
   enabledDevToolsExperiments: [],
+  disabledDevToolsExperiments: [],
   devToolsSettings: {
-    isUnderTest: true,
+    veLogsTestMode: true,
   },
   dockingMode: 'right',
+  panel: undefined
 };
 
 /**
- * @internal This should not be use outside setup
+ * @internal
  */
-async function setDevToolsSettings(devToolsPata: DevToolsPage, settings: Record<string, string|boolean>) {
+async function setDevToolsSettings(devToolsPata: DevToolsPage, settings: Record<string, unknown>) {
   if (!Object.keys(settings).length) {
     return;
   }
   const rawValues = Object.entries(settings).map(value => {
-    const rawValue = typeof value[1] === 'boolean' ? value[1].toString() : `'${value[1]}'`;
-    return [value[0], rawValue];
+    switch (typeof value[1]) {
+      case 'boolean':
+        return [value[0], value[1].toString()];
+      case 'string':
+      case 'number':
+      case 'bigint':
+        return [value[0], `'${value[1]}'`];
+      default:
+        return [value[0], JSON.stringify(value[1])];
+    }
   });
-
-  return await devToolsPata.evaluate(`(async () => {
+  const expression = `(async () => {
       const Common = await import('./core/common/common.js');
-      ${rawValues.map(([settingName, value]) => {
-    return `Common.Settings.Settings.instance().createSetting('${settingName}', ${value});`;
-  })}
-    })()`);
+      var setting;
+      ${
+      rawValues
+          .map(([settingName, value]) => `setting = Common.Settings.Settings.instance().createSetting('${settingName}');
+      setting.set(${value})`)
+          .join('\n      ')}
+    })()`;
+  return await devToolsPata.evaluate(expression);
 }
 
 /**
- * @internal This should not be use outside setup
+ * @internal
  */
 async function setDevToolsExperiments(devToolsPage: DevToolsPage, experiments: string[]) {
   if (!experiments.length) {
@@ -643,14 +855,24 @@ async function setDevToolsExperiments(devToolsPage: DevToolsPage, experiments: s
   }, experiments);
 }
 
-async function disableAnimations(devToolsPage: DevToolsPage) {
-  const session = await devToolsPage.page.createCDPSession();
-  await session.send('Animation.enable');
-  await session.send('Animation.setPlaybackRate', {playbackRate: 30_000});
+/**
+ * @internal
+ */
+async function setDisabledDevToolsExperiments(devToolsPage: DevToolsPage, experiments: string[]) {
+  if (!experiments.length) {
+    return;
+  }
+  return await devToolsPage.evaluate(async experiments => {
+    // @ts-expect-error evaluate in DevTools page
+    const Root = await import('./core/root/root.js');
+    for (const experiment of experiments) {
+      Root.Runtime.experiments.setEnabled(experiment, false);
+    }
+  }, experiments);
 }
 
 /**
- * @internal This should not be use outside setup
+ * @internal
  */
 async function setDockingSide(devToolsPage: DevToolsPage, side: string) {
   await devToolsPage.evaluate(`
@@ -661,8 +883,17 @@ async function setDockingSide(devToolsPage: DevToolsPage, side: string) {
   `);
 }
 
-export async function setupDevToolsPage(context: puppeteer.BrowserContext, settings: DevtoolsSettings) {
-  const devToolsTarget = await context.waitForTarget(target => target.url().startsWith('devtools://'));
+export async function setupDevToolsPage(
+    context: puppeteer.BrowserContext, settings: DevtoolsSettings, inspectedPage: InspectedPage) {
+  const session = await context.browser().target().createCDPSession();
+  // FIXME: get rid of the reload below and configure
+  // the initial DevTools state via the openDevTools command.
+  const {targetId} = await session.send('Target.openDevTools', {
+    // @ts-expect-error need to expose this via Puppeteer.
+    targetId: inspectedPage.page.target()._getTargetInfo().targetId
+  });
+  // @ts-expect-error need to expose this via Puppeteer.
+  const devToolsTarget = await context.waitForTarget(target => target._getTargetInfo().targetId === targetId);
   const frontend = await devToolsTarget?.page();
   if (!frontend) {
     throw new Error('Unable to find frontend target!');
@@ -671,13 +902,13 @@ export async function setupDevToolsPage(context: puppeteer.BrowserContext, setti
   const devToolsPage = new DevToolsPage(frontend);
   await devToolsPage.ensureReadyForTesting();
   await Promise.all([
-    disableAnimations(devToolsPage),
+    devToolsPage.disableAnimations(),
     setDevToolsSettings(devToolsPage, settings.devToolsSettings),
     setDevToolsExperiments(devToolsPage, settings.enabledDevToolsExperiments),
+    setDisabledDevToolsExperiments(devToolsPage, settings.disabledDevToolsExperiments),
   ]);
 
-  await devToolsPage.reload();
-  await devToolsPage.ensureReadyForTesting();
+  await devToolsPage.reloadWithParams({panel: settings.panel}, true);
 
   await Promise.all([
     devToolsPage.throttleCPUIfRequired(),

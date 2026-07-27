@@ -1,37 +1,36 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import '../../ui/legacy/components/data_grid/data_grid.js';
+import '../../ui/components/highlighting/highlighting.js';
 
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
-import * as TextUtils from '../../models/text_utils/text_utils.js';
+import type * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
-import {Directives, html, nothing, render} from '../../ui/lit/lit.js';
+import {html, nothing, render} from '../../ui/lit/lit.js';
 
 import developerResourcesListViewStyles from './developerResourcesListView.css.js';
 
-const {ref} = Directives;
-
 const UIStrings = {
   /**
-   *@description Text for the status of something
+   * @description Text for the status of something
    */
   status: 'Status',
   /**
-   *@description Text for web URLs
+   * @description Text for web URLs
    */
   url: 'URL',
   /**
-   *@description Text for the initiator of something
+   * @description Text for the initiator of something
    */
   initiator: 'Initiator',
   /**
-   *@description Text in Coverage List View of the Coverage tab
+   * @description Text in Coverage List View of the Coverage tab
    */
   totalBytes: 'Total Bytes',
   /**
@@ -39,15 +38,15 @@ const UIStrings = {
    */
   duration: 'Duration',
   /**
-   *@description Text for errors
+   * @description Text for errors
    */
   error: 'Error',
   /**
-   *@description Title for the Developer resources tab
+   * @description Title for the Developer resources tab
    */
   developerResources: 'Developer resources',
   /**
-   *@description Text for a context menu entry
+   * @description Text for a context menu entry
    */
   copyUrl: 'Copy URL',
   /**
@@ -56,19 +55,19 @@ const UIStrings = {
    */
   copyInitiatorUrl: 'Copy initiator URL',
   /**
-   *@description Text for the status column of a list view
+   * @description Text for the status column of a list view
    */
   pending: 'pending',
   /**
-   *@description Text for the status column of a list view
+   * @description Text for the status column of a list view
    */
   success: 'success',
   /**
-   *@description Text for the status column of a list view
+   * @description Text for the status column of a list view
    */
   failure: 'failure',
   /**
-   *@description Accessible text for the value in bytes in memory allocation.
+   * @description Accessible text for the value in bytes in memory allocation.
    */
   sBytes: '{n, plural, =1 {# byte} other {# bytes}}',
   /**
@@ -87,7 +86,6 @@ const {withThousandsSeparator} = Platform.NumberUtilities;
 export interface ViewInput {
   items: SDK.PageResourceLoader.PageResource[];
   selectedItem: SDK.PageResourceLoader.PageResource|null;
-  highlight: (element: Element|undefined, textContent: string|undefined, columnId: string) => void;
   filters: TextUtils.TextUtils.ParsedFilter[];
   onContextMenu: (e: CustomEvent<{menu: UI.ContextMenu.ContextMenu, element: HTMLElement}>) => void;
   onSelect: (e: CustomEvent<HTMLElement>) => void;
@@ -98,6 +96,20 @@ export interface ViewInput {
 export type View = (input: ViewInput, output: object, target: HTMLElement) => void;
 
 const DEFAULT_VIEW: View = (input, _output, target) => {
+  function highlightRange(textContent: string|undefined, columnId: string): string {
+    if (!textContent) {
+      return '';
+    }
+    const filter = input.filters.find(filter => filter.key?.split(',')?.includes(columnId));
+    if (!filter?.regex) {
+      return '';
+    }
+    const matches = filter.regex.exec(textContent ?? '');
+    if (!matches?.length) {
+      return '';
+    }
+    return `${matches.index},${matches[0].length}`;
+  }
   // clang-format off
   render(html`
       <style>${developerResourcesListViewStyles}</style>
@@ -135,11 +147,11 @@ const DEFAULT_VIEW: View = (input, _output, target) => {
                     item.success === false ? i18nString(UIStrings.failure) :
                                              i18nString(UIStrings.pending)}</td>
               <td title=${item.url} aria-label=${item.url}>
-                <div aria-hidden="true" part="url-outer"
-                     ${ref(e => input.highlight(e, item.url, 'url'))}>
+                <devtools-highlight aria-hidden="true" part="url-outer"
+                                    ranges=${highlightRange(item.url, 'url')}>
                   <div part="url-prefix">${splitURL ? splitURL[1] : item.url}</div>
                   <div part="url-suffix">${splitURL ? splitURL[2] : ''}</div>
-                </div>
+                </devtools-highlight>
               </td>
               <td title=${item.initiator.initiatorUrl || ''}
                   aria-label=${item.initiator.initiatorUrl || ''}
@@ -154,15 +166,15 @@ const DEFAULT_VIEW: View = (input, _output, target) => {
                   item.duration !== null ? html`<span>${i18n.TimeUtilities.millisToString(item.duration)}</span>` : ''}</td>
               <td class="error-message">
                 ${item.errorMessage ? html`
-                <span ${ref(e => input.highlight(e, item.errorMessage, 'error-message'))}>
+                <devtools-highlight ranges=${highlightRange(item.errorMessage, 'error-message')}>
                   ${item.errorMessage}
-                </span>` : nothing}
+                </devtools-highlight>` : nothing}
               </td>
             </tr>`;
           })}
           </table>
         </devtools-data-grid>`,
-        target, {host: input});
+        target);
   // clang-format on
 };
 
@@ -173,7 +185,7 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
   readonly #view: View;
   #filters: TextUtils.TextUtils.ParsedFilter[] = [];
   constructor(element: HTMLElement, view = DEFAULT_VIEW) {
-    super(true, undefined, element);
+    super(element, {useShadowDom: true});
     this.#view = view;
   }
 
@@ -224,7 +236,7 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
       } else {
         resourceMatch = i18nString(UIStrings.numberOfResourceMatch, {n: numberOfResourceMatch});
       }
-      UI.ARIAUtils.alert(resourceMatch);
+      UI.ARIAUtils.LiveAnnouncer.alert(resourceMatch);
     });
   }
 
@@ -233,7 +245,6 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
       items: this.#items,
       selectedItem: this.#selectedItem,
       filters: this.#filters,
-      highlight: this.#highlight.bind(this),
       onContextMenu: (e: CustomEvent<{menu: UI.ContextMenu.ContextMenu, element: HTMLElement}>) => {
         if (e.detail?.element) {
           this.#populateContextMenu(e.detail.menu, e.detail.element);
@@ -255,29 +266,5 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
     };
     const output = {};
     this.#view(input, output, this.contentElement);
-  }
-
-  #highlight(element: Element|undefined, textContent: string|undefined, columnId: string): void {
-    if (!element || !textContent) {
-      return;
-    }
-    const highlightContainers =
-        new Set<Element>([...element.querySelectorAll('.filter-highlight')].map(e => e.parentElement as Element));
-    for (const container of highlightContainers) {
-      container.textContent = container.textContent;
-    }
-    const filter = this.#filters.find(filter => filter.key?.split(',')?.includes(columnId));
-    if (!filter?.regex) {
-      return;
-    }
-    const matches = filter.regex.exec(element.textContent ?? '');
-    if (!matches?.length) {
-      return;
-    }
-    const range = new TextUtils.TextRange.SourceRange(matches.index, matches[0].length);
-    UI.UIUtils.highlightRangesWithStyleClass(element, [range], 'filter-highlight');
-    for (const el of element.querySelectorAll('.filter-highlight')) {
-      el.setAttribute('part', 'filter-highlight');
-    }
   }
 }

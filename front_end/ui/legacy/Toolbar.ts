@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2009 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2009 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
@@ -53,19 +27,19 @@ import {CheckboxLabel, LongClickController} from './UIUtils.js';
 
 const UIStrings = {
   /**
-   *@description Announced screen reader message for ToolbarSettingToggle when the setting is toggled on.
+   * @description Announced screen reader message for ToolbarSettingToggle when the setting is toggled on.
    */
   pressed: 'pressed',
   /**
-   *@description Announced screen reader message for ToolbarSettingToggle when the setting is toggled off.
+   * @description Announced screen reader message for ToolbarSettingToggle when the setting is toggled off.
    */
   notPressed: 'not pressed',
   /**
-   *@description Tooltip shown when the user hovers over the clear icon to empty the text input.
+   * @description Tooltip shown when the user hovers over the clear icon to empty the text input.
    */
   clearInput: 'Clear',
   /**
-   *@description Placeholder for filter bars that shows before the user types in a filter keyword.
+   * @description Placeholder for filter bars that shows before the user types in a filter keyword.
    */
   filter: 'Filter',
 } as const;
@@ -75,14 +49,14 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 /**
  * Custom element for toolbars.
  *
- * @attr floating - If present the toolbar is rendered in columns, with a border
+ * @property floating - The `"floating"` attribute is reflected as property.
+ * @property wrappable - The `"wrappable"` attribute is reflected as property.
+ * @attribute floating - If present the toolbar is rendered in columns, with a border
  *                  around it, and a non-transparent background. This is used to
  *                  build vertical toolbars that open with long-click. Defaults
  *                  to `false`.
- * @attr wrappable - If present the toolbar items will wrap to a new row and the
+ * @attribute wrappable - If present the toolbar items will wrap to a new row and the
  *                   toolbar height increases.
- * @prop {boolean} floating - The `"floating"` attribute is reflected as property.
- * @prop {boolean} wrappable - The `"wrappable"` attribute is reflected as property.
  */
 export class Toolbar extends HTMLElement {
   #shadowRoot = this.attachShadow({mode: 'open'});
@@ -120,7 +94,7 @@ export class Toolbar extends HTMLElement {
         if (element instanceof Buttons.Button.Button) {
           item = new ToolbarButton('', undefined, undefined, undefined, element);
         } else if (element instanceof ToolbarInputElement) {
-          item = element.item;
+          item = element.item as ToolbarItem;
         } else if (element instanceof HTMLSelectElement) {
           item = new ToolbarComboBox(null, element.title, undefined, undefined, element);
         } else {
@@ -142,7 +116,7 @@ export class Toolbar extends HTMLElement {
   /**
    * Returns whether this toolbar is floating.
    *
-   * @return `true` if the `"floating"` attribute is present on this toolbar,
+   * @returns `true` if the `"floating"` attribute is present on this toolbar,
    *         otherwise `false`.
    */
   get floating(): boolean {
@@ -161,7 +135,7 @@ export class Toolbar extends HTMLElement {
   /**
    * Returns whether this toolbar is wrappable.
    *
-   * @return `true` if the `"wrappable"` attribute is present on this toolbar,
+   * @returns `true` if the `"wrappable"` attribute is present on this toolbar,
    *         otherwise `false`.
    */
   get wrappable(): boolean {
@@ -492,7 +466,7 @@ export interface ToolbarButtonOptions {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export class ToolbarItem<T = any, E extends HTMLElement = HTMLElement> extends Common.ObjectWrapper.ObjectWrapper<T> {
   element: E;
-  private visibleInternal: boolean;
+  #visible: boolean;
   enabled: boolean;
   toolbar: Toolbar|null;
   protected title?: string;
@@ -500,7 +474,7 @@ export class ToolbarItem<T = any, E extends HTMLElement = HTMLElement> extends C
   constructor(element: E) {
     super();
     this.element = element;
-    this.visibleInternal = true;
+    this.#visible = true;
     this.enabled = true;
 
     /**
@@ -537,21 +511,29 @@ export class ToolbarItem<T = any, E extends HTMLElement = HTMLElement> extends C
   }
 
   visible(): boolean {
-    return this.visibleInternal;
+    return this.#visible;
   }
 
   setVisible(x: boolean): void {
-    if (this.visibleInternal === x) {
+    if (this.#visible === x) {
       return;
     }
     this.element.classList.toggle('hidden', !x);
-    this.visibleInternal = x;
+    this.#visible = x;
     if (this.toolbar && !(this instanceof ToolbarSeparator)) {
       this.toolbar.hideSeparatorDupes();
     }
   }
 
   setCompactLayout(_enable: boolean): void {
+  }
+
+  setMaxWidth(width: number): void {
+    this.element.style.maxWidth = width + 'px';
+  }
+
+  setMinWidth(width: number): void {
+    this.element.style.minWidth = width + 'px';
   }
 }
 
@@ -851,11 +833,12 @@ export class ToolbarFilter extends ToolbarInput {
 }
 
 export class ToolbarInputElement extends HTMLElement {
-  static observedAttributes = ['value'];
+  static observedAttributes = ['value', 'disabled'];
 
-  item!: ToolbarInput;
+  item?: ToolbarInput;
   datalist: HTMLDataListElement|null = null;
   value: string|undefined = undefined;
+  #disabled = false;
 
   connectedCallback(): void {
     if (this.item) {
@@ -884,6 +867,9 @@ export class ToolbarInputElement extends HTMLElement {
     if (this.value) {
       this.item.setValue(this.value);
     }
+    if (this.#disabled) {
+      this.item.setEnabled(false);
+    }
     this.item.addEventListener(ToolbarInput.Event.TEXT_CHANGED, event => {
       this.dispatchEvent(new CustomEvent('change', {detail: event.data}));
     });
@@ -893,7 +879,7 @@ export class ToolbarInputElement extends HTMLElement {
   }
 
   override focus(): void {
-    this.item.focus();
+    this.item?.focus();
   }
 
   async #onAutocomplete(expression: string, prefix: string, force?: boolean): Promise<Suggestion[]> {
@@ -912,7 +898,24 @@ export class ToolbarInputElement extends HTMLElement {
       } else {
         this.value = newValue;
       }
+    } else if (name === 'disabled') {
+      this.#disabled = typeof newValue === 'string';
+      if (this.item) {
+        this.item.setEnabled(!this.#disabled);
+      }
     }
+  }
+
+  set disabled(disabled: boolean) {
+    if (disabled) {
+      this.setAttribute('disabled', '');
+    } else {
+      this.removeAttribute('disabled');
+    }
+  }
+
+  get disabled(): boolean {
+    return this.hasAttribute('disabled');
   }
 }
 customElements.define('devtools-toolbar-input', ToolbarInputElement);
@@ -972,6 +975,7 @@ export class ToolbarMenuButton extends ToolbarItem<ToolbarButton.EventTypes> {
   private readonly contextMenuHandler: (arg0: ContextMenu) => void;
   private readonly useSoftMenu: boolean;
   private readonly keepOpen: boolean;
+  private readonly isIconDropdown: boolean;
   private triggerTimeoutId?: number;
   #triggerDelay = 200;
 
@@ -1005,6 +1009,7 @@ export class ToolbarMenuButton extends ToolbarItem<ToolbarButton.EventTypes> {
     this.contextMenuHandler = contextMenuHandler;
     this.useSoftMenu = Boolean(useSoftMenu);
     this.keepOpen = Boolean(keepOpen);
+    this.isIconDropdown = Boolean(isIconDropdown);
     ARIAUtils.markAsMenuButton(this.element);
   }
 
@@ -1066,10 +1071,12 @@ export class ToolbarMenuButton extends ToolbarItem<ToolbarButton.EventTypes> {
   private trigger(event: Event): void {
     delete this.triggerTimeoutId;
 
+    const horizontalPosition =
+        this.isIconDropdown ? this.element.getBoundingClientRect().right : this.element.getBoundingClientRect().left;
     const contextMenu = new ContextMenu(event, {
       useSoftMenu: this.useSoftMenu,
       keepOpen: this.keepOpen,
-      x: this.element.getBoundingClientRect().right,
+      x: horizontalPosition,
       y: this.element.getBoundingClientRect().top + this.element.offsetHeight,
       // Without adding a delay, pointer events will be un-ignored too early, and a single click causes
       // the context menu to be closed and immediately re-opened on Windows (https://crbug.com/339560549).
@@ -1111,7 +1118,7 @@ export class ToolbarSettingToggle extends ToolbarToggle {
     this.setToggled(toggled);
     const toggleAnnouncement = toggled ? i18nString(UIStrings.pressed) : i18nString(UIStrings.notPressed);
     if (this.willAnnounceState) {
-      ARIAUtils.alert(toggleAnnouncement);
+      ARIAUtils.LiveAnnouncer.alert(toggleAnnouncement);
     }
     this.willAnnounceState = false;
     this.setTitle(this.defaultTitle);
@@ -1217,14 +1224,6 @@ export class ToolbarComboBox extends ToolbarItem<void, HTMLSelectElement> {
   selectedIndex(): number {
     return this.element.selectedIndex;
   }
-
-  setMaxWidth(width: number): void {
-    this.element.style.maxWidth = width + 'px';
-  }
-
-  setMinWidth(width: number): void {
-    this.element.style.minWidth = width + 'px';
-  }
 }
 
 export interface Option {
@@ -1233,12 +1232,12 @@ export interface Option {
 }
 
 export class ToolbarSettingComboBox extends ToolbarComboBox {
-  private optionsInternal: Option[];
+  #options: Option[];
   private readonly setting: Common.Settings.Setting<string>;
   private muteSettingListener?: boolean;
   constructor(options: Option[], setting: Common.Settings.Setting<string>, accessibleName: string) {
     super(null, accessibleName, undefined, setting.name);
-    this.optionsInternal = options;
+    this.#options = options;
     this.setting = setting;
     this.element.addEventListener('change', this.onSelectValueChange.bind(this), false);
     this.setOptions(options);
@@ -1246,7 +1245,7 @@ export class ToolbarSettingComboBox extends ToolbarComboBox {
   }
 
   setOptions(options: Option[]): void {
-    this.optionsInternal = options;
+    this.#options = options;
     this.element.removeChildren();
     for (let i = 0; i < options.length; ++i) {
       const dataOption = options[i];
@@ -1259,7 +1258,7 @@ export class ToolbarSettingComboBox extends ToolbarComboBox {
   }
 
   value(): string {
-    return this.optionsInternal[this.selectedIndex()].value;
+    return this.#options[this.selectedIndex()].value;
   }
 
   override select(option: Element): void {
@@ -1269,7 +1268,7 @@ export class ToolbarSettingComboBox extends ToolbarComboBox {
 
   override setSelectedIndex(index: number): void {
     super.setSelectedIndex(index);
-    const option = this.optionsInternal.at(index);
+    const option = this.#options.at(index);
     if (option) {
       this.setTitle(option.label);
     }
@@ -1293,8 +1292,8 @@ export class ToolbarSettingComboBox extends ToolbarComboBox {
     }
 
     const value = this.setting.get();
-    for (let i = 0; i < this.optionsInternal.length; ++i) {
-      if (value === this.optionsInternal[i].value) {
+    for (let i = 0; i < this.#options.length; ++i) {
+      if (value === this.#options[i].value) {
         this.setSelectedIndex(i);
         break;
       }
@@ -1305,7 +1304,7 @@ export class ToolbarSettingComboBox extends ToolbarComboBox {
    * Run when the user interacts with the <select> element.
    */
   private onSelectValueChange(_event: Event): void {
-    const option = this.optionsInternal[this.selectedIndex()];
+    const option = this.#options[this.selectedIndex()];
     this.muteSettingListener = true;
     this.setting.set(option.value);
     this.muteSettingListener = false;

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -67,7 +67,8 @@ const UIStrings = {
    * grouped together or not. In Computed Style Widget of the Elements panel.
    */
   group: 'Group',
-  /** [
+  /**
+   * [
    * @description Text shown to the user when a filter is applied to the computed CSS properties, but
    * no properties matched the filter and thus no results were returned.
    */
@@ -90,7 +91,7 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
  * Rendering a property's name and value is expensive, and each time we do it
  * it generates a new HTML element. If we call this directly from our Lit
  * components, we will generate a brand new DOM element on each single render.
- * This is very expensive and unneccessary - for the majority of re-renders a
+ * This is very expensive and unnecessary - for the majority of re-renders a
  * property's name and value does not change. So we cache the rest of rendering
  * the name and value in a map, where the key used is a combination of the
  * property's name and value. This ensures that we only re-generate this element
@@ -190,7 +191,7 @@ const createTraceElement =
       return trace;
     };
 
-// clang-format off
+/** clang-format off **/
 class ColorRenderer extends rendererBase(SDK.CSSPropertyParserMatchers.ColorMatch) {
   // clang-format on
   override render(match: SDK.CSSPropertyParserMatchers.ColorMatch, context: RenderingContext): Node[] {
@@ -204,7 +205,6 @@ class ColorRenderer extends rendererBase(SDK.CSSPropertyParserMatchers.ColorMatc
     swatch.renderColor(color);
     const valueElement = document.createElement('span');
     valueElement.textContent = match.text;
-    swatch.append(valueElement);
 
     swatch.addEventListener(
         InlineEditor.ColorSwatch.ColorChangedEvent.eventName, (event: InlineEditor.ColorSwatch.ColorChangedEvent) => {
@@ -213,7 +213,7 @@ class ColorRenderer extends rendererBase(SDK.CSSPropertyParserMatchers.ColorMatc
         });
 
     context.addControl('color', swatch);
-    return [swatch];
+    return [swatch, valueElement];
   }
 
   matcher(): SDK.CSSPropertyParserMatchers.ColorMatcher {
@@ -552,7 +552,7 @@ export class ComputedStyleWidget extends UI.ThrottledWidget.ThrottledWidget {
     const rule = property.ownerStyle.parentRule;
 
     if (rule) {
-      const header = rule.styleSheetId ? matchedStyles.cssModel().styleSheetHeaderForId(rule.styleSheetId) : null;
+      const header = rule.header;
       if (header && !header.isAnonymousInlineStyleSheet()) {
         contextMenu.defaultSection().appendItem(i18nString(UIStrings.navigateToSelectorSource), () => {
           StylePropertiesSection.tryNavigateToRuleLocation(matchedStyles, rule);

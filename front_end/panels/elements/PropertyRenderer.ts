@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -17,13 +17,13 @@ import {unescapeCssString} from './StylesSidebarPane.js';
 
 const UIStrings = {
   /**
-   *@description Text that is announced by the screen reader when the user focuses on an input field for entering the name of a CSS property in the Styles panel
-   *@example {margin} PH1
+   * @description Text that is announced by the screen reader when the user focuses on an input field for entering the name of a CSS property in the Styles panel
+   * @example {margin} PH1
    */
   cssPropertyName: '`CSS` property name: {PH1}',
   /**
-   *@description Text that is announced by the screen reader when the user focuses on an input field for entering the value of a CSS property in the Styles panel
-   *@example {10px} PH1
+   * @description Text that is announced by the screen reader when the user focuses on an input field for entering the value of a CSS property in the Styles panel
+   * @example {10px} PH1
    */
   cssPropertyValue: '`CSS` property value: {PH1}',
 } as const;
@@ -57,8 +57,10 @@ export function rendererBase<MatchT extends SDK.CSSPropertyParser.Match>(
   return RendererBase;
 }
 
-// This class implements highlighting for rendered nodes in value traces. On hover, all nodes belonging to the same
-// Match (using object identity) are highlighted.
+/**
+ * This class implements highlighting for rendered nodes in value traces. On hover, all nodes belonging to the same
+ * Match (using object identity) are highlighted.
+ **/
 export class Highlighting {
   static readonly REGISTRY_NAME = 'css-value-tracing';
   // This holds a stack of active ranges, the top-stack is the currently highlighted set. mouseenter and mouseleave
@@ -145,19 +147,21 @@ export class Highlighting {
   }
 }
 
-// This class is used to guide value tracing when passed to the Renderer. Tracing has two phases. First, substitutions
-// such as var() are applied step by step. In each step, all vars in the value are replaced by their definition until no
-// vars remain. In the second phase, we evaluate other functions such as calc() or min() or color-mix(). Which CSS
-// function types are actually substituted or evaluated is not relevant here, rather it is decided by an individual
-// MatchRenderer.
-//
-// Callers don't need to keep track of the tracing depth (i.e., the number of substitution/evaluation steps).
-// TracingContext is stateful and keeps track of the depth, so callers can progressively produce steps by calling
-// TracingContext#nextSubstitution or TracingContext#nextEvaluation. Calling Renderer with the tracing context will then
-// produce the next step of tracing. The tracing depth is passed to the individual MatchRenderers by way of
-// TracingContext#substitution or TracingContext#applyEvaluation/TracingContext#evaluation (see function-level comments
-// about how these two play together), which MatchRenderers call to request a fresh TracingContext for the next level of
-// substitution/evaluation.
+/**
+ * This class is used to guide value tracing when passed to the Renderer. Tracing has two phases. First, substitutions
+ * such as var() are applied step by step. In each step, all vars in the value are replaced by their definition until no
+ * vars remain. In the second phase, we evaluate other functions such as calc() or min() or color-mix(). Which CSS
+ * function types are actually substituted or evaluated is not relevant here, rather it is decided by an individual
+ * MatchRenderer.
+ *
+ * Callers don't need to keep track of the tracing depth (i.e., the number of substitution/evaluation steps).
+ * TracingContext is stateful and keeps track of the depth, so callers can progressively produce steps by calling
+ * TracingContext#nextSubstitution or TracingContext#nextEvaluation. Calling Renderer with the tracing context will then
+ * produce the next step of tracing. The tracing depth is passed to the individual MatchRenderers by way of
+ * TracingContext#substitution or TracingContext#applyEvaluation/TracingContext#evaluation (see function-level comments
+ * about how these two play together), which MatchRenderers call to request a fresh TracingContext for the next level of
+ * substitution/evaluation.
+ **/
 export class TracingContext {
   #substitutionDepth = 0;
   #hasMoreSubstitutions: boolean;
@@ -183,7 +187,8 @@ export class TracingContext {
     this.#highlighting = highlighting;
     this.#hasMoreSubstitutions =
         matchedResult?.hasMatches(
-            SDK.CSSPropertyParserMatchers.VariableMatch, SDK.CSSPropertyParserMatchers.BaseVariableMatch) ??
+            SDK.CSSPropertyParserMatchers.VariableMatch, SDK.CSSPropertyParserMatchers.BaseVariableMatch,
+            SDK.CSSPropertyParserMatchers.AttributeMatch, SDK.CSSPropertyParserMatchers.EnvFunctionMatch) ??
         false;
     this.#propertyName = matchedResult?.ast.propertyName ?? null;
     this.#longhandOffset = initialLonghandOffset;
@@ -426,7 +431,7 @@ export class Renderer extends SDK.CSSPropertyParser.TreeWalker {
         node => this.walkExcludingSuccessors(
             context.ast.subtree(node), context.property, context.renderers, context.matchedResult, cssControls,
             context.options, context.tracing));
-    const nodes = renderers.map(node => node.#output).reduce(mergeWithSpacing);
+    const nodes = renderers.map(node => node.#output).reduce(mergeWithSpacing, []);
     return {nodes, cssControls};
   }
 
@@ -535,7 +540,7 @@ export class URLRenderer extends rendererBase(SDK.CSSPropertyParserMatchers.URLM
     const container = document.createDocumentFragment();
     UI.UIUtils.createTextChild(container, 'url(');
     let hrefUrl: Platform.DevToolsPath.UrlString|null = null;
-    if (this.rule && this.rule.resourceURL()) {
+    if (this.rule?.resourceURL()) {
       hrefUrl = Common.ParsedURL.ParsedURL.completeURL(this.rule.resourceURL(), url);
     } else if (this.node) {
       hrefUrl = this.node.resolveURL(url);

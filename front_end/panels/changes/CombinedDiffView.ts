@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -74,7 +74,7 @@ function renderSingleDiffView(singleDiffViewInput: SingleDiffViewInput): Lit.Tem
     <details open class=${classes}>
       <summary>
         <div class="summary-left">
-          <devtools-icon class="drop-down-icon" .name=${'arrow-drop-down'}></devtools-icon>
+          <devtools-icon class="drop-down-icon" name="arrow-drop-down"></devtools-icon>
           ${icon}
           <button class="file-name-link" jslog=${VisualLogging.action('jump-to-file')} @click=${() => onFileNameClick(fileUrl)}>${fileName}</button>
         </div>
@@ -127,7 +127,7 @@ export class CombinedDiffView extends UI.Widget.Widget {
     `,
         target, {host: target});
   }) {
-    super(false, false, element);
+    super(element);
     this.registerRequiredCSS(combinedDiffViewStyles);
     this.#view = view;
   }
@@ -149,7 +149,7 @@ export class CombinedDiffView extends UI.Widget.Widget {
     void this.#initializeModifiedUISourceCodes();
   }
 
-  set selectedFileUrl(fileUrl: string) {
+  set selectedFileUrl(fileUrl: string|undefined) {
     this.#selectedFileUrl = fileUrl;
     this.requestUpdate();
     void this.updateComplete.then(() => {

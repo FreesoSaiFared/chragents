@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,12 +14,14 @@ import type * as Models from './Models.js';
 export type InsightSetContext = InsightSetContextWithoutNavigation|InsightSetContextWithNavigation;
 
 export interface InsightSetContextWithoutNavigation {
+  options: Types.Configuration.ParseOptions;
   bounds: Types.Timing.TraceWindowMicro;
   frameId: string;
   navigation?: never;
 }
 
 export interface InsightSetContextWithNavigation {
+  options: Types.Configuration.ParseOptions;
   bounds: Types.Timing.TraceWindowMicro;
   frameId: string;
   navigation: Types.Events.NavigationStart;
@@ -74,6 +76,7 @@ export type InsightModel<UIStrings extends Record<string, string> = Record<strin
       strings: UIStrings,
       title: Common.UIString.LocalizedString,
       description: Common.UIString.LocalizedString,
+      docs: string,
       category: InsightCategory,
       state: 'pass' | 'fail' | 'informative',
       /** Used by RelatedInsightChips.ts */
@@ -94,10 +97,12 @@ export type InsightModel<UIStrings extends Record<string, string> = Record<strin
        * If this insight is attached to a navigation, this stores its ID.
        */
       navigationId?: string,
+      /** This is lazily-generated because some insights may create many overlays. */
+      createOverlays?: () => Types.Overlays.Overlay[],
     };
 
 export type PartialInsightModel<T> =
-    Omit<T, 'strings'|'title'|'description'|'category'|'state'|'insightKey'|'navigationId'|'frameId'>;
+    Omit<T, 'strings'|'title'|'description'|'docs'|'category'|'state'|'insightKey'|'navigationId'|'frameId'>;
 
 /**
  * Contains insights for a specific navigation. If a trace began after a navigation already started,
@@ -147,4 +152,6 @@ export const enum InsightKeys {
   RENDER_BLOCKING = 'RenderBlocking',
   SLOW_CSS_SELECTOR = 'SlowCSSSelector',
   VIEWPORT = 'Viewport',
+  MODERN_HTTP = 'ModernHTTP',
+  CACHE = 'Cache',
 }

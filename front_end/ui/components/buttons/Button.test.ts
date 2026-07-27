@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -208,6 +208,13 @@ describe('Button', () => {
     const bigContainerHeight = fullWidthContainer.getBoundingClientRect().height;
     assert.isBelow(buttonHeight, bigContainerHeight);
     assert.isAbove(buttonHeight, 0);
+  });
+
+  it('sets the accessible label on the internal button', async () => {
+    const button = renderButton({variant: Buttons.Button.Variant.PRIMARY, iconName, accessibleLabel: 'test-label'}, '');
+    const innerButton = button.shadowRoot?.querySelector('button');
+    assert.isOk(innerButton);
+    assert.strictEqual(innerButton.getAttribute('aria-label'), 'test-label');
   });
 
   describe('in forms', () => {

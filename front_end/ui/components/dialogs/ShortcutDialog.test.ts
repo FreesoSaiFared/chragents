@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,9 +51,7 @@ describeWithLocale('ShortcutDialog', () => {
   function getDialogFromShortcutDialog(shortcutDialog: Dialogs.ShortcutDialog.ShortcutDialog) {
     assert.isNotNull(shortcutDialog.shadowRoot);
     const dialog = shortcutDialog.shadowRoot.querySelector('devtools-button-dialog');
-    if (!dialog) {
-      assert.fail('devtools-button-dialog not found');
-    }
+    assert.isOk(dialog, 'devtools-button-dialog not found');
     assert.instanceOf(dialog, HTMLElement);
     return dialog;
   }

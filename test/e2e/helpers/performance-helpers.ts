@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@ import type * as puppeteer from 'puppeteer-core';
 
 import type {DevToolsPage} from '../../e2e_non_hosted/shared/frontend-helper.js';
 import type {InspectedPage} from '../../e2e_non_hosted/shared/target-helper.js';
-import {waitForMany} from '../../shared/helper.js';
 import {getBrowserAndPagesWrappers} from '../../shared/non_hosted_wrappers.js';
 
 import {openCommandMenu} from './quick_open-helpers.js';
@@ -75,8 +74,9 @@ export async function openCaptureSettings(
             [
               veImpression('Toggle', 'timeline-capture-layers-and-pictures'),
               veImpression('Toggle', 'timeline-capture-selector-stats'),
+              veImpression('Toggle', 'timeline-disable-js-sampling'),
               veImpression('DropDown', 'cpu-throttling'),
-              veImpression('DropDown', 'preferred-network-condition'),
+              veImpression('DropDown', 'active-network-condition-key'),
               veImpression('Toggle', 'timeline-show-extension-data'),
             ]),
       ],
@@ -207,7 +207,7 @@ export async function toggleCaseSensitive(devToolsPage: DevToolsPage = getBrowse
 
 export async function toggleRegExButtonBottomUp(
     devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
-  const regexButton = await devToolsPage.waitFor('[aria-label="Use regular expression"]');
+  const regexButton = await devToolsPage.waitFor('.timeline-tree-view [aria-label="Use regular expression"]');
   await regexButton.click();
   await expectVeEvents(
       [
@@ -294,17 +294,6 @@ export async function getTotalTimeFromPie(devToolsPage: DevToolsPage = getBrowse
   return parseInt(totalText, 10);
 }
 
-export async function getRenderingTimeFromSummary(): Promise<[number, string]> {
-  const categoryValues = await waitForMany('.category-value', 6);
-  const categoryNames = await waitForMany('.category-name', 6);
-
-  // update the index if the rendering time is showing in a different row
-  const categoryName = await categoryNames[1].evaluate(node => node.textContent as string);
-  const categoryValue = await categoryValues[1].evaluate(node => node.textContent as string);
-
-  return [parseInt(categoryValue, 10), categoryName];
-}
-
 export async function retrieveSelectedAndExpandedActivityItems(frontend: puppeteer.Page) {
   const treeItems = await frontend.$$('.expanded > td.activity-column,.selected > td.activity-column');
   const tree = [];
@@ -331,6 +320,7 @@ export async function navigateToSelectorStatsTab(
               veImpression('TableHeader', 'reject-percentage'),
               veImpression('TableHeader', 'selector'),
               veImpression('TableHeader', 'style-sheet-id'),
+              veImpression('TableHeader', 'invalidation-count'),
               veImpression('TableRow', undefined, [veImpression('TableCell', 'elapsed-us')]),
             ]),
       ],
@@ -357,7 +347,7 @@ export async function enableCSSSelectorStats(devToolsPage: DevToolsPage = getBro
   // Wait for the checkbox to load
   const toggle = await devToolsPage.waitForElementWithTextContent(CSS_SELECTOR_STATS_TITLE) as
       puppeteer.ElementHandle<HTMLInputElement>;
-  await devToolsPage.waitForFunction(() => toggle.evaluate((e: HTMLInputElement) => {
+  await devToolsPage.waitForFunction(() => toggle.evaluate(e => {
     if (e.disabled) {
       return false;
     }
@@ -380,7 +370,6 @@ export function veImpressionForPerformancePanel() {
           veImpression('Action', 'timeline.record-reload'),
           veImpression('Action', 'timeline.clear'),
           veImpression('Action', 'timeline.load-from-file'),
-          veImpression('DropDown', 'timeline.save-to-file-more-options'),
           veImpression('DropDown', 'history'),
           veImpression('Toggle', 'timeline-show-screenshots'),
           veImpression('Toggle', 'timeline-show-memory'),

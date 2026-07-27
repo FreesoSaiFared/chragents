@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -108,7 +108,7 @@ export async function createAndStartRecording(name?: string, selectorAttribute?:
   await createRecording(name ?? TEST_RECORDING_NAME, selectorAttribute, devToolsPage);
   const onRecordingStarted = onRecordingStateChanged(devToolsPage);
   await devToolsPage.click('devtools-control-button');
-  await devToolsPage.waitFor('devtools-recording-view');
+  await devToolsPage.waitFor('.recording-view');
   await onRecordingStarted;
 }
 
@@ -166,11 +166,11 @@ interface RecordingSnapshotOptions {
   /**
    * Whether to keep the offsets for recording or not.
    *
-   * @defaultValue `false`
+   * @default false
    */
   offsets?: boolean;
   /**
-   * @defaultValue `true`
+   * @default true
    */
   expectCommon?: boolean;
   resource?: string;
@@ -308,7 +308,7 @@ export async function startOrStopRecordingShortcut(
   await executeOn.keyboard.up(ControlOrMeta);
   await executeOn.keyboard.up('e');
 
-  await devToolsPage.waitFor('devtools-recording-view');
+  await devToolsPage.waitFor('.recording-view');
   return await onRecordingStarted;
 }
 
@@ -348,6 +348,7 @@ export async function toggleCodeView(
   await devToolsPage.page.keyboard.down('b');
   await devToolsPage.page.keyboard.up(ControlOrMeta);
   await devToolsPage.page.keyboard.up('b');
+  await devToolsPage.drainTaskQueue();
 }
 
 export async function raf(page: Page): Promise<void> {

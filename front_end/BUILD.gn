@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -29,6 +29,8 @@ group("front_end") {
     "entrypoints/shell",
     "entrypoints/wasmparser_worker:worker_entrypoint",
     "entrypoints/worker_app:entrypoint",
+    "panels/ai_chat:ai_chat_release_js_metadata",
+    "panels/ai_chat:ai_chat_release_css_metadata",
     "third_party/vscode.web-custom-data:web_custom_data",
   ]
 }
@@ -55,7 +57,7 @@ group("web_test_resources") {
 node_action("devtools_json") {
   inputs = []
 
-  script = "scripts/build/generate_devtools_json.js"
+  script = "scripts/build/generate_devtools_json.mjs"
 
   args = [ rebase_path(
           "$target_gen_dir/.well-known/appspecific/com.chrome.devtools.json",
@@ -108,6 +110,7 @@ copy_to_gen_with_grd("embedder-scripts") {
   ]
 }
 
+
 group("unittests") {
   deps = [
     "Images:optimize_images",
@@ -126,7 +129,9 @@ group("unittests") {
     "entrypoints/main:unittests",
     "entrypoints/wasmparser_worker:unittests",
     "models/ai_assistance:unittests",
+    "models/ai_code_completion:unittests",
     "models/autofill_manager:unittests",
+    "models/badges:unittests",
     "models/bindings:unittests",
     "models/breakpoints:unittests",
     "models/cpu_profile:unittests",
@@ -134,6 +139,7 @@ group("unittests") {
     "models/emulation:unittests",
     "models/extensions:unittests",
     "models/formatter:unittests",
+    "models/geometry:unittests",
     "models/har:unittests",
     "models/heap_snapshot_model:unittests",
     "models/issues_manager:unittests",
@@ -142,6 +148,7 @@ group("unittests") {
     "models/persistence:unittests",
     "models/project_settings:unittests",
     "models/source_map_scopes:unittests",
+    "models/stack_trace:unittests",
     "models/text_utils:unittests",
     "models/trace:unittests",
     "models/trace/extras:unittests",
@@ -153,10 +160,12 @@ group("unittests") {
     "models/trace/lantern/metrics:unittests",
     "models/trace/lantern/simulation:unittests",
     "models/trace/types:unittests",
+    "models/trace_source_maps_resolver:unittests",
     "models/workspace:unittests",
     "models/workspace_diff:unittests",
     "panels/accessibility:unittests",
     "panels/ai_assistance:unittests",
+    "panels/ai_chat:unittests",
     "panels/animation:unittests",
     "panels/application:unittests",
     "panels/application/components:unittests",
@@ -165,6 +174,7 @@ group("unittests") {
     "panels/autofill:unittests",
     "panels/browser_debugger:unittests",
     "panels/changes:unittests",
+    "panels/common:unittests",
     "panels/console:unittests",
     "panels/console_counters:unittests",
     "panels/coverage:unittests",
@@ -217,6 +227,7 @@ group("unittests") {
     "panels/webauthn:unittests",
     "panels/whats_new:unittests",
     "services/trace_bounds:unittests",
+    "services/tracing:unittests",
     "testing",
     "third_party/chromium/client-variations:unittests",
     "third_party/i18n:unittests",

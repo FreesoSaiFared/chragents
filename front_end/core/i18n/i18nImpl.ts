@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -68,7 +68,7 @@ export async function fetchAndRegisterLocaleData(
     locale: Intl.UnicodeBCP47LocaleIdentifier, location = self.location.toString()): Promise<void> {
   const localeDataTextPromise = fetch(getLocaleFetchUrl(locale, location)).then(result => result.json());
   const timeoutPromise =
-      new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error('timed out fetching locale')), 5000));
+      new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error('timed out fetching locale')), 2500));
   const localeData = await Promise.race([timeoutPromise, localeDataTextPromise]);
   i18nInstance.registerLocaleData(locale, localeData);
 }

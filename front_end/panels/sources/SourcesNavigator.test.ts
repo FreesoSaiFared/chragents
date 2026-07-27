@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,12 +36,13 @@ describeWithMockConnection('NetworkNavigatorView', () => {
     workspace = Workspace.Workspace.WorkspaceImpl.instance();
     const targetManager = SDK.TargetManager.TargetManager.instance();
     const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
+    const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
     const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
       forceNew: true,
       resourceMapping,
       targetManager,
+      ignoreListManager,
     });
-    Bindings.IgnoreListManager.IgnoreListManager.instance({forceNew: true, debuggerWorkspaceBinding});
     const breakpointManager = Breakpoints.BreakpointManager.BreakpointManager.instance(
         {forceNew: true, targetManager, workspace, debuggerWorkspaceBinding});
     Persistence.Persistence.PersistenceImpl.instance({forceNew: true, workspace, breakpointManager});
@@ -454,7 +455,7 @@ describeWithMockConnection('NetworkNavigatorView', () => {
 
     beforeEach(() => {
       target = createTarget();
-      Bindings.IgnoreListManager.IgnoreListManager.instance().addChangeListener(() => {
+      Workspace.IgnoreListManager.IgnoreListManager.instance().addChangeListener(() => {
         if (resolveFn) {
           resolveFn();
           resolveFn = null;

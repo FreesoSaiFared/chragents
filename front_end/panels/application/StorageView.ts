@@ -1,4 +1,4 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -236,6 +236,7 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
     this.quotaOverrideCheckbox.addEventListener('click', this.onClickCheckbox.bind(this), false);
     this.quotaOverrideControlRow = quota.appendRow();
     this.quotaOverrideEditor = this.quotaOverrideControlRow.createChild('input', 'quota-override-notification-editor');
+    this.quotaOverrideEditor.setAttribute('placeholder', i18nString(UIStrings.pleaseEnterANumber));
     this.quotaOverrideEditor.setAttribute(
         'jslog', `${VisualLogging.textField('quota-override').track({change: true})}`);
     this.quotaOverrideControlRow.appendChild(UI.UIUtils.createLabel(i18nString(UIStrings.mb)));
@@ -402,7 +403,7 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
       this.quotaOverrideControlRow.classList.remove('hidden');
       this.quotaOverrideCheckbox.checked = true;
       this.quotaOverrideEditor.value = this.previousOverrideFieldValue;
-      this.quotaOverrideEditor.focus();
+      window.setTimeout(() => this.quotaOverrideEditor.focus(), 500);
     } else if (this.target && this.securityOrigin) {
       this.quotaOverrideControlRow.classList.add('hidden');
       this.quotaOverrideCheckbox.checked = false;
@@ -438,7 +439,7 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
       this.clearButton.focus();
     }, 500);
 
-    UI.ARIAUtils.alert(i18nString(UIStrings.SiteDataCleared));
+    UI.ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.SiteDataCleared));
   }
 
   static clear(
@@ -519,7 +520,9 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
 
     if (!response.overrideActive && response.quota < 125829120) {  // 120 MB
       const icon = new IconButton.Icon.Icon();
-      icon.data = {iconName: 'info', color: 'var(--icon-info)', width: '14px', height: '14px'};
+      icon.name = 'info';
+      icon.style.color = 'var(--icon-info)';
+      icon.classList.add('small');
       UI.Tooltip.Tooltip.install(this.quotaRow, i18nString(UIStrings.storageQuotaIsLimitedIn));
       this.quotaRow.appendChild(icon);
     }

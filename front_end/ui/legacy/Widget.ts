@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -32,11 +32,10 @@
 import '../../core/dom_extension/dom_extension.js';
 
 import * as Platform from '../../core/platform/platform.js';
+import * as Geometry from '../../models/geometry/geometry.js';
 import * as Lit from '../../ui/lit/lit.js';
 
-import {Constraints, Size} from './Geometry.js';
 import {createShadowRootWithCoreStyles} from './UIUtils.js';
-import {XWidget} from './XWidget.js';
 
 // Remember the original DOM mutation methods here, since we
 // will override them below to sanity check the Widget system.
@@ -214,6 +213,44 @@ function decrementWidgetCounter(parentElement: Element, childElement: Element): 
 const UPDATE_COMPLETE = Promise.resolve(true);
 const UPDATE_COMPLETE_RESOLVE = (_result: boolean): void => {};
 
+/**
+ * Additional options passed to the `Widget` constructor to configure the
+ * behavior of the resulting instance.
+ */
+export interface WidgetOptions {
+  /**
+   * If you pass `true` here, the `contentElement` of the resulting `Widget`
+   * will be placed into the shadow DOM of its `element`. If the `element`
+   * doesn't already have a `shadowRoot`, a new one will be created.
+   *
+   * Otherwise, the `contentElement` will be a regular child of the `element`.
+   *
+   * Its default value is `false`.
+   */
+  useShadowDom?: boolean;
+
+  /**
+   * A boolean that, when set to `true`, specifies behavior that mitigates
+   * custom element issues around focusability. When a non-focusable part of
+   * the shadow DOM is clicked, the first focusable part is given focus, and
+   * the shadow host is given any available `:focus` styling.
+   *
+   * Its default value is `false`.
+   *
+   * @see https://developer.mozilla.org/en-US/docs/Web/API/Element/attachShadow
+   */
+  delegatesFocus?: boolean;
+
+  /**
+   * The Visual Logging configuration to put onto the `element` of the resulting
+   * `Widget`.
+   */
+  jslog?: string;
+  /**
+   * The additional classes to put onto the `element` of the resulting `Widget`.
+   */
+  classes?: string[];
+}
 export class Widget {
   readonly element: HTMLElement;
   contentElement: HTMLElement;
@@ -228,24 +265,59 @@ export class Widget {
   #invalidationsSuspended = 0;
   #parentWidget: Widget|null = null;
   #defaultFocusedElement?: Element|null;
-  #cachedConstraints?: Constraints;
-  #constraints?: Constraints;
+  #cachedConstraints?: Geometry.Constraints;
+  #constraints?: Geometry.Constraints;
   #invalidationsRequested?: boolean;
   #externallyManaged?: boolean;
   #updateComplete = UPDATE_COMPLETE;
   #updateCompleteResolve = UPDATE_COMPLETE_RESOLVE;
   #updateRequestID = 0;
-  constructor(useShadowDom?: boolean, delegatesFocus?: boolean, element?: HTMLElement) {
-    this.element = element || document.createElement('div');
+
+  /**
+   * Constructs a new `Widget` with the given `options`.
+   *
+   * @param options optional settings to configure the behavior.
+   */
+  constructor(options?: WidgetOptions);
+
+  /**
+   * Constructs a new `Widget` with the given `options` and attached to the
+   * given `element`.
+   *
+   * If `element` is `undefined`, a new `<div>` element will be created instead
+   * and the widget will be attached to that.
+   *
+   * @param element an (optional) `HTMLElement` to attach the `Widget` to.
+   * @param options optional settings to configure the behavior.
+   */
+  constructor(element?: HTMLElement, options?: WidgetOptions);
+
+  constructor(elementOrOptions?: HTMLElement|WidgetOptions, options?: WidgetOptions) {
+    if (elementOrOptions instanceof HTMLElement) {
+      this.element = elementOrOptions;
+    } else {
+      this.element = document.createElement('div');
+      if (elementOrOptions !== undefined) {
+        options = elementOrOptions;
+      }
+    }
     this.#shadowRoot = this.element.shadowRoot;
-    if (useShadowDom && !this.#shadowRoot) {
+    if (options?.useShadowDom && !this.#shadowRoot) {
       this.element.classList.add('vbox');
       this.element.classList.add('flex-auto');
-      this.#shadowRoot = createShadowRootWithCoreStyles(this.element, {delegatesFocus});
+      this.#shadowRoot = createShadowRootWithCoreStyles(this.element, {
+        delegatesFocus: options?.delegatesFocus,
+      });
       this.contentElement = document.createElement('div');
       this.#shadowRoot.appendChild(this.contentElement);
     } else {
       this.contentElement = this.element;
+    }
+    if (options?.classes) {
+      this.element.classList.add(...options.classes);
+    }
+    if (options?.jslog) {
+      this.contentElement.setAttribute('jslog', options.jslog);
     }
     this.contentElement.classList.add('widget');
     widgetMap.set(this.element, this);
@@ -270,7 +342,7 @@ export class Widget {
     if (element instanceof WidgetElement) {
       return element.createWidget();
     }
-    return new Widget(undefined, undefined, element);
+    return new Widget(element);
   }
 
   markAsRoot(): void {
@@ -359,6 +431,7 @@ export class Widget {
 
   private processWasHidden(): void {
     this.callOnVisibleChildren(this.processWasHidden);
+    this.notify(this.wasHidden);
   }
 
   private processOnResize(): void {
@@ -385,6 +458,9 @@ export class Widget {
   }
 
   willHide(): void {
+  }
+
+  wasHidden(): void {
   }
 
   onResize(): void {
@@ -420,7 +496,7 @@ export class Widget {
       }
       this.attach(currentWidget);
     }
-    this.showWidgetInternal(parentElement, insertBefore);
+    this.#showWidget(parentElement, insertBefore);
   }
 
   private attach(parentWidget: Widget): void {
@@ -442,10 +518,10 @@ export class Widget {
     if (!this.element.parentElement) {
       throw new Error('Attempt to show widget that is not hidden using hideWidget().');
     }
-    this.showWidgetInternal(this.element.parentElement, this.element.nextSibling);
+    this.#showWidget(this.element.parentElement, this.element.nextSibling);
   }
 
-  private showWidgetInternal(parentElement: Element, insertBefore?: Node|null): void {
+  #showWidget(parentElement: Element, insertBefore?: Node|null): void {
     let currentParent: Element|null = parentElement;
     while (currentParent && !widgetMap.get(currentParent)) {
       currentParent = currentParent.parentElementOrShadowHost();
@@ -499,10 +575,10 @@ export class Widget {
     if (!this.#visible) {
       return;
     }
-    this.hideWidgetInternal(false);
+    this.#hideWidget(false);
   }
 
-  private hideWidgetInternal(removeFromDOM: boolean): void {
+  #hideWidget(removeFromDOM: boolean): void {
     this.#visible = false;
     const {parentElement} = this.element;
 
@@ -550,7 +626,7 @@ export class Widget {
     // responsibility for the consequences.
     const removeFromDOM = overrideHideOnDetach || !this.shouldHideOnDetach();
     if (this.#visible) {
-      this.hideWidgetInternal(removeFromDOM);
+      this.#hideWidget(removeFromDOM);
     } else if (removeFromDOM) {
       const {parentElement} = this.element;
       if (parentElement) {
@@ -661,6 +737,11 @@ export class Widget {
       return;
     }
 
+    if (this.#shadowRoot?.delegatesFocus && this.contentElement.querySelector('[autofocus]')) {
+      this.element.focus();
+      return;
+    }
+
     const element = (this.#defaultFocusedElement as HTMLElement | null);
     if (element) {
       if (!element.hasFocus()) {
@@ -680,10 +761,6 @@ export class Widget {
       }
       let child = this.contentElement.traverseNextNode(this.contentElement);
       while (child) {
-        if (child instanceof XWidget) {
-          child.focus();
-          return;
-        }
         child = child.traverseNextNode(this.contentElement);
       }
     }
@@ -693,11 +770,11 @@ export class Widget {
     return this.element.hasFocus();
   }
 
-  calculateConstraints(): Constraints {
-    return new Constraints();
+  calculateConstraints(): Geometry.Constraints {
+    return new Geometry.Constraints();
   }
 
-  constraints(): Constraints {
+  constraints(): Geometry.Constraints {
     if (typeof this.#constraints !== 'undefined') {
       return this.#constraints;
     }
@@ -708,16 +785,17 @@ export class Widget {
   }
 
   setMinimumAndPreferredSizes(width: number, height: number, preferredWidth: number, preferredHeight: number): void {
-    this.#constraints = new Constraints(new Size(width, height), new Size(preferredWidth, preferredHeight));
+    this.#constraints =
+        new Geometry.Constraints(new Geometry.Size(width, height), new Geometry.Size(preferredWidth, preferredHeight));
     this.invalidateConstraints();
   }
 
   setMinimumSize(width: number, height: number): void {
-    this.minimumSize = new Size(width, height);
+    this.minimumSize = new Geometry.Size(width, height);
   }
 
-  set minimumSize(size: Size) {
-    this.#constraints = new Constraints(size);
+  set minimumSize(size: Geometry.Size) {
+    this.#constraints = new Geometry.Constraints(size);
     this.invalidateConstraints();
   }
 
@@ -775,9 +853,9 @@ export class Widget {
    * the `requestAnimationFrame` and executed with the animation frame. Instead,
    * use the `requestUpdate()` method to schedule an asynchronous update.
    *
-   * @return can either return nothing or a promise; in that latter case, the
-   *         update logic will await the resolution of the returned promise
-   *         before proceeding.
+   * @returns can either return nothing or a promise; in that latter case, the
+   *          update logic will await the resolution of the returned promise
+   *          before proceeding.
    */
   performUpdate(): Promise<void>|void {
   }
@@ -848,17 +926,32 @@ const storedScrollPositions = new WeakMap<Element, {
 }>();
 
 export class VBox extends Widget {
-  constructor(useShadowDom?: boolean|HTMLElement, delegatesFocus?: boolean, element?: HTMLElement) {
-    if (useShadowDom instanceof HTMLElement) {
-      element = useShadowDom;
-      useShadowDom = false;
-    }
-    super(useShadowDom, delegatesFocus, element);
+  /**
+   * Constructs a new `VBox` with the given `options`.
+   *
+   * @param options optional settings to configure the behavior.
+   */
+  constructor(options?: WidgetOptions);
+
+  /**
+   * Constructs a new `VBox` with the given `options` and attached to the
+   * given `element`.
+   *
+   * If `element` is `undefined`, a new `<div>` element will be created instead
+   * and the widget will be attached to that.
+   *
+   * @param element an (optional) `HTMLElement` to attach the `VBox` to.
+   * @param options optional settings to configure the behavior.
+   */
+  constructor(element?: HTMLElement, options?: WidgetOptions);
+
+  constructor() {
+    super(...arguments);
     this.contentElement.classList.add('vbox');
   }
 
-  override calculateConstraints(): Constraints {
-    let constraints: Constraints = new Constraints();
+  override calculateConstraints(): Geometry.Constraints {
+    let constraints: Geometry.Constraints = new Geometry.Constraints();
 
     function updateForChild(this: Widget): void {
       const child = this.constraints();
@@ -872,13 +965,32 @@ export class VBox extends Widget {
 }
 
 export class HBox extends Widget {
-  constructor(useShadowDom?: boolean) {
-    super(useShadowDom);
+  /**
+   * Constructs a new `HBox` with the given `options`.
+   *
+   * @param options optional settings to configure the behavior.
+   */
+  constructor(options?: WidgetOptions);
+
+  /**
+   * Constructs a new `HBox` with the given `options` and attached to the
+   * given `element`.
+   *
+   * If `element` is `undefined`, a new `<div>` element will be created instead
+   * and the widget will be attached to that.
+   *
+   * @param element an (optional) `HTMLElement` to attach the `HBox` to.
+   * @param options optional settings to configure the behavior.
+   */
+  constructor(element?: HTMLElement, options?: WidgetOptions);
+
+  constructor() {
+    super(...arguments);
     this.contentElement.classList.add('hbox');
   }
 
-  override calculateConstraints(): Constraints {
-    let constraints: Constraints = new Constraints();
+  override calculateConstraints(): Geometry.Constraints {
+    let constraints: Geometry.Constraints = new Geometry.Constraints();
 
     function updateForChild(this: Widget): void {
       const child = this.constraints();

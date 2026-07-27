@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {Session} from 'chromium-bidi/lib/cjs/protocol/protocol.js';
+import type {Session} from 'webdriver-bidi-protocol';
 
 import type {
   IsPageTargetCallback,
@@ -49,6 +49,15 @@ export interface ConnectOptions {
    * @defaultValue `false`
    */
   acceptInsecureCerts?: boolean;
+  /**
+   * Experimental setting to disable monitoring network events by default. When
+   * set to `false`, parts of Puppeteer that depend on network events would not
+   * work such as HTTPRequest and HTTPResponse.
+   *
+   * @experimental
+   * @defaultValue `true`
+   */
+  networkEnabled?: boolean;
   /**
    * Sets the viewport for each page.
    *

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -99,6 +99,15 @@ export function stubNoopSettings() {
   } as unknown as Common.Settings.Settings);
 }
 
+export function registerActions(actions: UIModule.ActionRegistration.ActionRegistration[]): void {
+  for (const action of actions) {
+    UI.ActionRegistration.maybeRemoveActionExtension(action.actionId);
+    UI.ActionRegistration.registerActionExtension(action);
+  }
+  const actionRegistryInstance = UI.ActionRegistry.ActionRegistry.instance({forceNew: true});
+  UI.ShortcutRegistry.ShortcutRegistry.instance({forceNew: true, actionRegistry: actionRegistryInstance});
+}
+
 export function registerNoopActions(actionIds: string[]): void {
   for (const actionId of actionIds) {
     UI.ActionRegistration.maybeRemoveActionExtension(actionId);
@@ -120,15 +129,13 @@ const REGISTERED_EXPERIMENTS = [
   'timeline-invalidation-tracking',
   Root.Runtime.ExperimentName.INSTRUMENTATION_BREAKPOINTS,
   Root.Runtime.ExperimentName.HEADER_OVERRIDES,
-  Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL,
   Root.Runtime.ExperimentName.USE_SOURCE_MAP_SCOPES,
   'font-editor',
   Root.Runtime.ExperimentName.TIMELINE_DEBUG_MODE,
   Root.Runtime.ExperimentName.FULL_ACCESSIBILITY_TREE,
   Root.Runtime.ExperimentName.TIMELINE_SHOW_POST_MESSAGE_EVENTS,
   Root.Runtime.ExperimentName.TIMELINE_ENHANCED_TRACES,
-  Root.Runtime.ExperimentName.TIMELINE_EXPERIMENTAL_INSIGHTS,
-  Root.Runtime.ExperimentName.VERTICAL_DRAWER,
+  Root.Runtime.ExperimentName.TIMELINE_COMPILED_SOURCES,
 ];
 
 export async function initializeGlobalVars({reset = true} = {}) {
@@ -238,6 +245,7 @@ export async function initializeGlobalVars({reset = true} = {}) {
         Common.Settings.SettingCategory.NONE, 'custom-network-conditions', [], Common.Settings.SettingType.ARRAY),
     createSettingValue(
         Common.Settings.SettingCategory.NONE, 'calibrated-cpu-throttling', [], Common.Settings.SettingType.BOOLEAN),
+    createSettingValue(Common.Settings.SettingCategory.NONE, 'gdp.ai-conversation-count', 0),
     createSettingValue(
         Common.Settings.SettingCategory.APPEARANCE, 'ui-theme', 'systemPreferred', Common.Settings.SettingType.ENUM),
     createSettingValue(
@@ -301,6 +309,11 @@ export async function initializeGlobalVars({reset = true} = {}) {
         Common.Settings.SettingCategory.AI, 'ai-assistance-patching-fre-completed', false,
         Common.Settings.SettingType.BOOLEAN),
     createSettingValue(
+        Common.Settings.SettingCategory.AI, 'ai-code-completion-enabled', false, Common.Settings.SettingType.BOOLEAN),
+    createSettingValue(
+        Common.Settings.SettingCategory.AI, 'ai-code-completion-teaser-dismissed', false,
+        Common.Settings.SettingType.BOOLEAN),
+    createSettingValue(
         Common.Settings.SettingCategory.MOBILE, 'emulation.show-device-outline', false,
         Common.Settings.SettingType.BOOLEAN),
     createSettingValue(
@@ -308,6 +321,12 @@ export async function initializeGlobalVars({reset = true} = {}) {
     createSettingValue(
         Common.Settings.SettingCategory.PERFORMANCE, 'timeline.user-had-shortcuts-dialog-opened-once', false,
         Common.Settings.SettingType.BOOLEAN),
+    createSettingValue(
+        Common.Settings.SettingCategory.ELEMENTS, 'show-event-listeners-for-ancestors', true,
+        Common.Settings.SettingType.BOOLEAN),
+    createSettingValue(Common.Settings.SettingCategory.ELEMENTS, 'global-ai-button-click-count', 0),
+    createSettingValue(Common.Settings.SettingCategory.ACCOUNT, 'receive-gdp-badges', false),
+    createSettingValue(Common.Settings.SettingCategory.GLOBAL, 'currentDockState', 'right'),
   ];
 
   Common.Settings.registerSettingsForTest(settings, reset);
@@ -353,7 +372,7 @@ export async function deinitializeGlobalVars() {
   Common.Revealer.RevealerRegistry.removeInstance();
   Common.Console.Console.removeInstance();
   Workspace.Workspace.WorkspaceImpl.removeInstance();
-  Bindings.IgnoreListManager.IgnoreListManager.removeInstance();
+  Workspace.IgnoreListManager.IgnoreListManager.removeInstance();
   Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.removeInstance();
   Bindings.CSSWorkspaceBinding.CSSWorkspaceBinding.removeInstance();
   IssuesManager.IssuesManager.IssuesManager.removeInstance();
@@ -479,7 +498,7 @@ export function setupActionRegistry() {
   });
 }
 
-// This needs to be invoked within a describe block, rather than within an it() block.
+/** This needs to be invoked within a describe block, rather than within an it() block. **/
 export function expectConsoleLogs(expectedLogs: {warn?: string[], log?: string[], error?: string[]}) {
   const {error, warn, log} = console;
   before(() => {

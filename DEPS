@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -12,27 +12,27 @@ vars = {
   'build_with_chromium': False,
 
   'build_url': 'https://chromium.googlesource.com/chromium/src/build.git',
-  'build_revision': 'e13953ced04ed05f45aa3c961bd6d802aced74ec',
+  'build_revision': 'd496fc3c8221c758ac43bb6f4ee1b241533efec8',
 
   'buildtools_url': 'https://chromium.googlesource.com/chromium/src/buildtools.git',
-  'buildtools_revision': 'f7862e515c44313f6942517fef6d7718d92283d3',
+  'buildtools_revision': '00586fa43b1dedbd119cfd5c71cb9396d09d53e0',
 
   'depot_tools_url': 'https://chromium.googlesource.com/chromium/tools/depot_tools.git',
-  'depot_tools_revision': '5cc29c7a217801cfa7b7b0aa23144300b49b750d',
+  'depot_tools_revision': 'a5514728766942dd77a2c0d222fb6c9d5a9d9b9d',
 
   'inspector_protocol_url': 'https://chromium.googlesource.com/deps/inspector_protocol',
-  'inspector_protocol_revision': '6d1ae0f13aae6ad381ca31b17b88a0f5af29ca94',
+  'inspector_protocol_revision': '679b33a98ae546ff521eee2ea28d8d5bf28872ba',
 
-  # Keeping track of the last time we rollerd the browser protocol files.
-  'chromium_browser_protocol_revision' : '9a6cdde91b579b777f10c566efb8b25d7552f21e',
+  # Keeping track of the last time we rolled the browser protocol files.
+  'chromium_browser_protocol_revision' : '4ceac4e2889e841baa72d3beb6c8eac6c0d2341e',
 
   'clang_format_url': 'https://chromium.googlesource.com/external/github.com/llvm/llvm-project/clang/tools/clang-format.git',
-  'clang_format_revision': '37f6e68a107df43b7d7e044fd36a13cbae3413f2',
+  'clang_format_revision': 'c2725e0622e1a86d55f14514f2177a39efea4a0e',
 
   'emscripten_tag': 'ade9d780ff17c88d81aa13860361743e3c1e1396',
 
   # GN CIPD package version.
-  'gn_version': 'git_revision:97b68a0bb62b7528bc3491c7949d6804223c2b82',
+  'gn_version': 'git_revision:5ddf42d01f30d9db392aedf2cf7e0f36980c882d',
 
   'cmake_version': 'version:2@3.21.3',
 
@@ -49,7 +49,7 @@ vars = {
   # Chrome version used for tests. It should be regularly updated to
   # match the Canary version listed here:
   # https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json
-  'chrome': '139.0.7247.0',
+  'chrome': '143.0.7459.0',
 
   # 'magic' text to tell depot_tools that git submodules should be accepted but
   # but parity with DEPS file is expected.
@@ -59,16 +59,16 @@ vars = {
   'non_git_source': 'True',
 
   # siso CIPD package version
-  'siso_version': 'git_revision:4ac6aa83563aed91e78947b2b466eb6d49d51a21',
+  'siso_version': 'git_revision:2eee1d6feaab76d99397d4d840bd369a428c01ea',
 }
 
 # Only these hosts are allowed for dependencies in this DEPS file.
-# If you need to add a new host, contact chrome infrastracture team.
+# If you need to add a new host, contact chrome infrastructure team.
 allowed_hosts = [
   'chromium.googlesource.com',
   'chrome-infra-packages.appspot.com',
 
-  # TODO(b/337061377): Move into a separate alllowed gcs bucket list.
+  # TODO(b/337061377): Move into a separate allowed gcs bucket list.
   'chromium-nodejs',
 ]
 
@@ -148,7 +148,7 @@ deps = {
   'third_party/siso': {
     'packages': [
       {
-        'package': 'infra/build/siso/${{platform}}',
+        'package': 'build/siso/${{platform}}',
         'version': Var('siso_version'),
       }
     ],
@@ -215,6 +215,19 @@ deps = {
               'output_file': 'node-darwin-arm64.tar.gz',
           },
       ],
+  },
+  "scripts/ai_assistance/suite/outputs": {
+    "dep_type": "gcs",
+    'condition': 'checkout_ai_evals == True',
+    "bucket": "chrome-devtools-ai-evals",
+    "objects": [
+      {
+        "object_name": "8aaaea341cac9e6dad90a0685f4eeae39fabb9f655761eed9c3af16795a40f14",
+        "sha256sum": "c2e5b18a77095451dbaae27cea913aace1fc267e8e9e0f0b4f297a6215eb5299",
+        "size_bytes": 6801,
+        "generation": 1756718606230139
+      }
+    ]
   },
   'third_party/node/win': {
       'dep_type': 'gcs',

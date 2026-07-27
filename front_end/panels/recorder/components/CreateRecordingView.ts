@@ -1,13 +1,14 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-/* eslint-disable rulesdir/no-lit-render-outside-of-view, rulesdir/inject-checkbox-styles */
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/legacy/legacy.js';
 import '../../../ui/components/icon_button/icon_button.js';
 import './ControlButton.js';
 
 import * as i18n from '../../../core/i18n/i18n.js';
+import * as Badges from '../../../models/badges/badges.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as Input from '../../../ui/components/input/input.js';
 import * as Lit from '../../../ui/lit/lit.js';
@@ -82,7 +83,7 @@ const UIStrings = {
   selectorTypeXPath: 'XPath',
   /**
    * @description The label for the input that allows specifying selector types
-   * that should be used during the recordering.
+   * that should be used during the recording.
    */
   selectorTypes: 'Selector types to record',
   /**
@@ -162,13 +163,13 @@ export class CreateRecordingView extends HTMLElement {
     this.#defaultRecordingName = this.#recorderSettings.defaultTitle;
   }
 
-  #onKeyDown(event: Event): void {
+  #onKeyDown(event: KeyboardEvent): void {
     if (this.#error) {
       this.#error = undefined;
       this.#render();
     }
 
-    const keyboardEvent = event as KeyboardEvent;
+    const keyboardEvent = event;
     if (keyboardEvent.key === 'Enter') {
       this.startRecording();
       event.stopPropagation();
@@ -231,6 +232,7 @@ export class CreateRecordingView extends HTMLElement {
             selectorAttribute,
             ),
     );
+    Badges.UserBadges.instance().recordAction(Badges.BadgeAction.RECORDER_RECORDING_STARTED);
   }
 
   #dispatchRecordingCancelled(): void {

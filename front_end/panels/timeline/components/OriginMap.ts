@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -66,7 +66,7 @@ export class OriginMap extends UI.Widget.WidgetElement<UI.Widget.Widget> impleme
   }
 
   override createWidget(): UI.Widget.Widget {
-    const containerWidget = new UI.Widget.Widget(false, false, this);
+    const containerWidget = new UI.Widget.Widget(this);
 
     this.#list.registerRequiredCSS(originMapStyles);
     this.#list.show(containerWidget.contentElement);

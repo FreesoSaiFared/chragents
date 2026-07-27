@@ -8,13 +8,13 @@ When the user interacts with AI via the AI Assistance Panel, they are having a _
 
 Each agent has a _context_ defined, which represents the selected data that forms the context of the conversation the user is having with that agent. For example:
 
-- The `PerformanceInsightsAgent` has an individual performance insight as its context.
+- The `PerformanceAgent` has an individual performance trace and a specific focus (an insight, or a call tree) as its context.
 - The `StylingAgent` has a DOM Node as its context.
 
 When defining a context, they must extend the `ConversationContext` interface, which defines a few methods which must be implemented, including:
 
 - `getOrigin()`: the origin of the data. This is important as for security concerns if the user swaps to a new context with a different origin, a new conversation must be started to avoid any concerns of sharing data across origins.
-- `getIcon()` and `getTitle()` which are used to represent the context in the UI.
+- `getTitle()` which are used to represent the context in the UI.
 
 When the user begins a conversation with the AI, we want to include information based on the active context to send as part of the prompt. This is done in the agent implementation by overriding the `enhanceQuery()` method, which takes the active context as the second argument. This method can be used to enrich the query with contextual information.
 
@@ -23,6 +23,10 @@ When the user begins a conversation with the AI, we want to include information 
 To deal with the work to take an object that is the AI agent's context and turn it into a text representation that can be sent to the AI, we use _formatters_. These are typically classes with `static` methods that can take in objects and return their text representation that we want to pass to the AI.
 
 ## Performance specific documentation
+
+### `TimelineUtils.AIContext.AgentFocus`
+
+The context for `PerformanceAgent` is `AgentFocus`, which supports different behavior for different entry-points of the "Ask AI" feature for a trace. The two entry-points now are "insight" and "call-tree". The agent modifies its capabilities based on this focus.
 
 ### Adding "Ask AI" to a new Insight
 
@@ -34,19 +38,13 @@ The process for adding "Ask AI" support to a new insight is mostly limited to up
 
 Once you've done that, you will need to update the UI component to tell it that it can render the "Ask AI" button. To do this, override the `hasAskAiSupport()` method in the component and return `true`.
 
-### `InsightAIContext` and time bounds for insights
+### Time bounds for insights
 
-The `PerformanceInsightsAgent` has the ability to make function calls to be informed about network and main thread activity. When this happens we determine the time bounds that are relevant for the selected Insight. For example, for any LCP based Insights we limit the time frame to be:
+The `PerformanceAgent` has the ability to make function calls to be informed about network and main thread activity. When this happens we determine the time bounds that are relevant for the selected insight.
 
-- **Start time**: navigation start or trace start
-- **End time**: the LCP timestamp
+In general, the trace bounds are defined by the insight's overlays. If there are none, we use the insight set's navigation bounds.
 
-For all other Insights, we use:
-
-- **Start time**: navigation start or trace start
-- **End time**: the next navigation start or the trace end
-
-You can override this if you need to; see the `insightBounds` function in `InsightAIContext.ts`.
+See the `insightBounds` function in `InsightAIContext.ts`.
 
 
 ### Testing the new Insight
@@ -57,7 +55,13 @@ Once it's working, it's a good idea to manually experiment with the new Insight 
 
 ## Debugging tips
 
-To test the AI code, you must be running DevTools in a branded Chrome (e.g. official Chrome Canary) and be signed in. So you cannot use the `npm start` script in this repo to run against Chrome for Testing. You'll want to run Canary but point at your local DevTools:
+To test the AI code, you must be running DevTools in a branded Chrome (e.g. official Chrome Canary) and be signed in. You can use the `npm start` with a canary flag in this repository to run against Chromium, or by running Chrome Canary and pointing it to your local DevTools.":
+
+```
+npm start -- --browser=canary
+```
+
+or
 
 ```
 /Applications/Google\ Chrome\ Canary.app/Contents/MacOS/Google\ Chrome\ Canary --custom-devtools-frontend=file://$(realpath out/Fast/gen/front_end)

@@ -1,7 +1,7 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-/* eslint-disable rulesdir/no-lit-render-outside-of-view, rulesdir/inject-checkbox-styles */
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import './RequestHeaderSection.js';
 
@@ -15,7 +15,6 @@ import * as Workspace from '../../../models/workspace/workspace.js';
 import * as NetworkForward from '../../../panels/network/forward/forward.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
-import type * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as Input from '../../../ui/components/input/input.js';
 import * as LegacyWrapper from '../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
@@ -36,79 +35,75 @@ const {render, html} = Lit;
 
 const UIStrings = {
   /**
-   *@description Text in Request Headers View of the Network panel
+   * @description Text in Request Headers View of the Network panel
    */
   fromDiskCache: '(from disk cache)',
   /**
-   *@description Text in Request Headers View of the Network panel
+   * @description Text in Request Headers View of the Network panel
    */
   fromMemoryCache: '(from memory cache)',
   /**
-   *@description Text in Request Headers View of the Network panel
+   * @description Text in Request Headers View of the Network panel
    */
   fromEarlyHints: '(from early hints)',
   /**
-   *@description Text in Request Headers View of the Network panel
+   * @description Text in Request Headers View of the Network panel
    */
   fromPrefetchCache: '(from prefetch cache)',
   /**
-   *@description Text in Request Headers View of the Network panel
+   * @description Text in Request Headers View of the Network panel
    */
   fromServiceWorker: '(from `service worker`)',
   /**
-   *@description Text in Request Headers View of the Network panel
+   * @description Text in Request Headers View of the Network panel
    */
   fromSignedexchange: '(from signed-exchange)',
   /**
-   *@description Text in Request Headers View of the Network panel
-   */
-  fromWebBundle: '(from Web Bundle)',
-  /**
-   *@description Section header for a list of the main aspects of a http request
+   * @description Section header for a list of the main aspects of a http request
    */
   general: 'General',
   /**
-   *@description Label for a checkbox to switch between raw and parsed headers
+   * @description Label for a checkbox to switch between raw and parsed headers
    */
   raw: 'Raw',
   /**
-   *@description Text in Request Headers View of the Network panel
+   * @description Text in Request Headers View of the Network panel
    */
   referrerPolicy: 'Referrer Policy',
   /**
-   *@description Text in Network Log View Columns of the Network panel
+   * @description Text in Network Log View Columns of the Network panel
    */
   remoteAddress: 'Remote Address',
   /**
-   *@description Text in Request Headers View of the Network panel
+   * @description Text in Request Headers View of the Network panel
    */
   requestHeaders: 'Request Headers',
   /**
-   *@description The HTTP method of a request
+   * @description The HTTP method of a request
    */
   requestMethod: 'Request Method',
   /**
-   *@description The URL of a request
+   * @description The URL of a request
    */
   requestUrl: 'Request URL',
   /**
-   *@description A context menu item in the Network Log View Columns of the Network panel
+   * @description A context menu item in the Network Log View Columns of the Network panel
    */
   responseHeaders: 'Response Headers',
   /**
-   *@description A context menu item in the Network Log View Columns of the Network panel
+   * @description A context menu item in the Network Log View Columns of the Network panel
    */
   earlyHintsHeaders: 'Early Hints Headers',
   /**
-   *@description Title text for a link to the Sources panel to the file containing the header override definitions
+   * @description Title text for a link to the Sources panel to the file containing the header override definitions
    */
   revealHeaderOverrides: 'Reveal header override definitions',
   /**
-   *@description Text to show more content
+   * @description Text to show more content
    */
   showMore: 'Show more',
   /**
-   *@description HTTP response code
+   * @description HTTP response code
    */
   statusCode: 'Status Code',
 } as const;
@@ -296,11 +291,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     const fileIcon = html`
-      <devtools-icon class=${overridesSetting.get() ? 'inline-icon dot purple': 'inline-icon'} .data=${{
-          iconName: 'document',
-          width: '16px',
-          height: '16px',
-        } as IconButton.Icon.IconData}>
+      <devtools-icon name="document" class=${'medium' + overridesSetting.get() ? 'inline-icon dot purple': 'inline-icon'}>
       </devtools-icon>`;
     // clang-format on
 
@@ -321,11 +312,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
           class="link devtools-link"
           jslog=${VisualLogging.link('devtools-override').track({click: true})}
       >
-        <devtools-icon class="inline-icon" .data=${{
-            iconName: 'help',
-            width: '16px',
-            height: '16px',
-          } as IconButton.Icon.IconData}>
+        <devtools-icon name="help" class="inline-icon medium">
         </devtools-icon>
       </x-link>
       <x-link
@@ -459,8 +446,6 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
       comment = i18nString(UIStrings.fromServiceWorker);
     } else if (this.#request.redirectSourceSignedExchangeInfoHasNoErrors()) {
       comment = i18nString(UIStrings.fromSignedexchange);
-    } else if (this.#request.webBundleInnerRequestInfo()) {
-      comment = i18nString(UIStrings.fromWebBundle);
     } else if (this.#request.fromPrefetchCache()) {
       comment = i18nString(UIStrings.fromPrefetchCache);
     } else if (this.#request.cached()) {
@@ -578,11 +563,10 @@ export class Category extends HTMLElement {
             </div>
             <div class="hide-when-closed">
               ${this.#checked !== undefined ? html`
-                <label>
-                  <input type="checkbox" .checked=${this.#checked} @change=${this.#onCheckboxToggle}
+                <devtools-checkbox .checked=${this.#checked} @change=${this.#onCheckboxToggle}
                          jslog=${VisualLogging.toggle('raw-headers').track({change: true})}>
                   ${i18nString(UIStrings.raw)}
-                </label>` : Lit.nothing}
+              </devtools-checkbox>` : Lit.nothing}
             </div>
             <div class="hide-when-closed">${this.#additionalContent}</div>
           </div>

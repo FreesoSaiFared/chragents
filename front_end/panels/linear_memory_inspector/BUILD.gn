@@ -1,4 +1,4 @@
-# Copyright 2023 The Chromium Authors. All rights reserved.
+# Copyright 2023 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -15,7 +15,12 @@ devtools_module("linear_memory_inspector") {
   ]
 
   deps = [
+    "../../core/common:bundle",
+    "../../core/i18n:bundle",
+    "../../core/platform:bundle",
+    "../../ui/legacy:bundle",
     "../../ui/legacy/components/object_ui:bundle",
+    "../../ui/visual_logging:bundle",
     "./components:bundle",
   ]
 

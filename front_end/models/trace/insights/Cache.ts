@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@ import {metricSavingsForWastedBytes} from './Common.js';
 import {linearInterpolation} from './Statistics.js';
 import {
   InsightCategory,
+  InsightKeys,
   type InsightModel,
   type InsightSetContext,
   type PartialInsightModel,
@@ -26,7 +27,7 @@ export const UIStrings = {
    * @description Text to tell the user about how caching can help improve performance.
    */
   description:
-      'A long cache lifetime can speed up repeat visits to your page. [Learn more](https://web.dev/uses-long-cache-ttl/).',
+      'A long cache lifetime can speed up repeat visits to your page. [Learn more about caching](https://developer.chrome.com/docs/performance/insights/cache).',
   /**
    * @description Column for a font loaded by the page to render text.
    */
@@ -62,10 +63,11 @@ const IGNORE_THRESHOLD_IN_PERCENT = 0.925;
 
 function finalize(partialModel: PartialInsightModel<CacheInsightModel>): CacheInsightModel {
   return {
-    insightKey: 'Cache',
+    insightKey: InsightKeys.CACHE,
     strings: UIStrings,
     title: i18nString(UIStrings.title),
     description: i18nString(UIStrings.description),
+    docs: 'https://developer.chrome.com/docs/performance/insights/cache',
     category: InsightCategory.ALL,
     state: partialModel.requests.length > 0 ? 'fail' : 'pass',
     ...partialModel,
@@ -188,10 +190,13 @@ export interface CacheableRequest {
   wastedBytes: number;
 }
 
-export function generateInsight(
-    parsedTrace: Handlers.Types.ParsedTrace, context: InsightSetContext): CacheInsightModel {
+export function isCacheInsight(model: InsightModel): model is CacheInsightModel {
+  return model.insightKey === InsightKeys.CACHE;
+}
+
+export function generateInsight(data: Handlers.Types.HandlerData, context: InsightSetContext): CacheInsightModel {
   const isWithinContext = (event: Types.Events.Event): boolean => Helpers.Timing.eventIsInBounds(event, context.bounds);
-  const contextRequests = parsedTrace.NetworkRequests.byTime.filter(isWithinContext);
+  const contextRequests = data.NetworkRequests.byTime.filter(isWithinContext);
 
   const results: CacheableRequest[] = [];
   let totalWastedBytes = 0;
@@ -249,4 +254,16 @@ export function generateInsight(
     metricSavings: metricSavingsForWastedBytes(wastedBytesByRequestId, context),
     wastedBytes: totalWastedBytes,
   });
+}
+
+export function createOverlayForRequest(request: Types.Events.SyntheticNetworkRequest): Types.Overlays.EntryOutline {
+  return {
+    type: 'ENTRY_OUTLINE',
+    entry: request,
+    outlineReason: 'ERROR',
+  };
+}
+
+export function createOverlays(model: CacheInsightModel): Types.Overlays.Overlay[] {
+  return model.requests.map(req => createOverlayForRequest(req.request));
 }

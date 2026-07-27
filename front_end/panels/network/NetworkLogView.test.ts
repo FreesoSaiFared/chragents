@@ -1,11 +1,10 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as HAR from '../../models/har/har.js';
@@ -20,8 +19,10 @@ import {dispatchClickEvent, raf, renderElementIntoDOM} from '../../testing/DOMHe
 import {
   createTarget,
   describeWithEnvironment,
+  registerActions,
   registerNoopActions,
-  stubNoopSettings
+  stubNoopSettings,
+  updateHostConfig
 } from '../../testing/EnvironmentHelpers.js';
 import {expectCalled} from '../../testing/ExpectStubCall.js';
 import {stubFileManager} from '../../testing/FileManagerHelpers.js';
@@ -125,7 +126,7 @@ describeWithMockConnection('NetworkLogView', () => {
   });
 
   // Note this isn't an ideal test as the internal headers are generated rather than explicitly added,
-  // are only added on HTTP/2 and HTTP/3, have a preceeding colon like `:authority` but it still tests
+  // are only added on HTTP/2 and HTTP/3, have a preceding colon like `:authority` but it still tests
   // the stripping function.
   it('generates a valid curl command while stripping internal headers', async () => {
     const request = createNetworkRequest(urlString`http://localhost`, {
@@ -194,6 +195,20 @@ describeWithMockConnection('NetworkLogView', () => {
     );
   });
 
+  it('generates a valid curl command when header values contain tabs or form feed', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [{name: 'cookie', value: 'query=evil\t\v\f\r\n & cmd /c calc.exe \n\n'}],
+    });
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' -b $\'query=evil\\u0009\\u000b\\u000c\\r\\n & cmd /c calc.exe \\n\\n\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^\"http://localhost^\" -b ^\"query=evil   ^\n\n ^& cmd /c calc.exe ^\n\n^\n\n^\"',
+    );
+  });
+
   it('generates a valid curl command when header values contain CR only', async () => {
     const request = createNetworkRequest(urlString`http://localhost`, {
       requestHeaders: [{name: 'cookie', value: 'query=evil\r & cmd /c calc.exe'}],
@@ -205,6 +220,129 @@ describeWithMockConnection('NetworkLogView', () => {
     assert.strictEqual(
         await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
         'curl ^\"http://localhost^\" -b ^\"query=evil^\n\n ^& cmd /c calc.exe^\"',
+    );
+  });
+
+  it('generates a valid curl command for a POST request with data', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {});
+    request.requestMethod = 'POST';
+    request.setRequestFormData(true, '123');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' --data-raw \'123\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://localhost^" --data-raw ^"123^"');
+  });
+
+  it('generates a valid curl command for a POST request with urlencoded data', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [{name: 'Content-Type', value: 'application/x-www-form-urlencoded'}],
+    });
+    request.requestMethod = 'POST';
+    request.setRequestFormData(true, '1&b');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' \\\n  -H \'Content-Type: application/x-www-form-urlencoded\' \\\n  --data-raw \'1&b\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://localhost^" ^\n  -H ^"Content-Type: application/x-www-form-urlencoded^" ^\n  --data-raw ^"1^&b^"');
+  });
+
+  it('generates a valid curl command for a POST request with JSON data', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [{name: 'Content-Type', value: 'application/json'}],
+    });
+    request.requestMethod = 'POST';
+    request.setRequestFormData(true, '{"a":1}');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' \\\n  -H \'Content-Type: application/json\' \\\n  --data-raw \'{"a":1}\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://localhost^" ^\n  -H ^"Content-Type: application/json^" ^\n  --data-raw ^"^{^\\^"a^\\^":1^}^"');
+  });
+
+  it('generates a valid curl command for a POST request with binary data', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [{name: 'Content-Type', value: 'application/binary'}],
+    });
+    request.requestMethod = 'POST';
+    request.setRequestFormData(true, '1234\r\n00\x02\x03\x04\x05\'"!');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' \\\n  -H \'Content-Type: application/binary\' \\\n  --data-raw $\'1234\\r\\n00\\u0002\\u0003\\u0004\\u0005\\\'"\\u0021\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://localhost^" ^\n  -H ^"Content-Type: application/binary^" ^\n  --data-raw ^"1234^\n\n00^\u0002^\u0003^\u0004^\u0005\'^\\^"^!^"');
+  });
+
+  it('generates a valid curl command for a POST request with binary data containing %', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [{name: 'Content-Type', value: 'application/binary'}],
+    });
+    request.requestMethod = 'POST';
+    request.setRequestFormData(true, '%OS%\\r\\n%%OS%%\\r\\n"\\\\"\'$&!');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' \\\n  -H \'Content-Type: application/binary\' \\\n  --data-raw $\'%OS%\\\\r\\\\n%%OS%%\\\\r\\\\n"\\\\\\\\"\\\'$&\\u0021\'');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://localhost^" ^\n  -H ^"Content-Type: application/binary^" ^\n  --data-raw ^"^%^OS^%^\\^\\r^\\^\\n^%^%^OS^%^%^\\^\\r^\\^\\n^\\^"^\\^\\^\\^\\^\\^"\'^$^&^!^"');
+  });
+
+  it('generates a valid curl command for a URL with special characters', async () => {
+    const request = createNetworkRequest(urlString`http://example.com/?a=[]{}`, {});
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://example.com/?a=\\[\\]\\{\\}\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://example.com/?a=^\\[^\\]^\\{^\\}^"');
+  });
+
+  it('generates a valid curl command stripping pseudo-headers', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [
+        {name: ':host', value: 'h'},
+        {name: 'version', value: 'v'},
+      ],
+    });
+    const actual = await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix');
+    const expected = 'curl \'http://localhost\'';
+    assert.strictEqual(actual, expected);
+  });
+
+  it('generates a curl command with an unescaped method', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {});
+    request.requestMethod = '|evilcommand|';
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' -X \'|evilcommand|\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://localhost^" -X ^"^|evilcommand^|^"');
+  });
+
+  it('generates a valid curl command for urlencoded data starting with @', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [{name: 'Content-Type', value: 'application/x-www-form-urlencoded'}],
+    });
+    request.requestMethod = 'POST';
+    request.setRequestFormData(true, '@/etc/passwd');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' \\\n  -H \'Content-Type: application/x-www-form-urlencoded\' \\\n  --data-raw \'@/etc/passwd\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^\"http://localhost^\" ^\n  -H ^\"Content-Type: application/x-www-form-urlencoded^\" ^\n  --data-raw ^\"^@/etc/passwd^\"',
     );
   });
 
@@ -584,10 +722,10 @@ describeWithMockConnection('NetworkLogView', () => {
 
     // set up overrides
     r2.originalResponseHeaders = [{name: 'content-type', value: 'x'}];
-    r2.responseHeaders = [{name: 'content-type', value: 'overriden'}];
+    r2.responseHeaders = [{name: 'content-type', value: 'overridden'}];
     r3.hasOverriddenContent = true;
     r4.originalResponseHeaders = [{name: 'age', value: 'x'}];
-    r4.responseHeaders = [{name: 'age', value: 'overriden'}];
+    r4.responseHeaders = [{name: 'age', value: 'overridden'}];
     r4.hasOverriddenContent = true;
 
     return {urlNotOverridden, urlHeaderOverridden, urlContentOverridden, urlHeaderAndContentOverridden};
@@ -782,10 +920,10 @@ describeWithMockConnection('NetworkLogView', () => {
 url-header-und-content-overridden`]);
     copyText.resetHistory();
 
-    const copyAllCurlComnmands = findMenuItemWithLabel(
+    const copyAllCurlCommands = findMenuItemWithLabel(
         footerSection, Host.Platform.isWin() ? 'Copy all listed as cURL (bash)' : 'Copy all listed as cURL');
-    assert.isDefined(copyAllCurlComnmands);
-    contextMenu.invokeHandler(copyAllCurlComnmands.id());
+    assert.isDefined(copyAllCurlCommands);
+    contextMenu.invokeHandler(copyAllCurlCommands.id());
     await expectCalled(copyText);
     sinon.assert.callCount(copyText, 1);
     assert.deepEqual(copyText.lastCall.args, [`curl 'url-header-overridden' ;
@@ -831,7 +969,7 @@ url-content-overridden
 url-header-und-content-overridden`]);
     copyText.resetHistory();
 
-    contextMenu.invokeHandler(copyAllCurlComnmands.id());
+    contextMenu.invokeHandler(copyAllCurlCommands.id());
     await expectCalled(copyText);
     sinon.assert.callCount(copyText, 1);
     assert.deepEqual(copyText.lastCall.args, [`curl 'url-not-overridden' ;
@@ -943,18 +1081,21 @@ describeWithMockConnection('NetworkLogView placeholder', () => {
 
   beforeEach(() => {
     stubNoopSettings();
-    UI.ActionRegistration.registerActionExtension({
-      actionId: START_RECORDING_ID,
-      category: UI.ActionRegistration.ActionCategory.NETWORK,
-      title: () => 'mock' as Platform.UIString.LocalizedString,
-      toggleable: true,
-    });
-    UI.ActionRegistration.registerActionExtension({
-      actionId: RELOAD_ID,
-      category: UI.ActionRegistration.ActionCategory.NETWORK,
-      title: () => 'mock' as Platform.UIString.LocalizedString,
-      toggleable: true,
-    });
+
+    registerActions([
+      {
+        actionId: START_RECORDING_ID,
+        category: UI.ActionRegistration.ActionCategory.NETWORK,
+        title: () => 'mock' as Platform.UIString.LocalizedString,
+        toggleable: true,
+      },
+      {
+        actionId: RELOAD_ID,
+        category: UI.ActionRegistration.ActionCategory.NETWORK,
+        title: () => 'mock' as Platform.UIString.LocalizedString,
+        toggleable: true,
+      }
+    ]);
     sinon.stub(UI.ShortcutRegistry.ShortcutRegistry, 'instance').returns({
       shortcutTitleForAction: () => 'Ctrl',
       shortcutsForAction: () => [new UI.KeyboardShortcut.KeyboardShortcut(
@@ -992,8 +1133,42 @@ describeWithEnvironment('NetworkLogView', () => {
     try {
       createNetworkLogView();
     } catch {
-      assert.fail('Creating the network view without registring the actions shouldn\'t fail.');
+      assert.fail('Creating the network view without registering the actions shouldn\'t fail.');
     }
+  });
+
+  it('shows Debug with AI menu and submenu items when the flag is on', () => {
+    updateHostConfig({
+      devToolsAiSubmenuPrompts: {
+        enabled: true,
+      },
+    });
+    stubNoopSettings();
+    registerActions([{
+      actionId: 'drjones.network-panel-context',
+      title: () => 'Debug with AI' as Platform.UIString.LocalizedString,
+      category: UI.ActionRegistration.ActionCategory.GLOBAL,
+    }]);
+
+    const filterBar = new UI.FilterBar.FilterBar('network-test');
+    const progressBarContainer = document.createElement('div');
+    const setting = Common.Settings.Settings.instance().createSetting('network-log-large-rows', false);
+    const networkLogView = new Network.NetworkLogView.NetworkLogView(filterBar, progressBarContainer, setting);
+    const request = SDK.NetworkRequest.NetworkRequest.create(
+        'requestId' as Protocol.Network.RequestId, Platform.DevToolsPath.urlString`https://www.example.com/script.js`,
+        Platform.DevToolsPath.urlString``, null, null, null);
+
+    const event = new Event('contextmenu');
+    sinon.stub(event, 'target').value(document);
+    const contextMenu = new UI.ContextMenu.ContextMenu(event);
+
+    networkLogView.handleContextMenuForRequest(contextMenu, request);
+
+    const debugWithAiItem = contextMenu.buildDescriptor().subItems?.find(item => item.label === 'Debug with AI');
+    assert.exists(debugWithAiItem);
+    assert.deepEqual(
+        debugWithAiItem?.subItems?.map(item => item.label),
+        ['Start a chat', 'Explain purpose', 'Explain slowness', 'Explain failures', 'Assess security headers']);
   });
 });
 
@@ -1042,7 +1217,7 @@ function getMoreFiltersActiveCount(filterBar: UI.FilterBar.FilterBar): string {
 
 function getDropdownItem(softMenu: UI.ContextMenu.ContextMenu, label: string) {
   const item = findMenuItemWithLabel(softMenu.defaultSection(), label);
-  assertNotNullOrUndefined(item);
+  assert.isOk(item);
   return item;
 }
 

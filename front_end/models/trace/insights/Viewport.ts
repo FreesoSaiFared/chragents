@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@ import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
 import * as Handlers from '../handlers/handlers.js';
 import * as Helpers from '../helpers/helpers.js';
-import type * as Types from '../types/types.js';
+import * as Types from '../types/types.js';
 
 import {
   InsightCategory,
@@ -24,7 +24,7 @@ export const UIStrings = {
    * @description Text to tell the user how a viewport meta element can improve performance. \xa0 is a non-breaking space
    */
   description:
-      'Tap interactions may be [delayed by up to 300\xA0ms](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/) if the viewport is not optimized for mobile.',
+      'Tap interactions may be [delayed by up to 300\xA0ms](https://developer.chrome.com/docs/performance/insights/viewport) if the viewport is not optimized for mobile.',
   /**
    * @description Text for a label describing the portion of an interaction event that was delayed due to a bad mobile viewport.
    */
@@ -46,15 +46,19 @@ function finalize(partialModel: PartialInsightModel<ViewportInsightModel>): View
     strings: UIStrings,
     title: i18nString(UIStrings.title),
     description: i18nString(UIStrings.description),
+    docs: 'https://developer.chrome.com/docs/performance/insights/viewport',
     category: InsightCategory.INP,
     state: partialModel.mobileOptimized === false ? 'fail' : 'pass',
     ...partialModel,
   };
 }
 
-export function generateInsight(
-    parsedTrace: Handlers.Types.ParsedTrace, context: InsightSetContext): ViewportInsightModel {
-  const viewportEvent = parsedTrace.UserInteractions.parseMetaViewportEvents.find(event => {
+export function isViewportInsight(model: InsightModel): model is ViewportInsightModel {
+  return model.insightKey === InsightKeys.VIEWPORT;
+}
+
+export function generateInsight(data: Handlers.Types.HandlerData, context: InsightSetContext): ViewportInsightModel {
+  const viewportEvent = data.UserInteractions.parseMetaViewportEvents.find(event => {
     if (event.args.data.frame !== context.frameId) {
       return false;
     }
@@ -62,7 +66,7 @@ export function generateInsight(
     return Helpers.Timing.eventIsInBounds(event, context.bounds);
   });
 
-  const compositorEvents = parsedTrace.UserInteractions.beginCommitCompositorFrameEvents.filter(event => {
+  const compositorEvents = data.UserInteractions.beginCommitCompositorFrameEvents.filter(event => {
     if (event.args.frame !== context.frameId) {
       return false;
     }
@@ -88,7 +92,7 @@ export function generateInsight(
   for (const event of compositorEvents) {
     if (!event.args.is_mobile_optimized) {
       // Grab all the pointer events with at least 50ms of input delay.
-      const longPointerInteractions = [...parsedTrace.UserInteractions.interactionsOverThreshold.values()].filter(
+      const longPointerInteractions = [...data.UserInteractions.interactionsOverThreshold.values()].filter(
           interaction => Handlers.ModelHandlers.UserInteractions.categoryOfInteraction(interaction) === 'POINTER' &&
               interaction.inputDelay >= 50_000);
 
@@ -110,5 +114,25 @@ export function generateInsight(
   return finalize({
     mobileOptimized: true,
     viewportEvent,
+  });
+}
+
+export function createOverlays(model: ViewportInsightModel): Types.Overlays.Overlay[] {
+  if (!model.longPointerInteractions) {
+    return [];
+  }
+
+  return model.longPointerInteractions.map(interaction => {
+    const delay = Math.min(interaction.inputDelay, 300 * 1000);
+    const bounds = Helpers.Timing.traceWindowFromMicroSeconds(
+        Types.Timing.Micro(interaction.ts),
+        Types.Timing.Micro(interaction.ts + delay),
+    );
+    return {
+      type: 'TIMESPAN_BREAKDOWN',
+      entry: interaction,
+      sections: [{bounds, label: i18nString(UIStrings.mobileTapDelayLabel), showDuration: true}],
+      renderLocation: 'ABOVE_EVENT',
+    };
   });
 }

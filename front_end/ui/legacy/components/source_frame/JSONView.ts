@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2011 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2011 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as i18n from '../../../../core/i18n/i18n.js';
@@ -40,12 +14,13 @@ import jsonViewStyles from './jsonView.css.js';
 
 const UIStrings = {
   /**
-   *@description Text to find an item
+   * @description Text to find an item
    */
   find: 'Find',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/source_frame/JSONView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
+
 export class JSONView extends UI.Widget.VBox implements UI.SearchableView.Searchable {
   private initialized: boolean;
   private readonly parsedJSON: ParsedJSON;
@@ -83,9 +58,9 @@ export class JSONView extends UI.Widget.VBox implements UI.SearchableView.Search
     return searchableView;
   }
 
-  static createViewSync(obj: Object|null): UI.SearchableView.SearchableView {
+  static createViewSync(obj: Object|null, element?: HTMLElement): UI.SearchableView.SearchableView {
     const jsonView = new JSONView(new ParsedJSON(obj, '', ''));
-    const searchableView = new UI.SearchableView.SearchableView(jsonView, null);
+    const searchableView = new UI.SearchableView.SearchableView(jsonView, null, undefined, element);
     searchableView.setPlaceholder(i18nString(UIStrings.find));
     jsonView.searchableView = searchableView;
     jsonView.show(searchableView.element);
@@ -93,10 +68,14 @@ export class JSONView extends UI.Widget.VBox implements UI.SearchableView.Search
     return searchableView;
   }
 
+  setSearchableView(searchableView: UI.SearchableView.SearchableView): void {
+    this.searchableView = searchableView;
+  }
+
   private static parseJSON(text: string|null): Promise<ParsedJSON|null> {
-    let returnObj: (ParsedJSON|null)|null = null;
+    let returnObj: ParsedJSON<string>|null = null;
     if (text) {
-      returnObj = JSONView.extractJSON((text));
+      returnObj = JSONView.extractJSON(text);
     }
     if (!returnObj) {
       return Promise.resolve(null);
@@ -114,7 +93,7 @@ export class JSONView extends UI.Widget.VBox implements UI.SearchableView.Search
     return Promise.resolve(returnObj);
   }
 
-  private static extractJSON(text: string): ParsedJSON|null {
+  private static extractJSON(text: string): ParsedJSON<string>|null {
     // Do not treat HTML as JSON.
     if (text.startsWith('<')) {
       return null;
@@ -286,23 +265,46 @@ export class JSONView extends UI.Widget.VBox implements UI.SearchableView.Search
     return true;
   }
 
+  supportsWholeWordSearch(): boolean {
+    return true;
+  }
+
   supportsRegexSearch(): boolean {
     return true;
   }
 }
 
-export class ParsedJSON {
-  // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: any;
+export class ParsedJSON<T extends unknown = unknown> {
+  data: T;
   prefix: string;
   suffix: string;
 
-  // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(data: any, prefix: string, suffix: string) {
+  constructor(data: T, prefix: string, suffix: string) {
     this.data = data;
     this.prefix = prefix;
     this.suffix = suffix;
+  }
+}
+
+export class SearchableJsonView extends UI.SearchableView.SearchableView {
+  #jsonView: JSONView;
+
+  constructor(element: HTMLElement) {
+    const jsonView = new JSONView(new ParsedJSON('', '', ''));
+    super(jsonView, null, undefined, element);
+    this.#jsonView = jsonView;
+    this.setPlaceholder(i18nString(UIStrings.find));
+    jsonView.setSearchableView(this);
+    jsonView.show(this.element);
+    jsonView.element.tabIndex = 0;
+  }
+
+  set jsonObject(obj: Object) {
+    const jsonView = new JSONView(new ParsedJSON(obj, '', ''));
+    this.#jsonView.detach();
+    this.#jsonView = jsonView;
+    this.searchProvider = jsonView;
+    jsonView.show(this.element);
+    this.requestUpdate();
   }
 }

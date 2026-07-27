@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,7 +24,7 @@ const component = new ConsoleInsight(
     {
       async *
           // eslint-disable-next-line require-yield
-          fetch() {
+          doConversation() {
             throw new Error('Could not connect to the server');
           },
       registerClientEvent: () => Promise.resolve({}),

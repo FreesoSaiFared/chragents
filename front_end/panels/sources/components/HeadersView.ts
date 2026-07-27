@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -8,6 +8,7 @@ import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Protocol from '../../../generated/protocol.js';
 import * as Persistence from '../../../models/persistence/persistence.js';
+import * as TextUtils from '../../../models/text_utils/text_utils.js';
 import * as Workspace from '../../../models/workspace/workspace.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
@@ -21,34 +22,34 @@ const {html} = Lit;
 
 const UIStrings = {
   /**
-   *@description The title of a button that adds a field to input a header in the editor form.
+   * @description The title of a button that adds a field to input a header in the editor form.
    */
   addHeader: 'Add a header',
   /**
-   *@description The title of a button that removes a field to input a header in the editor form.
+   * @description The title of a button that removes a field to input a header in the editor form.
    */
   removeHeader: 'Remove this header',
   /**
-   *@description The title of a button that removes a section for defining header overrides in the editor form.
+   * @description The title of a button that removes a section for defining header overrides in the editor form.
    */
   removeBlock: 'Remove this \'`ApplyTo`\'-section',
   /**
-   *@description Error message for files which cannot not be parsed.
-   *@example {.headers} PH1
+   * @description Error message for files which cannot not be parsed.
+   * @example {.headers} PH1
    */
   errorWhenParsing: 'Error when parsing \'\'{PH1}\'\'.',
   /**
-   *@description Explainer for files which cannot be parsed.
-   *@example {.headers} PH1
+   * @description Explainer for files which cannot be parsed.
+   * @example {.headers} PH1
    */
   parsingErrorExplainer:
       'This is most likely due to a syntax error in \'\'{PH1}\'\'. Try opening this file in an external editor to fix the error or delete the file and re-create the override.',
   /**
-   *@description Button text for a button which adds an additional header override rule.
+   * @description Button text for a button which adds an additional header override rule.
    */
   addOverrideRule: 'Add override rule',
   /**
-   *@description Text which is a hyperlink to more documentation
+   * @description Text which is a hyperlink to more documentation
    */
   learnMore: 'Learn more',
 } as const;
@@ -63,8 +64,11 @@ export class HeadersView extends UI.View.SimpleView {
   #uiSourceCode: Workspace.UISourceCode.UISourceCode;
 
   constructor(uiSourceCode: Workspace.UISourceCode.UISourceCode) {
-    super(i18n.i18n.lockedString('HeadersView'));
-    this.element.setAttribute('jslog', `${VisualLogging.pane('headers-view')}`);
+    super({
+      title: i18n.i18n.lockedString('HeadersView'),
+      viewId: 'headers-view',
+      jslog: `${VisualLogging.pane('headers-view')}`,
+    });
     this.#uiSourceCode = uiSourceCode;
     this.#uiSourceCode.addEventListener(
         Workspace.UISourceCode.Events.WorkingCopyChanged, this.#onWorkingCopyChanged, this);
@@ -75,8 +79,8 @@ export class HeadersView extends UI.View.SimpleView {
   }
 
   async #setInitialData(): Promise<void> {
-    const content = await this.#uiSourceCode.requestContent();
-    this.#setComponentData(content.content || '');
+    const contentDataOrError = await this.#uiSourceCode.requestContentData();
+    this.#setComponentData(TextUtils.ContentData.ContentData.textOr(contentDataOrError, ''));
   }
 
   #setComponentData(content: string): void {

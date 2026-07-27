@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -11,7 +11,7 @@ import pieChartStyles from './pieChart.css.js';
 
 const UIStrings = {
   /**
-   *@description Text for sum
+   * @description Text for sum
    */
   total: 'Total',
 } as const;
@@ -32,10 +32,12 @@ export interface PieChartData {
   total: number;
   slices: Slice[];
 }
-// If the slices are not available when constructing the pie chart, set .data
-// immediately, with total=0 and slices=[], so that the chart is rendered with
-// the correct initial size. This avoids a layout shift when the slices are
-// later populated.
+/**
+ * If the slices are not available when constructing the pie chart, set .data
+ * immediately, with total=0 and slices=[], so that the chart is rendered with
+ * the correct initial size. This avoids a layout shift when the slices are
+ * later populated.
+ **/
 export class PieChart extends HTMLElement {
   private readonly shadow = this.attachShadow({mode: 'open'});
   private chartName = '';

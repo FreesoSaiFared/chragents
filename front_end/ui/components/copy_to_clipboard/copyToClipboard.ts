@@ -1,5 +1,5 @@
 
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,6 @@ export function copyTextToClipboard(text: string, alert?: string): void {
   Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(text);
   // TODO: make alert required.
   if (alert) {
-    UI.ARIAUtils.alert(alert);
+    UI.ARIAUtils.LiveAnnouncer.alert(alert);
   }
 }

@@ -17,11 +17,16 @@ export interface TestCase<TInput = any> {
   tool: string; // Name of the tool to test
   input: TInput; // Tool-specific input
   validation: ValidationConfig;
+  skip?: boolean; // Skip this test case
   metadata: {
     tags: string[];
     timeout?: number;
     retries?: number;
     flaky?: boolean;
+    /** CSS selector to wait for visibility after navigation (for dynamic content like modals) */
+    waitForSelector?: string;
+    /** Delay in ms after navigation (alternative to waitForSelector) */
+    waitAfterNavigation?: number;
   };
 }
 
@@ -159,6 +164,11 @@ export interface EvaluationConfig {
   // LLM settings for evaluation (used by LLM judge)
   evaluationModel: string;
   evaluationApiKey: string;
+  
+  // Model settings for tools and agents under test
+  mainModel: string;
+  miniModel: string;
+  nanoModel: string;
   
   // Execution settings
   maxConcurrency: number;

@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,9 +7,6 @@ import type {Page} from 'puppeteer-core';
 
 import type {StepChanged} from '../../../front_end/panels/recorder/components/StepView.js';
 import type {RecorderActions} from '../../../front_end/panels/recorder/recorder-actions/recorder-actions.js';
-import {
-  assertNotNullOrUndefined,
-} from '../../../test/shared/helper.js';
 import {
   changeNetworkConditions,
   fillCreateRecordingForm,
@@ -112,8 +109,8 @@ describe('Recorder', function() {
     await inspectedPage.bringToFront();
     await inspectedPage.page.click('#mouse-button', {button: 'middle'});
     await inspectedPage.page.click('#mouse-button', {button: 'right'});
-    await inspectedPage.page.click('#mouse-button', {button: 'forward' as 'left'});
-    await inspectedPage.page.click('#mouse-button', {button: 'back' as 'left'});
+    await inspectedPage.page.click('#mouse-button', {button: 'forward'});
+    await inspectedPage.page.click('#mouse-button', {button: 'back'});
     await inspectedPage.page.click('#mouse-button', {clickCount: 1});
     await inspectedPage.page.click('#mouse-button', {clickCount: 2});
 
@@ -1357,7 +1354,7 @@ describe('Recorder', function() {
       return steps.length === 5 ? steps : undefined;
     });
     const step = steps.pop();
-    assertNotNullOrUndefined(step);
+    assert.isOk(step);
     const title = await step.waitForSelector(':scope >>>> .main-title');
     await title!.click();
 
@@ -1367,7 +1364,7 @@ describe('Recorder', function() {
 
     const eventPromise = step.evaluate(element => {
       return new Promise(resolve => {
-        element.addEventListener('stepchanged', (event: Event) => {
+        element.addEventListener('stepchanged', event => {
           resolve((event as StepChanged).newStep);
         }, {once: true});
       });
@@ -1403,10 +1400,8 @@ describe('Recorder', function() {
     );
 
     // Find the button.
-    const button = await devToolsPage.waitFor('.add-assertion-button');
+    await devToolsPage.click('.add-assertion-button');
 
-    // Add an assertion.
-    await button.click();
     await devToolsPage.renderCoordinatorQueueEmpty();
 
     // Get the latest step.

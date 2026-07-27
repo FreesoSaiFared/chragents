@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,9 +16,9 @@ describeWithMockConnection('CSSOverviewPanel', () => {
   let target: SDK.Target.Target;
 
   beforeEach(async () => {
-    const tabTaget = createTarget({type: SDK.Target.Type.TAB});
-    createTarget({parentTarget: tabTaget, subtype: 'prerender'});
-    target = createTarget({parentTarget: tabTaget});
+    const tabTarget = createTarget({type: SDK.Target.Type.TAB});
+    createTarget({parentTarget: tabTarget, subtype: 'prerender'});
+    target = createTarget({parentTarget: tabTarget});
   });
 
   it('reacts to start event and sends completion event', async () => {

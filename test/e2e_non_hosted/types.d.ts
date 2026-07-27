@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import type {Platform} from '../conductor/platform.js';
@@ -48,6 +48,10 @@ declare global {
       beforeEach: undefined;
       afterEach: undefined;
     }
+
+    export interface Test {
+      realDuration?: number;
+    }
   }
   namespace E2E {
     export type HarnessSettings = BrowserSettings&DevtoolsSettings;
@@ -59,7 +63,7 @@ declare global {
       browser: BrowserWrapper;
     }
 
-    // We do not allow test functions to affect mocha context.
+    /** We do not allow test functions to affect mocha context. **/
     export type TestAsyncCallbackWithState = (this: undefined, state: State) => PromiseLike<unknown>;
   }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,8 +11,8 @@ const path = require('path');
  * Converts a string to camelCase.
  * e.g., "my-component-name" -> "myComponentName"
  * e.g., "MyComponentName" -> "myComponentName"
- * @param {string} str
- * @returns {string}
+ * @param str
+ * @returns
  */
 function toCamelCase(str) {
   if (!str) {
@@ -27,8 +27,8 @@ function toCamelCase(str) {
  * Converts a string to PascalCase.
  * e.g., "my-component-name" -> "MyComponentName"
  * e.g., "myComponentName" -> "MyComponentName"
- * @param {string} str
- * @returns {string}
+ * @param str
+ * @returns
  */
 function toPascalCase(str) {
   if (!str) {
@@ -43,8 +43,8 @@ function toPascalCase(str) {
  * Converts a string to kebab-case.
  * e.g., "MyComponentName" -> "my-component-name"
  * e.g., "myComponentName" -> "my-component-name"
- * @param {string} str
- * @returns {string}
+ * @param str
+ * @returns
  */
 function toKebabCase(str) {
   if (!str) {

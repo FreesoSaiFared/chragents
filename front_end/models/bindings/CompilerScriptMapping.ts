@@ -1,42 +1,16 @@
-/*
- * Copyright (C) 2012 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2012 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
+import type * as StackTraceImpl from '../stack_trace/stack_trace_impl.js';
 import * as TextUtils from '../text_utils/text_utils.js';
 import * as Workspace from '../workspace/workspace.js';
 
 import {ContentProviderBasedProject} from './ContentProviderBasedProject.js';
 import type {DebuggerSourceMapping, DebuggerWorkspaceBinding} from './DebuggerWorkspaceBinding.js';
-import {IgnoreListManager} from './IgnoreListManager.js';
 import {NetworkProject} from './NetworkProject.js';
 
 /**
@@ -131,7 +105,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
     // Find the source location for the raw location.
     const {lineNumber, columnNumber} = script.rawLocationToRelativeLocation(rawLocation);
     const entry = sourceMap.findEntry(lineNumber, columnNumber);
-    if (!entry || !entry.sourceURL) {
+    if (!entry?.sourceURL) {
       return [];
     }
 
@@ -215,7 +189,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
     }
 
     const entry = sourceMap.findEntry(lineNumber, columnNumber, rawLocation.inlineFrameIndex);
-    if (!entry || !entry.sourceURL) {
+    if (!entry?.sourceURL) {
       return null;
     }
 
@@ -291,12 +265,19 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
     return ranges;
   }
 
+  translateRawFramesStep(
+      _rawFrames: StackTraceImpl.Trie.RawFrame[],
+      _translatedFrames: Awaited<ReturnType<StackTraceImpl.StackTraceModel.TranslateRawFrames>>): boolean {
+    // TODO(crbug.com/433162438): Implement source map stack trace translation.
+    return false;
+  }
+
   /**
    * Computes the set of line numbers which are source-mapped to a script within the
    * given {@link uiSourceCode}.
    *
    * @param uiSourceCode the source mapped entity.
-   * @return a set of source-mapped line numbers or `null` if the {@link uiSourceCode}
+   * @returns a set of source-mapped line numbers or `null` if the {@link uiSourceCode}
    *         is not provided by this {@link CompilerScriptMapping} instance.
    */
   getMappedLines(uiSourceCode: Workspace.UISourceCode.UISourceCode): Set<number>|null {
@@ -329,7 +310,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
     // Create stub UISourceCode for the time source mapping is being loaded.
     this.addStubUISourceCode(script);
     void this.#debuggerWorkspaceBinding.updateLocations(script);
-    if (IgnoreListManager.instance().isUserIgnoreListedURL(
+    if (Workspace.IgnoreListManager.IgnoreListManager.instance().isUserIgnoreListedURL(
             script.sourceURL, {isContentScript: script.isContentScript()})) {
       this.#sourceMapManager.cancelAttachSourceMap(script);
     }

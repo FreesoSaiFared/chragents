@@ -12,11 +12,13 @@
   "lighthouse",
   "lit",
   "marked",
+  "mcp-sdk",
   "puppeteer",
   "puppeteer/third_party/mitt",
   "puppeteer/third_party/parsel",
   "puppeteer/third_party/rxjs",
   "puppeteer-replay",
+  "source-map-scopes-codec",
   "third-party-web",
   "wasmparser",
   "web-vitals"

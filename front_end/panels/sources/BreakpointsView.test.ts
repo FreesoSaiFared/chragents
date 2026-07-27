@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -728,10 +728,12 @@ describeWithMockConnection('BreakpointsSidebarController', () => {
     const workspace = Workspace.Workspace.WorkspaceImpl.instance();
     const targetManager = SDK.TargetManager.TargetManager.instance();
     const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
+    const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
     const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
       forceNew: true,
       resourceMapping,
       targetManager,
+      ignoreListManager,
     });
     Breakpoints.BreakpointManager.BreakpointManager.instance(
         {forceNew: true, targetManager, workspace, debuggerWorkspaceBinding});
@@ -746,8 +748,7 @@ describeWithMockConnection('BreakpointsSidebarController', () => {
             Breakpoints.BreakpointManager.BreakpointOrigin.USER_ACTION,
           ];
 
-  // Flaky
-  it.skip('[crbug.com/345456307] auto-expands if a user adds a new  breakpoint', async () => {
+  it('auto-expands if a user adds a new  breakpoint', async () => {
     const breakpointManager = Breakpoints.BreakpointManager.BreakpointManager.instance();
     const settings = Common.Settings.Settings.instance();
     const {uiSourceCode, project} =
@@ -914,10 +915,12 @@ describeWithMockConnection('BreakpointsView', () => {
     const workspace = Workspace.Workspace.WorkspaceImpl.instance();
     const targetManager = SDK.TargetManager.TargetManager.instance();
     const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
+    const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
     const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
       forceNew: true,
       resourceMapping,
       targetManager,
+      ignoreListManager,
     });
     Breakpoints.BreakpointManager.BreakpointManager.instance(
         {forceNew: true, targetManager, workspace, debuggerWorkspaceBinding});
@@ -1545,7 +1548,7 @@ describeWithMockConnection('BreakpointsView', () => {
   });
 
   describe('navigating with keyboard', () => {
-    // One expanded group with 2 breakpoints, and one collapsed with 2 breakpoints.
+    /** One expanded group with 2 breakpoints, and one collapsed with 2 breakpoints. **/
     async function renderBreakpointsForKeyboardNavigation(): Promise<{
       component: Sources.BreakpointsView.BreakpointsView,
       data: Sources.BreakpointsView.BreakpointsViewData,

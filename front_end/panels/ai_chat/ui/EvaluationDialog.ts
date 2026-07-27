@@ -10,14 +10,19 @@ import { MarkdownReportGenerator } from '../evaluation/framework/MarkdownReportG
 import { MarkdownViewerUtil } from '../common/MarkdownViewerUtil.js';
 import { schemaExtractorTests } from '../evaluation/test-cases/schema-extractor-tests.js';
 import { streamlinedSchemaExtractorTests } from '../evaluation/test-cases/streamlined-schema-extractor-tests.js';
+import { htmlToMarkdownTests } from '../evaluation/test-cases/html-to-markdown-tests.js';
 import { researchAgentTests } from '../evaluation/test-cases/research-agent-tests.js';
 import { actionAgentTests } from '../evaluation/test-cases/action-agent-tests.js';
 import { webTaskAgentTests } from '../evaluation/test-cases/web-task-agent-tests.js';
 import type { TestResult } from '../evaluation/framework/types.js';
 import { createLogger } from '../core/Logger.js';
 import { AIChatPanel } from './AIChatPanel.js';
+import { MODEL_PLACEHOLDERS } from '../core/Constants.js';
 
 const logger = createLogger('EvaluationDialog');
+
+// Judge model storage key
+const JUDGE_MODEL_STORAGE_KEY = 'ai_chat_judge_model';
 
 // Tool test mapping for extensibility - add new tools here
 const TOOL_TEST_MAPPING: Record<string, { tests: any[], displayName: string }> = {
@@ -29,8 +34,11 @@ const TOOL_TEST_MAPPING: Record<string, { tests: any[], displayName: string }> =
     tests: streamlinedSchemaExtractorTests,
     displayName: 'Streamlined Schema Extractor'
   },
+  'html_to_markdown': {
+    tests: htmlToMarkdownTests,
+    displayName: 'HTML to Markdown'
+  },
   // Future tools can be added here:
-  // 'html_to_markdown': { tests: htmlToMarkdownTests, displayName: 'HTML to Markdown' },
   // 'fetcher_tool': { tests: fetcherToolTests, displayName: 'Fetcher Tool' },
 };
 
@@ -169,7 +177,7 @@ export class EvaluationDialog {
     bottomPanelView: 'summary',
     testLogs: [],
     toolType: 'extract_schema',
-    judgeModel: 'gpt-4o-mini', // Default judge model
+    judgeModel: 'gpt-4.1-mini', // Will be updated by initializeJudgeModel()
   };
   
   #evaluationRunner?: EvaluationRunner;
@@ -191,15 +199,30 @@ export class EvaluationDialog {
     this.#dialog.contentElement.style.display = 'flex';
     this.#dialog.contentElement.style.flexDirection = 'column';
     
+    // Initialize judge model based on current provider
+    this.#initializeJudgeModel();
+    
     // Initialize evaluation runners
     try {
-      this.#evaluationRunner = new EvaluationRunner(this.#state.judgeModel);
+      // Inject current UI-selected models into the runner to decouple from UI internals
+      this.#evaluationRunner = new EvaluationRunner({
+        judgeModel: this.#state.judgeModel,
+        mainModel: AIChatPanel.instance().getSelectedModel(),
+        miniModel: AIChatPanel.getMiniModel(),
+        nanoModel: AIChatPanel.getNanoModel(),
+      });
     } catch (error) {
       logger.error('Failed to initialize evaluation runner:', error);
     }
     
     try {
-      this.#agentEvaluationRunner = new VisionAgentEvaluationRunner(this.#state.visionEnabled, this.#state.judgeModel);
+      this.#agentEvaluationRunner = new VisionAgentEvaluationRunner({
+        visionEnabled: this.#state.visionEnabled,
+        judgeModel: this.#state.judgeModel,
+        mainModel: AIChatPanel.instance().getSelectedModel(),
+        miniModel: AIChatPanel.getMiniModel(),
+        nanoModel: AIChatPanel.getNanoModel(),
+      });
     } catch (error) {
       logger.error('Failed to initialize agent evaluation runner:', error);
     }
@@ -207,6 +230,63 @@ export class EvaluationDialog {
     this.#addStyles();
     this.#render();
     this.#dialog.show();
+  }
+
+  #initializeJudgeModel(): void {
+    const currentProvider = AIChatPanel.getCurrentProvider();
+    
+    // Get models available for the current provider
+    const providerModels = AIChatPanel.getModelOptions(currentProvider);
+    
+    // First, try to load saved judge model
+    const savedJudgeModel = localStorage.getItem(JUDGE_MODEL_STORAGE_KEY);
+    if (savedJudgeModel && providerModels.find(m => m.value === savedJudgeModel)) {
+      this.#state.judgeModel = savedJudgeModel;
+      logger.info(`Using saved judge model: ${savedJudgeModel} for provider: ${currentProvider}`);
+      return;
+    }
+    
+    // If no saved model or saved model not available for current provider, use smart selection
+    
+    // Regex patterns for finding suitable judge models (in order of preference)
+    const modelPatterns = [
+      // Exact gpt-4.1-mini match with optional provider prefix and suffix
+      { pattern: /^(.*\/)?gpt-4\.1-mini(-.*)?$/i, name: 'gpt-4.1-mini variant' },
+      // Any gpt-4.1 model
+      { pattern: /^(.*\/)?gpt-4\.1(-.*)?$/i, name: 'gpt-4.1 variant' },
+      // Any gpt-4 model
+      { pattern: /^(.*\/)?gpt-4(-.*)?$/i, name: 'gpt-4 variant' }
+    ];
+    
+    let selectedModel = null;
+    let matchReason = '';
+    
+    // Try each pattern in order of preference
+    for (const { pattern, name } of modelPatterns) {
+      const foundModel = providerModels.find(model => pattern.test(model.value));
+      if (foundModel) {
+        selectedModel = foundModel;
+        matchReason = `Found ${name}: ${foundModel.value}`;
+        break;
+      }
+    }
+    
+    if (selectedModel) {
+      // Use the matched model
+      this.#state.judgeModel = selectedModel.value;
+      logger.info(`${matchReason} for provider: ${currentProvider}`);
+    } else if (providerModels.length > 0) {
+      // Fall back to the first available model for this provider
+      this.#state.judgeModel = providerModels[0].value;
+      logger.info(`No preferred judge model pattern found, using first available: ${this.#state.judgeModel} for provider: ${currentProvider}`);
+    } else {
+      // Ultimate fallback if no models are available (shouldn't happen)
+      this.#state.judgeModel = 'gpt-4.1-mini';
+      logger.warn(`No models found for provider ${currentProvider}, using fallback: gpt-4.1-mini`);
+    }
+    
+    // Save the initially selected model
+    localStorage.setItem(JUDGE_MODEL_STORAGE_KEY, this.#state.judgeModel);
   }
 
   #addStyles(): void {
@@ -763,20 +843,20 @@ export class EvaluationDialog {
       min-width: 120px;
     `;
 
-    // Get the currently selected model and its provider
+    // Get the currently selected provider using the AIChatPanel method
+    const currentProvider = AIChatPanel.getCurrentProvider();
     const currentModel = AIChatPanel.instance().getSelectedModel();
-    const currentProvider = AIChatPanel.getProviderForModel(currentModel);
     
-    // Get all model options but only show models from the same provider as the current model
+    // Get all model options but only show models from the same provider as the selected provider
     const modelOptions = AIChatPanel.getModelOptions();
     
-    // Filter models to only show those from the same provider
+    // Filter models to only show those from the selected provider
     const filteredModels = modelOptions.filter(option => {
-      if (option.value.startsWith('_placeholder')) {
+      if (option.value.startsWith(MODEL_PLACEHOLDERS.NO_MODELS) || option.value.startsWith(MODEL_PLACEHOLDERS.ADD_CUSTOM)) {
         return false; // Skip placeholder options
       }
-      const modelProvider = AIChatPanel.getProviderForModel(option.value);
-      return modelProvider === currentProvider;
+      // Use the model's type to determine if it belongs to the selected provider
+      return option.type === currentProvider;
     });
     
     // If no models from current provider, use current model as fallback
@@ -804,9 +884,17 @@ export class EvaluationDialog {
       // If current judge model is not in filtered list, select first available
       if (!filteredModels.find(m => m.value === this.#state.judgeModel)) {
         this.#state.judgeModel = filteredModels[0].value;
+        // Set the selected attribute on the appropriate option
+        const optionToSelect = select.querySelector(`option[value="${this.#state.judgeModel}"]`) as HTMLOptionElement;
+        if (optionToSelect) {
+          optionToSelect.selected = true;
+        }
         select.value = this.#state.judgeModel;
       }
     }
+
+    // Ensure the selection is properly synchronized
+    select.value = this.#state.judgeModel;
 
     // Handle judge model change
     select.addEventListener('change', () => {
@@ -814,16 +902,30 @@ export class EvaluationDialog {
       
       // Reinitialize evaluation runners with new model
       try {
-        this.#evaluationRunner = new EvaluationRunner(this.#state.judgeModel);
+        this.#evaluationRunner = new EvaluationRunner({
+          judgeModel: this.#state.judgeModel,
+          mainModel: AIChatPanel.instance().getSelectedModel(),
+          miniModel: AIChatPanel.getMiniModel(),
+          nanoModel: AIChatPanel.getNanoModel(),
+        });
       } catch (error) {
         logger.error('Failed to reinitialize evaluation runner:', error);
       }
       
       try {
-        this.#agentEvaluationRunner = new VisionAgentEvaluationRunner(this.#state.visionEnabled, this.#state.judgeModel);
+        this.#agentEvaluationRunner = new VisionAgentEvaluationRunner({
+          visionEnabled: this.#state.visionEnabled,
+          judgeModel: this.#state.judgeModel,
+          mainModel: AIChatPanel.instance().getSelectedModel(),
+          miniModel: AIChatPanel.getMiniModel(),
+          nanoModel: AIChatPanel.getNanoModel(),
+        });
       } catch (error) {
         logger.error('Failed to reinitialize agent evaluation runner:', error);
       }
+      
+      // Save the user's selection to localStorage
+      localStorage.setItem(JUDGE_MODEL_STORAGE_KEY, select.value);
       
       this.#addLog(`Changed judge model to: ${select.value}`);
     });

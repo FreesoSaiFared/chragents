@@ -1,6 +1,6 @@
 #!/usr/bin/env vpython3
 #
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """
@@ -184,15 +184,6 @@ def run_npm_command():
     if exec_command([
             'npm',
             'install',
-    ]):
-        return True
-
-    # To minimize disk usage for Chrome DevTools node_modules, always try to dedupe dependencies.
-    # We need to perform this every time, as the order of dependencies added could lead to a
-    # non-optimal dependency tree, resulting in unnecessary disk usage.
-    if exec_command([
-            'npm',
-            'dedupe',
     ]):
         return True
 

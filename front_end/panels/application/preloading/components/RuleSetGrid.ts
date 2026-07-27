@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -26,27 +26,27 @@ const {html, Directives: {styleMap}} = Lit;
 
 const UIStrings = {
   /**
-   *@description Column header: Short URL of rule set.
+   * @description Column header: Short URL of rule set.
    */
   ruleSet: 'Rule set',
   /**
-   *@description Column header: Show how many preloads are associated if valid, error counts if invalid.
+   * @description Column header: Show how many preloads are associated if valid, error counts if invalid.
    */
   status: 'Status',
   /**
-   *@description button: Title of button to reveal the corresponding request of rule set in Elements panel
+   * @description button: Title of button to reveal the corresponding request of rule set in Elements panel
    */
   clickToOpenInElementsPanel: 'Click to open in Elements panel',
   /**
-   *@description button: Title of button to reveal the corresponding request of rule set in Network panel
+   * @description button: Title of button to reveal the corresponding request of rule set in Network panel
    */
   clickToOpenInNetworkPanel: 'Click to open in Network panel',
   /**
-   *@description Value of status, specifying rule set contains how many errors.
+   * @description Value of status, specifying rule set contains how many errors.
    */
   errors: '{errorCount, plural, =1 {# error} other {# errors}}',
   /**
-   *@description button: Title of button to reveal preloading attempts with filter by selected rule set
+   * @description button: Title of button to reveal preloading attempts with filter by selected rule set
    */
   buttonRevealPreloadsAssociatedWithRuleSet: 'Reveal speculative loads associated with this rule set',
 } as const;
@@ -63,7 +63,7 @@ export interface RuleSetGridRow {
   preloadsStatusSummary: string;
 }
 
-// Grid component to show SpeculationRules rule sets.
+/** Grid component to show SpeculationRules rule sets. **/
 export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<UI.Widget.VBox> {
   readonly #shadow = this.attachShadow({mode: 'open'});
   #data: RuleSetGridData|null = null;
@@ -128,7 +128,7 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
       Lit.render(html`
         <style>${ruleSetGridStyles}</style>
         <div class="ruleset-container" jslog=${VisualLogging.pane('preloading-rules')}>
-          <devtools-data-grid striped @select=${this.#onRowSelected}>
+          <devtools-data-grid striped>
             <table>
               <tr>
                 <th id="rule-set" weight="20" sortable>
@@ -143,7 +143,7 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
                 const revealInElements = ruleSet.backendNodeId !== undefined;
                 const revealInNetwork = ruleSet.url !== undefined && ruleSet.requestId;
                 return html`
-                  <tr data-id=${ruleSet.id}>
+                  <tr @select=${() => this.dispatchEvent(new CustomEvent('select', {detail: ruleSet.id}))}>
                     <td>
                       ${revealInElements || revealInNetwork ? html`
                         <button class="link" role="link"
@@ -163,11 +163,9 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
                                 .action(revealInElements ? 'reveal-in-elements' : 'reveal-in-network')
                                 .track({click: true})}
                           >
-                            <devtools-icon name=${revealInElements ? 'code-circle' : 'arrow-up-down-circle'}
+                            <devtools-icon name=${revealInElements ? 'code-circle' : 'arrow-up-down-circle'} class="medium"
                               style=${styleMap({
                                 color: 'var(--icon-link)',
-                                width: '16px',
-                                height: '16px',
                                 'vertical-align': 'sub',
                               })}
                             ></devtools-icon>
@@ -179,7 +177,9 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
                     ${ruleSet.errorType !== undefined ? html`
                       <span style=${styleMap({color: 'var(--sys-color-error)'})}>
                         ${i18nString(UIStrings.errors, {errorCount: 1})}
-                      </span>` : ''} ${ruleSet.errorType !== Protocol.Preload.RuleSetErrorType.SourceIsNotJsonObject ? html`
+                      </span>` : ''} ${ruleSet.errorType !== Protocol.Preload.RuleSetErrorType.SourceIsNotJsonObject &&
+                      ruleSet.errorType !== Protocol.Preload.RuleSetErrorType.InvalidRulesetLevelTag ?
+                      html`
                       <button class="link" role="link"
                         @click=${() => this.#revealAttemptViewWithFilter(ruleSet)}
                         title=${i18nString(UIStrings.buttonRevealPreloadsAssociatedWithRuleSet)}
@@ -203,13 +203,6 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
         </div>
       `, this.#shadow, {host: this});
     // clang-format on
-  }
-
-  #onRowSelected(event: CustomEvent<HTMLElement>): void {
-    const ruleSetId = event.detail.dataset.id;
-    if (ruleSetId !== undefined) {
-      this.dispatchEvent(new CustomEvent('select', {detail: ruleSetId}));
-    }
   }
 }
 

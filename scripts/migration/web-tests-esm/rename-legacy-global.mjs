@@ -1,9 +1,9 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 /**
- * @fileoverview A quick and dirty search & replace script to aid in the
+ * @file A quick and dirty search & replace script to aid in the
  * "*-legacy-ts" removal effort.
  *
  * It replaces each occurrence passed via "--from" to "--to" and adds the

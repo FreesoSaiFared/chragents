@@ -1,17 +1,19 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/*
-  To use links in markdown, add key here with the link and
-  use the added key in markdown.
-  @example markdown
-  Find more information about web development at [Learn more](exampleLink)
-*/
+/**
+ * To use links in markdown, add key here with the link and
+ * use the added key in markdown.
+ * @example markdown
+ * Find more information about web development at [Learn more](exampleLink)
+ */
 
-// This is only exported for tests, and it should not be
-// imported in any component, instead add link in map and
-// use getMarkdownLink to get the appropriate link.
+/**
+ * This is only exported for tests, and it should not be
+ * imported in any component, instead add link in map and
+ * use getMarkdownLink to get the appropriate link.
+ **/
 export const markdownLinks = new Map<string, string>([
   ['issuesContrastWCAG21AA', 'https://www.w3.org/TR/WCAG21/#contrast-minimum'],
   ['issuesContrastWCAG21AAA', 'https://www.w3.org/TR/WCAG21/#contrast-enhanced'],
@@ -84,6 +86,9 @@ export const getMarkdownLink = (key: string): string => {
     return key;
   }
   if (/^https:\/\/web\.dev\//.test(key)) {
+    return key;
+  }
+  if (/^https:\/\/developer\.mozilla\.org\//.test(key)) {
     return key;
   }
   if (key === 'https://philipwalton.com/articles/the-state-of-es5-on-the-web/') {

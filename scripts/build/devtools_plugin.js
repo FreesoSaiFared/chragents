@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,8 +31,8 @@ const path = require('path');
  *
  * Now, the first path does *not* start with the second one, as expected.
  *
- * @param {string} file
- * @return {string}
+ * @param file
+ * @returns
  */
 function dirnameWithSeparator(file) {
   return path.dirname(file) + path.sep;
@@ -107,6 +107,13 @@ function devtoolsPlugin(source, importer) {
   }
 
   if (importedFileDirectory.includes(path.join('front_end', 'third_party', 'puppeteer-replay', 'package'))) {
+    return {
+      id: importedFilelocation,
+      external: false,
+    };
+  }
+
+  if (importedFileDirectory.includes(path.join('front_end', 'third_party', 'source-map-scopes-codec', 'package'))) {
     return {
       id: importedFilelocation,
       external: false,

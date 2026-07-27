@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,11 +29,26 @@ export async function getDataGridRows(
   return await Promise.all(handlers.map(handler => devToolsPage.$$('td[jslog]:not(.hidden)', handler)));
 }
 
+export async function getDataGridColumnNames(
+    root?: ElementHandle<Node>,
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<String[]> {
+  const columnNames: String[] = [];
+  const dataGrid = !root ? await devToolsPage.waitFor('devtools-data-grid') : root;
+
+  const columnNodes = await dataGrid.$$('pierce/[role="columnheader"]');
+  for (const column of columnNodes) {
+    const text = await column.evaluate(x => {
+      return (x as HTMLElement).innerText || '';
+    });
+    columnNames.push(text);
+  }
+
+  return columnNames;
+}
+
 export async function getDataGrid(root?: ElementHandle, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const dataGrid = await devToolsPage.waitFor('devtools-data-grid', root);
-  if (!dataGrid) {
-    assert.fail('Could not find data-grid');
-  }
+  assert.isOk(dataGrid, 'Could not find data-grid');
   await devToolsPage.waitForFunction(async () => {
     const height = await dataGrid.evaluate(elem => elem.clientHeight);
     // Give it a chance to fully render into the page.

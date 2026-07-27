@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@ import {CookieIssue, CookieIssueSubCategory} from './CookieIssue.js';
 import {CorsIssue} from './CorsIssue.js';
 import {CrossOriginEmbedderPolicyIssue, isCrossOriginEmbedderPolicyIssue} from './CrossOriginEmbedderPolicyIssue.js';
 import {DeprecationIssue} from './DeprecationIssue.js';
+import {ElementAccessibilityIssue} from './ElementAccessibilityIssue.js';
 import {FederatedAuthRequestIssue} from './FederatedAuthRequestIssue.js';
 import {GenericIssue} from './GenericIssue.js';
 import {HeavyAdIssue} from './HeavyAdIssue.js';
@@ -26,12 +27,12 @@ import {MixedContentIssue} from './MixedContentIssue.js';
 import {PartitioningBlobURLIssue} from './PartitioningBlobURLIssue.js';
 import {PropertyRuleIssue} from './PropertyRuleIssue.js';
 import {QuirksModeIssue} from './QuirksModeIssue.js';
-import {SelectElementAccessibilityIssue} from './SelectElementAccessibilityIssue.js';
 import {SharedArrayBufferIssue} from './SharedArrayBufferIssue.js';
 import {SharedDictionaryIssue} from './SharedDictionaryIssue.js';
 import {SourceFrameIssuesManager} from './SourceFrameIssuesManager.js';
 import {SRIMessageSignatureIssue} from './SRIMessageSignatureIssue.js';
 import {StylesheetLoadingIssue} from './StylesheetLoadingIssue.js';
+import {UnencodedDigestIssue} from './UnencodedDigestIssue.js';
 import {UserReidentificationIssue} from './UserReidentificationIssue.js';
 
 export {Events} from './IssuesManagerEvents.js';
@@ -133,12 +134,16 @@ const issueCodeHandlers = new Map<
     CookieDeprecationMetadataIssue.fromInspectorIssue,
   ],
   [
-    Protocol.Audits.InspectorIssueCode.SelectElementAccessibilityIssue,
-    SelectElementAccessibilityIssue.fromInspectorIssue,
+    Protocol.Audits.InspectorIssueCode.ElementAccessibilityIssue,
+    ElementAccessibilityIssue.fromInspectorIssue,
   ],
   [
     Protocol.Audits.InspectorIssueCode.SRIMessageSignatureIssue,
     SRIMessageSignatureIssue.fromInspectorIssue,
+  ],
+  [
+    Protocol.Audits.InspectorIssueCode.UnencodedDigestIssue,
+    UnencodedDigestIssue.fromInspectorIssue,
   ],
   [
     Protocol.Audits.InspectorIssueCode.UserReidentificationIssue,

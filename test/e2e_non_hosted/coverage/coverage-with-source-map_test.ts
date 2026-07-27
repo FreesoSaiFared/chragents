@@ -1,17 +1,15 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chai';
-
 import {
-  getCoverageData,
   startInstrumentingCoverage,
+  waitForCoverageData,
   waitForTheCoveragePanelToLoad,
 } from '../../e2e/helpers/coverage-helpers.js';
 import {
   MAIN_PANEL_SELECTOR,
-  MOVE_TO_MAIN_PANEL_SELECTOR,
+  MOVE_TO_MAIN_TAB_BAR_SELECTOR,
 } from '../../e2e/helpers/cross-tool-helper.js';
 import type {DevToolsPage} from '../shared/frontend-helper.js';
 import type {InspectedPage} from '../shared/target-helper.js';
@@ -26,7 +24,7 @@ describe('Coverage Panel', function() {
     await waitForTheCoveragePanelToLoad(devToolsPage);
     // Bring the coverage panel to the top to ensure it has enough height to show all the rows.
     await devToolsPage.click(COVERAGE_TAB_ID, {clickOptions: {button: 'right'}});
-    await devToolsPage.click(MOVE_TO_MAIN_PANEL_SELECTOR);
+    await devToolsPage.click(MOVE_TO_MAIN_TAB_BAR_SELECTOR);
     const mainPanel = await devToolsPage.waitFor(MAIN_PANEL_SELECTOR);
     await devToolsPage.waitFor(COVERAGE_TAB_ID, mainPanel);
     await startInstrumentingCoverage(devToolsPage);
@@ -78,7 +76,7 @@ describe('Coverage Panel', function() {
         url: `${URL_PREFIX}/src/animal.ts`,
       },
     ];
-    assert.deepEqual(await getCoverageData(5, devToolsPage), expected);
+    await waitForCoverageData(expected, devToolsPage);
   });
 
   it('Can update and sort the coverage information for sources', async ({devToolsPage, inspectedPage}) => {
@@ -117,6 +115,6 @@ describe('Coverage Panel', function() {
       },
     ];
     await devToolsPage.waitForElementWithTextContent(`${URL_PREFIX}/src/users.tsJS (per function)1202823.3%`);
-    assert.deepEqual(await getCoverageData(5, devToolsPage), expected);
+    await waitForCoverageData(expected, devToolsPage);
   });
 });

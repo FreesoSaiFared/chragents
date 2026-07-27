@@ -1,9 +1,17 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 /* eslint-disable @stylistic/quotes, @stylistic/quote-props */
 export const generatedProperties = [
+ {
+  "longhands": [
+   "max-lines",
+   "block-ellipsis",
+   "continue"
+  ],
+  "name": "-alternative-webkit-line-clamp"
+ },
  {
   "inherited": true,
   "name": "-webkit-border-horizontal-spacing"
@@ -87,14 +95,12 @@ export const generatedProperties = [
   "name": "-webkit-font-smoothing"
  },
  {
-  "inherited": true,
   "keywords": [
    "auto",
    "loose",
    "normal",
    "strict",
-   "after-white-space",
-   "anywhere"
+   "after-white-space"
   ],
   "name": "-webkit-line-break"
  },
@@ -325,12 +331,7 @@ export const generatedProperties = [
    "animation-range-start",
    "animation-timeline",
    "animation-timing-function",
-   "animation-trigger-exit-range-end",
-   "animation-trigger-exit-range-start",
-   "animation-trigger-range-end",
-   "animation-trigger-range-start",
-   "animation-trigger-timeline",
-   "animation-trigger-type",
+   "animation-trigger",
    "app-region",
    "appearance",
    "ascent-override",
@@ -350,6 +351,7 @@ export const generatedProperties = [
    "base-palette",
    "baseline-shift",
    "baseline-source",
+   "block-ellipsis",
    "block-size",
    "border-block-end-color",
    "border-block-end-style",
@@ -382,6 +384,7 @@ export const generatedProperties = [
    "border-right-color",
    "border-right-style",
    "border-right-width",
+   "border-shape",
    "border-start-end-radius",
    "border-start-start-radius",
    "border-top-color",
@@ -431,6 +434,7 @@ export const generatedProperties = [
    "container-type",
    "content",
    "content-visibility",
+   "continue",
    "corner-bottom-left-shape",
    "corner-bottom-right-shape",
    "corner-end-end-shape",
@@ -469,6 +473,7 @@ export const generatedProperties = [
    "font-family",
    "font-feature-settings",
    "font-kerning",
+   "font-language-override",
    "font-optical-sizing",
    "font-palette",
    "font-size",
@@ -488,7 +493,7 @@ export const generatedProperties = [
    "font-variation-settings",
    "font-weight",
    "forced-color-adjust",
-   "gap-rule-paint-order",
+   "gap-rule-overlap",
    "grid-auto-columns",
    "grid-auto-flow",
    "grid-auto-rows",
@@ -513,8 +518,8 @@ export const generatedProperties = [
    "inset-block-start",
    "inset-inline-end",
    "inset-inline-start",
-   "interest-target-hide-delay",
-   "interest-target-show-delay",
+   "interest-delay-end",
+   "interest-delay-start",
    "interpolate-size",
    "isolation",
    "item-tolerance",
@@ -525,7 +530,6 @@ export const generatedProperties = [
    "letter-spacing",
    "lighting-color",
    "line-break",
-   "line-clamp",
    "line-gap-override",
    "line-height",
    "list-style-image",
@@ -558,6 +562,7 @@ export const generatedProperties = [
    "max-block-size",
    "max-height",
    "max-inline-size",
+   "max-lines",
    "max-width",
    "min-block-size",
    "min-height",
@@ -591,10 +596,12 @@ export const generatedProperties = [
    "overflow-y",
    "overlay",
    "override-colors",
+   "overscroll-area",
    "overscroll-behavior-block",
    "overscroll-behavior-inline",
    "overscroll-behavior-x",
    "overscroll-behavior-y",
+   "overscroll-position",
    "pad",
    "padding-block-end",
    "padding-block-start",
@@ -634,6 +641,7 @@ export const generatedProperties = [
    "row-rule-style",
    "row-rule-width",
    "ruby-align",
+   "ruby-overhang",
    "ruby-position",
    "rx",
    "ry",
@@ -725,6 +733,12 @@ export const generatedProperties = [
    "text-wrap-mode",
    "text-wrap-style",
    "timeline-scope",
+   "timeline-trigger-exit-range-end",
+   "timeline-trigger-exit-range-start",
+   "timeline-trigger-name",
+   "timeline-trigger-range-end",
+   "timeline-trigger-range-start",
+   "timeline-trigger-source",
    "top",
    "touch-action",
    "transform",
@@ -880,57 +894,10 @@ export const generatedProperties = [
   "name": "animation-timing-function"
  },
  {
-  "longhands": [
-   "animation-trigger-timeline",
-   "animation-trigger-type",
-   "animation-trigger-range-start",
-   "animation-trigger-range-end",
-   "animation-trigger-exit-range-start",
-   "animation-trigger-exit-range-end"
+  "keywords": [
+   "none"
   ],
   "name": "animation-trigger"
- },
- {
-  "longhands": [
-   "animation-trigger-exit-range-start",
-   "animation-trigger-exit-range-end"
-  ],
-  "name": "animation-trigger-exit-range"
- },
- {
-  "name": "animation-trigger-exit-range-end"
- },
- {
-  "name": "animation-trigger-exit-range-start"
- },
- {
-  "longhands": [
-   "animation-trigger-range-start",
-   "animation-trigger-range-end"
-  ],
-  "name": "animation-trigger-range"
- },
- {
-  "name": "animation-trigger-range-end"
- },
- {
-  "name": "animation-trigger-range-start"
- },
- {
-  "keywords": [
-   "none",
-   "auto"
-  ],
-  "name": "animation-trigger-timeline"
- },
- {
-  "keywords": [
-   "once",
-   "repeat",
-   "alternate",
-   "state"
-  ],
-  "name": "animation-trigger-type"
  },
  {
   "keywords": [
@@ -1080,6 +1047,14 @@ export const generatedProperties = [
    "last"
   ],
   "name": "baseline-source"
+ },
+ {
+  "inherited": true,
+  "keywords": [
+   "auto",
+   "no-ellipsis"
+  ],
+  "name": "block-ellipsis"
  },
  {
   "keywords": [
@@ -1426,6 +1401,12 @@ export const generatedProperties = [
    "thick"
   ],
   "name": "border-right-width"
+ },
+ {
+  "keywords": [
+   "none"
+  ],
+  "name": "border-shape"
  },
  {
   "inherited": true,
@@ -1787,7 +1768,9 @@ export const generatedProperties = [
  {
   "longhands": [
    "column-width",
-   "column-count"
+   "column-count",
+   "column-height",
+   "column-wrap"
   ],
   "name": "columns"
  },
@@ -1864,6 +1847,14 @@ export const generatedProperties = [
    "hidden"
   ],
   "name": "content-visibility"
+ },
+ {
+  "keywords": [
+   "auto",
+   "collapse",
+   "-webkit-legacy"
+  ],
+  "name": "continue"
  },
  {
   "longhands": [
@@ -2274,7 +2265,8 @@ export const generatedProperties = [
    "font-size-adjust",
    "font-kerning",
    "font-feature-settings",
-   "font-variation-settings"
+   "font-variation-settings",
+   "font-language-override"
   ],
   "name": "font"
  },
@@ -2300,6 +2292,13 @@ export const generatedProperties = [
    "none"
   ],
   "name": "font-kerning"
+ },
+ {
+  "inherited": true,
+  "keywords": [
+   "normal"
+  ],
+  "name": "font-language-override"
  },
  {
   "inherited": true,
@@ -2543,7 +2542,7 @@ export const generatedProperties = [
    "row-over-column",
    "column-over-row"
   ],
-  "name": "gap-rule-paint-order"
+  "name": "gap-rule-overlap"
  },
  {
   "longhands": [
@@ -2762,16 +2761,16 @@ export const generatedProperties = [
  },
  {
   "longhands": [
-   "interest-target-show-delay",
-   "interest-target-hide-delay"
+   "interest-delay-start",
+   "interest-delay-end"
   ],
-  "name": "interest-target-delay"
+  "name": "interest-delay"
  },
  {
-  "name": "interest-target-hide-delay"
+  "name": "interest-delay-end"
  },
  {
-  "name": "interest-target-show-delay"
+  "name": "interest-delay-start"
  },
  {
   "inherited": true,
@@ -2790,7 +2789,8 @@ export const generatedProperties = [
  },
  {
   "keywords": [
-   "normal"
+   "normal",
+   "infinite"
   ],
   "name": "item-tolerance"
  },
@@ -2829,14 +2829,16 @@ export const generatedProperties = [
    "loose",
    "normal",
    "strict",
-   "anywhere"
+   "anywhere",
+   "after-white-space"
   ],
   "name": "line-break"
  },
  {
-  "keywords": [
-   "none",
-   "auto"
+  "longhands": [
+   "max-lines",
+   "block-ellipsis",
+   "continue"
   ],
   "name": "line-clamp"
  },
@@ -3049,6 +3051,15 @@ export const generatedProperties = [
   "name": "mask-type"
  },
  {
+  "longhands": [
+   "grid-template-areas",
+   "grid-template-columns",
+   "masonry-direction",
+   "masonry-fill"
+  ],
+  "name": "masonry"
+ },
+ {
   "keywords": [
    "row",
    "row-reverse",
@@ -3108,6 +3119,12 @@ export const generatedProperties = [
    "none"
   ],
   "name": "max-inline-size"
+ },
+ {
+  "keywords": [
+   "none"
+  ],
+  "name": "max-lines"
  },
  {
   "keywords": [
@@ -3342,6 +3359,12 @@ export const generatedProperties = [
   "name": "override-colors"
  },
  {
+  "keywords": [
+   "none"
+  ],
+  "name": "overscroll-area"
+ },
+ {
   "longhands": [
    "overscroll-behavior-x",
    "overscroll-behavior-y"
@@ -3369,6 +3392,12 @@ export const generatedProperties = [
    "none"
   ],
   "name": "overscroll-behavior-y"
+ },
+ {
+  "keywords": [
+   "none"
+  ],
+  "name": "overscroll-position"
  },
  {
   "name": "pad"
@@ -3706,6 +3735,14 @@ export const generatedProperties = [
  {
   "inherited": true,
   "keywords": [
+   "auto",
+   "none"
+  ],
+  "name": "ruby-overhang"
+ },
+ {
+  "inherited": true,
+  "keywords": [
    "over",
    "under"
   ],
@@ -3820,11 +3857,6 @@ export const generatedProperties = [
   "name": "scroll-margin-top"
  },
  {
-  "keywords": [
-   "none",
-   "after",
-   "before"
-  ],
   "name": "scroll-marker-group"
  },
  {
@@ -4128,7 +4160,8 @@ export const generatedProperties = [
    "-webkit-right",
    "-webkit-center",
    "start",
-   "end"
+   "end",
+   "match-parent"
   ],
   "name": "text-align"
  },
@@ -4141,7 +4174,8 @@ export const generatedProperties = [
    "left",
    "right",
    "center",
-   "justify"
+   "justify",
+   "match-parent"
   ],
   "name": "text-align-last"
  },
@@ -4157,8 +4191,8 @@ export const generatedProperties = [
  {
   "inherited": true,
   "keywords": [
-   "normal",
-   "no-autospace"
+   "no-autospace",
+   "normal"
   ],
   "name": "text-autospace"
  },
@@ -4392,6 +4426,39 @@ export const generatedProperties = [
  },
  {
   "name": "timeline-scope"
+ },
+ {
+  "longhands": [
+   "timeline-trigger-name",
+   "timeline-trigger-source",
+   "timeline-trigger-range-start",
+   "timeline-trigger-range-end",
+   "timeline-trigger-exit-range-start",
+   "timeline-trigger-exit-range-end"
+  ],
+  "name": "timeline-trigger"
+ },
+ {
+  "name": "timeline-trigger-exit-range-end"
+ },
+ {
+  "name": "timeline-trigger-exit-range-start"
+ },
+ {
+  "name": "timeline-trigger-name"
+ },
+ {
+  "name": "timeline-trigger-range-end"
+ },
+ {
+  "name": "timeline-trigger-range-start"
+ },
+ {
+  "keywords": [
+   "none",
+   "auto"
+  ],
+  "name": "timeline-trigger-source"
  },
  {
   "keywords": [
@@ -4705,8 +4772,7 @@ export const generatedPropertyValues = {
    "loose",
    "normal",
    "strict",
-   "after-white-space",
-   "anywhere"
+   "after-white-space"
   ]
  },
  "-webkit-line-clamp": {
@@ -4835,18 +4901,9 @@ export const generatedPropertyValues = {
    "step-end"
   ]
  },
- "animation-trigger-timeline": {
+ "animation-trigger": {
   "values": [
-   "none",
-   "auto"
-  ]
- },
- "animation-trigger-type": {
-  "values": [
-   "once",
-   "repeat",
-   "alternate",
-   "state"
+   "none"
   ]
  },
  "app-region": {
@@ -4944,6 +5001,12 @@ export const generatedPropertyValues = {
    "auto",
    "first",
    "last"
+  ]
+ },
+ "block-ellipsis": {
+  "values": [
+   "auto",
+   "no-ellipsis"
   ]
  },
  "block-size": {
@@ -5051,6 +5114,11 @@ export const generatedPropertyValues = {
    "thin",
    "medium",
    "thick"
+  ]
+ },
+ "border-shape": {
+  "values": [
+   "none"
   ]
  },
  "border-style": {
@@ -5351,6 +5419,13 @@ export const generatedPropertyValues = {
    "hidden"
   ]
  },
+ "continue": {
+  "values": [
+   "auto",
+   "collapse",
+   "-webkit-legacy"
+  ]
+ },
  "corner-bottom-left-shape": {
   "values": [
    "notch",
@@ -5592,6 +5667,11 @@ export const generatedPropertyValues = {
    "none"
   ]
  },
+ "font-language-override": {
+  "values": [
+   "normal"
+  ]
+ },
  "font-optical-sizing": {
   "values": [
    "auto",
@@ -5761,7 +5841,7 @@ export const generatedPropertyValues = {
    "preserve-parent-color"
   ]
  },
- "gap-rule-paint-order": {
+ "gap-rule-overlap": {
   "values": [
    "row-over-column",
    "column-over-row"
@@ -5883,7 +5963,8 @@ export const generatedPropertyValues = {
  },
  "item-tolerance": {
   "values": [
-   "normal"
+   "normal",
+   "infinite"
   ]
  },
  "left": {
@@ -5907,13 +5988,8 @@ export const generatedPropertyValues = {
    "loose",
    "normal",
    "strict",
-   "anywhere"
-  ]
- },
- "line-clamp": {
-  "values": [
-   "none",
-   "auto"
+   "anywhere",
+   "after-white-space"
   ]
  },
  "line-height": {
@@ -6060,6 +6136,11 @@ export const generatedPropertyValues = {
    "none"
   ]
  },
+ "max-lines": {
+  "values": [
+   "none"
+  ]
+ },
  "max-width": {
   "values": [
    "none"
@@ -6201,6 +6282,11 @@ export const generatedPropertyValues = {
    "auto"
   ]
  },
+ "overscroll-area": {
+  "values": [
+   "none"
+  ]
+ },
  "overscroll-behavior-x": {
   "values": [
    "auto",
@@ -6212,6 +6298,11 @@ export const generatedPropertyValues = {
   "values": [
    "auto",
    "contain",
+   "none"
+  ]
+ },
+ "overscroll-position": {
+  "values": [
    "none"
   ]
  },
@@ -6389,6 +6480,12 @@ export const generatedPropertyValues = {
    "space-between"
   ]
  },
+ "ruby-overhang": {
+  "values": [
+   "auto",
+   "none"
+  ]
+ },
  "ruby-position": {
   "values": [
    "over",
@@ -6415,13 +6512,6 @@ export const generatedPropertyValues = {
   "values": [
    "none",
    "nearest"
-  ]
- },
- "scroll-marker-group": {
-  "values": [
-   "none",
-   "after",
-   "before"
   ]
  },
  "scroll-padding-block-end": {
@@ -6583,7 +6673,8 @@ export const generatedPropertyValues = {
    "-webkit-right",
    "-webkit-center",
    "start",
-   "end"
+   "end",
+   "match-parent"
   ]
  },
  "text-align-last": {
@@ -6594,7 +6685,8 @@ export const generatedPropertyValues = {
    "left",
    "right",
    "center",
-   "justify"
+   "justify",
+   "match-parent"
   ]
  },
  "text-anchor": {
@@ -6606,8 +6698,8 @@ export const generatedPropertyValues = {
  },
  "text-autospace": {
   "values": [
-   "normal",
-   "no-autospace"
+   "no-autospace",
+   "normal"
   ]
  },
  "text-box-trim": {
@@ -6741,6 +6833,12 @@ export const generatedPropertyValues = {
    "balance",
    "pretty",
    "stable"
+  ]
+ },
+ "timeline-trigger-source": {
+  "values": [
+   "none",
+   "auto"
   ]
  },
  "top": {

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@ import * as CodeHighlighter from '../code_highlighter/code_highlighter.js';
 
 import {baseConfiguration, dummyDarkTheme, dynamicSetting, DynamicSetting, themeSelection} from './config.js';
 import {toLineColumn, toOffset} from './position.js';
+import textEditorStyles from './textEditor.css.js';
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -41,6 +42,7 @@ export class TextEditor extends HTMLElement {
     super();
     this.#pendingState = pendingState;
     this.#shadow.createChild('style').textContent = CodeHighlighter.codeHighlighterStyles;
+    this.#shadow.createChild('style').textContent = textEditorStyles;
   }
 
   #createEditor(): CodeMirror.EditorView {

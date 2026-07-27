@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@ import * as SDK from '../../core/sdk/sdk.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as Bindings from '../bindings/bindings.js';
 import * as BreakpointManager from '../breakpoints/breakpoints.js';
+import * as TextUtils from '../text_utils/text_utils.js';
 import * as Workspace from '../workspace/workspace.js';
 
 import {Automapping, type AutomappingStatus} from './Automapping.js';
@@ -63,19 +64,19 @@ export class PersistenceImpl extends Common.ObjectWrapper.ObjectWrapper<EventTyp
   }
 
   async addBinding(binding: PersistenceBinding): Promise<void> {
-    await this.innerAddBinding(binding);
+    await this.#addBinding(binding);
   }
 
   async addBindingForTest(binding: PersistenceBinding): Promise<void> {
-    await this.innerAddBinding(binding);
+    await this.#addBinding(binding);
   }
 
   async removeBinding(binding: PersistenceBinding): Promise<void> {
-    await this.innerRemoveBinding(binding);
+    await this.#removeBinding(binding);
   }
 
   async removeBindingForTest(binding: PersistenceBinding): Promise<void> {
-    await this.innerRemoveBinding(binding);
+    await this.#removeBinding(binding);
   }
 
   #setupBindings(networkUISourceCode: Workspace.UISourceCode.UISourceCode): Promise<void> {
@@ -85,7 +86,7 @@ export class PersistenceImpl extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     return this.#mapping.computeNetworkStatus(networkUISourceCode);
   }
 
-  private async innerAddBinding(binding: PersistenceBinding): Promise<void> {
+  async #addBinding(binding: PersistenceBinding): Promise<void> {
     bindings.set(binding.network, binding);
     bindings.set(binding.fileSystem, binding);
 
@@ -118,7 +119,7 @@ export class PersistenceImpl extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     this.dispatchEventToListeners(Events.BindingCreated, binding);
   }
 
-  private async innerRemoveBinding(binding: PersistenceBinding): Promise<void> {
+  async #removeBinding(binding: PersistenceBinding): Promise<void> {
     if (bindings.get(binding.network) !== binding) {
       return;
     }
@@ -149,12 +150,12 @@ export class PersistenceImpl extends Common.ObjectWrapper.ObjectWrapper<EventTyp
   private onStatusAdded(status: AutomappingStatus): Promise<void> {
     const binding = new PersistenceBinding(status.network, status.fileSystem);
     statusBindings.set(status, binding);
-    return this.innerAddBinding(binding);
+    return this.#addBinding(binding);
   }
 
   private async onStatusRemoved(status: AutomappingStatus): Promise<void> {
     const binding = statusBindings.get(status) as PersistenceBinding;
-    await this.innerRemoveBinding(binding);
+    await this.#removeBinding(binding);
   }
 
   private onWorkingCopyChanged(event: Common.EventTarget.EventTargetEvent<Workspace.UISourceCode.UISourceCode>): void {
@@ -215,10 +216,12 @@ export class PersistenceImpl extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     const other = binding.network === uiSourceCode ? binding.fileSystem : binding.network;
     const target = Bindings.NetworkProject.NetworkProject.targetForUISourceCode(binding.network);
     if (target && target.type() === SDK.Target.Type.NODE) {
-      void other.requestContent().then(currentContent => {
-        const nodeJSContent = PersistenceImpl.rewrapNodeJSContent(other, currentContent.content || '', newContent);
-        setContent.call(this, nodeJSContent);
-      });
+      void other.requestContentData()
+          .then(contentDataOrError => TextUtils.ContentData.ContentData.textOr(contentDataOrError, ''))
+          .then(currentContent => {
+            const nodeJSContent = PersistenceImpl.rewrapNodeJSContent(other, currentContent, newContent);
+            setContent.call(this, nodeJSContent);
+          });
       return;
     }
     setContent.call(this, newContent);

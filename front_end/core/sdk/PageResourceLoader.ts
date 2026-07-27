@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,7 @@ import {TargetManager} from './TargetManager.js';
 
 const UIStrings = {
   /**
-   *@description Error message for canceled source map loads
+   * @description Error message for canceled source map loads
    */
   loadCanceledDueToReloadOf: 'Load canceled due to reload of inspected page',
 } as const;
@@ -59,7 +59,7 @@ export interface PageResource {
   duration: number|null;
 }
 
-// Used for revealing a resource.
+/** Used for revealing a resource. **/
 export class ResourceKey {
   readonly key: string;
 
@@ -246,14 +246,14 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
   }
 
   loadResource(url: Platform.DevToolsPath.UrlString, initiator: PageResourceLoadInitiator, isBinary: true): Promise<{
-    content: Uint8Array,
+    content: Uint8Array<ArrayBuffer>,
   }>;
   loadResource(url: Platform.DevToolsPath.UrlString, initiator: PageResourceLoadInitiator, isBinary?: false): Promise<{
     content: string,
   }>;
   async loadResource(url: Platform.DevToolsPath.UrlString, initiator: PageResourceLoadInitiator, isBinary = false):
       Promise<{
-        content: string | Uint8Array,
+        content: string | Uint8Array<ArrayBuffer>,
       }> {
     if (isExtensionInitiator(initiator)) {
       throw new Error('Invalid initiator');
@@ -293,14 +293,14 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
   private async dispatchLoad(
       url: Platform.DevToolsPath.UrlString, initiator: PageResourceLoadInitiator, isBinary: boolean): Promise<{
     success: boolean,
-    content: string|Uint8Array,
+    content: string|Uint8Array<ArrayBuffer>,
     errorDescription: Host.ResourceLoader.LoadErrorDescription,
   }> {
     if (isExtensionInitiator(initiator)) {
       throw new Error('Invalid initiator');
     }
 
-    let failureReason: string|null = null;
+    const failureReason: string|null = null;
     if (this.#loadOverride) {
       return await this.#loadOverride(url);
     }
@@ -327,7 +327,14 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
       } catch (e) {
         if (e instanceof Error) {
           Host.userMetrics.developerResourceLoaded(Host.UserMetrics.DeveloperResourceLoaded.LOAD_THROUGH_PAGE_FAILURE);
-          failureReason = e.message;
+          if (e.message.includes('CSP violation')) {
+            return {
+              success: false,
+              content: '',
+              errorDescription:
+                  {statusCode: 0, netError: undefined, netErrorName: undefined, message: e.message, urlValid: undefined}
+            };
+          }
         }
       }
       Host.userMetrics.developerResourceLoaded(Host.UserMetrics.DeveloperResourceLoaded.LOAD_THROUGH_PAGE_FALLBACK);
@@ -377,7 +384,7 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
       target: Target, frameId: Protocol.Page.FrameId|null, url: Platform.DevToolsPath.UrlString,
       isBinary: boolean): Promise<{
     success: boolean,
-    content: string|Uint8Array,
+    content: string|Uint8Array<ArrayBuffer>,
     errorDescription: {
       statusCode: number,
       netError: number|undefined,

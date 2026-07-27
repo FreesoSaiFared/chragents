@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -55,13 +55,12 @@ interface ViewInput {
   renderInline?: boolean;
   portBindingEnabled?: boolean;
   schemeBindingEnabled?: boolean;
-  onEdit:
-      (event: CustomEvent<{node: HTMLElement, columnId: string, valueBeforeEditing: string, newText: string}>) => void;
-  onCreate: (event: CustomEvent<CookieData>) => void;
+  onEdit: (data: CookieData, columnId: string, valueBeforeEditing: string, newText: string) => void;
+  onCreate: (data: CookieData) => void;
   onRefresh: () => void;
-  onDelete: (event: CustomEvent<HTMLElement>) => void;
-  onContextMenu: (event: CustomEvent<{menu: UI.ContextMenu.ContextMenu, element: HTMLElement}>) => void;
-  onSelect: (event: CustomEvent<HTMLElement|null>) => void;
+  onDelete: (data: CookieData) => void;
+  onContextMenu: (data: CookieData, menu: UI.ContextMenu.ContextMenu) => void;
+  onSelect: (key: string|undefined) => void;
 }
 type ViewFunction = (input: ViewInput, output: object, target: HTMLElement) => void;
 type AttributeWithIcon = SDK.Cookie.Attribute.NAME|SDK.Cookie.Attribute.VALUE|SDK.Cookie.Attribute.DOMAIN|
@@ -84,48 +83,48 @@ const {repeat, ifDefined} = Directives;
 
 const UIStrings = {
   /**
-   *@description Cookie table cookies table expires session value in Cookies Table of the Cookies table in the Application panel
+   * @description Cookie table cookies table expires session value in Cookies Table of the Cookies table in the Application panel
    */
   session: 'Session',
   /**
-   *@description Text for the name of something
+   * @description Text for the name of something
    */
   name: 'Name',
   /**
-   *@description Text for the value of something
+   * @description Text for the value of something
    */
   value: 'Value',
   /**
-   *@description Text for the size of something
+   * @description Text for the size of something
    */
   size: 'Size',
   /**
-   *@description Data grid name for Editable Cookies data grid
+   * @description Data grid name for Editable Cookies data grid
    */
   editableCookies: 'Editable Cookies',
   /**
-   *@description Text for web cookies
+   * @description Text for web cookies
    */
   cookies: 'Cookies',
   /**
-   *@description Text for something not available
+   * @description Text for something not available
    */
   na: 'N/A',
   /**
-   *@description Text for Context Menu entry
+   * @description Text for Context Menu entry
    */
   showRequestsWithThisCookie: 'Show requests with this cookie',
   /**
-   *@description Text for Context Menu entry
+   * @description Text for Context Menu entry
    */
   showIssueAssociatedWithThis: 'Show issue associated with this cookie',
   /**
-   *@description Tooltip for the cell that shows the sourcePort property of a cookie in the cookie table. The source port is numberic attribute of a cookie.
+   * @description Tooltip for the cell that shows the sourcePort property of a cookie in the cookie table. The source port is numberic attribute of a cookie.
    */
   sourcePortTooltip:
       'Shows the source port (range 1-65535) the cookie was set on. If the port is unknown, this shows -1.',
   /**
-   *@description Tooltip for the cell that shows the sourceScheme property of a cookie in the cookie table. The source scheme is a trinary attribute of a cookie.
+   * @description Tooltip for the cell that shows the sourceScheme property of a cookie in the cookie table. The source scheme is a trinary attribute of a cookie.
    */
   sourceSchemeTooltip:
       'Shows the source scheme (`Secure`, `NonSecure`) the cookie was set on. If the scheme is unknown, this shows `Unset`.',
@@ -183,12 +182,9 @@ export class CookiesTable extends UI.Widget.VBox {
                id="cookies-table"
                striped
                ?inline=${input.renderInline}
-               @edit=${input.onEdit}
                @create=${input.onCreate}
                @refresh=${input.onRefresh}
-               @delete=${input.onDelete}
-               @contextmenu=${input.onContextMenu}
-               @select=${input.onSelect}
+               @deselect=${() => input.onSelect(undefined)}
           >
             <table>
                <tr>
@@ -237,12 +233,16 @@ export class CookiesTable extends UI.Widget.VBox {
                    SourcePort
                 </th>` : ''}
               </tr>
-              ${repeat(this.data,
-                        cookie => cookie.key, cookie => html`<tr data-key=${ifDefined(cookie.key)}
-                    ?selected=${cookie.key === input.selectedKey}
+              ${repeat(this.data, cookie => cookie.key, cookie => html`
+                <tr ?selected=${cookie.key === input.selectedKey}
                     ?inactive=${cookie.inactive}
                     ?dirty=${cookie.dirty}
-                    ?highlighted=${cookie.flagged}>
+                    ?highlighted=${cookie.flagged}
+                    @edit=${(e: CustomEvent<{columnId: string, valueBeforeEditing: string, newText: string}>) =>
+                       input.onEdit(cookie, e.detail.columnId, e.detail.valueBeforeEditing, e.detail.newText)}
+                    @delete=${()=> input.onDelete(cookie)}
+                    @contextmenu=${(e: CustomEvent<UI.ContextMenu.ContextMenu>) => input.onContextMenu(cookie, e.detail)}
+                    @select=${() => input.onSelect(cookie.key)}>
                   <td>${cookie.icons?.name}${cookie.name}</td>
                   <td>${cookie.value}</td>
                   <td>${cookie.icons?.domain}${cookie.domain}</td>
@@ -336,37 +336,35 @@ export class CookiesTable extends UI.Widget.VBox {
       renderInline: this.renderInline,
       schemeBindingEnabled: this.schemeBindingEnabled,
       portBindingEnabled: this.portBindingEnabled,
-      onEdit: event => this.onUpdateCookie(
-          event.detail.node, event.detail.columnId, event.detail.valueBeforeEditing, event.detail.newText),
-      onCreate: event => this.onCreateCookie(event.detail),
-      onRefresh: () => this.refresh(),
-      onDelete: event => this.onDeleteCookie(event.detail),
-      onSelect: event => this.onSelect(event.detail),
-      onContextMenu: event => this.populateContextMenu(event.detail.menu, event.detail.element),
+      onEdit: this.onUpdateCookie.bind(this),
+      onCreate: this.onCreateCookie.bind(this),
+      onRefresh: this.refresh.bind(this),
+      onDelete: this.onDeleteCookie.bind(this),
+      onSelect: this.onSelect.bind(this),
+      onContextMenu: this.populateContextMenu.bind(this),
     };
     const output = {};
     this.view(input, output, this.element);
   }
 
-  private onSelect(node: HTMLElement|null): void {
-    this.selectedKey = node?.dataset?.key;
+  private onSelect(key: string|undefined): void {
+    this.selectedKey = key;
     this.selectedCallback?.();
   }
 
-  private onDeleteCookie(node: HTMLElement): void {
-    const cookie = this.cookies.find(cookie => cookie.key() === node.dataset.key);
+  private onDeleteCookie(data: CookieData): void {
+    const cookie = this.cookies.find(cookie => cookie.key() === data.key);
     if (cookie && this.deleteCallback) {
       this.deleteCallback(cookie, () => this.refresh());
     }
   }
 
-  private onUpdateCookie(editingNode: HTMLElement, columnIdentifier: string, _oldText: string, newText: string): void {
-    const oldCookie = this.cookies.find(cookie => cookie.key() === editingNode.dataset.key);
-    const oldData = this.data.find(data => data.key === editingNode.dataset.key);
-    if (!oldData || !oldCookie) {
+  private onUpdateCookie(oldData: CookieData, columnIdentifier: string, _oldText: string, newText: string): void {
+    const oldCookie = this.cookies.find(cookie => cookie.key() === oldData.key);
+    if (!oldCookie) {
       return;
     }
-    const newCookieData = {...oldData, [columnIdentifier]: newText};  // as CookieData;
+    const newCookieData = {...oldData, [columnIdentifier]: newText};
     if (!this.isValidCookieData(newCookieData)) {
       newCookieData.dirty = true;
       this.requestUpdate();
@@ -477,7 +475,7 @@ export class CookiesTable extends UI.Widget.VBox {
           i18nString(UIStrings.timeAfterTooltip, {seconds: cookie.expires(), date: new Date(maxTime).toISOString()});
     }
     data[SDK.Cookie.Attribute.PARTITION_KEY_SITE] =
-        cookie.partitionKeyOpaque() ? i18nString(UIStrings.opaquePartitionKey) : cookie.topLevelSite();
+        cookie.partitionKeyOpaque() ? i18nString(UIStrings.opaquePartitionKey).toString() : cookie.topLevelSite();
     data[SDK.Cookie.Attribute.HAS_CROSS_SITE_ANCESTOR] = cookie.hasCrossSiteAncestor() ? 'true' : '';
     data[SDK.Cookie.Attribute.SIZE] = String(cookie.size());
     data[SDK.Cookie.Attribute.PRIORITY] = cookie.priority();
@@ -492,16 +490,12 @@ export class CookiesTable extends UI.Widget.VBox {
         if (attribute === SDK.Cookie.Attribute.NAME &&
             IssuesManager.RelatedIssue.hasThirdPartyPhaseoutCookieIssue(cookie)) {
           data.icons[attribute].name = 'warning-filled';
-          data.icons[attribute].style.color = 'var(--icon-warning)';
-          data.icons[attribute].style.width = '14px';
-          data.icons[attribute].style.height = '14px';
           data.icons[attribute].onclick = () => IssuesManager.RelatedIssue.reveal(cookie);
           data.icons[attribute].style.cursor = 'pointer';
         } else {
           data.icons[attribute].name = 'info';
-          data.icons[attribute].style.width = '14px';
-          data.icons[attribute].style.height = '14px';
         }
+        data.icons[attribute].classList.add('small');
         data.icons[attribute].title = blockedReason.uiString;
       } else if (data.icons[attribute]) {
         data.icons[attribute].title += '\n' + blockedReason.uiString;
@@ -513,8 +507,7 @@ export class CookiesTable extends UI.Widget.VBox {
       data.flagged = true;
       data.icons.name = new IconButton.Icon.Icon();
       data.icons.name.name = 'info';
-      data.icons.name.style.width = '14px';
-      data.icons.name.style.height = '14px';
+      data.icons.name.classList.add('small');
       data.icons.name.title = exemptionReason;
     }
     data.key = cookie.key();
@@ -561,8 +554,8 @@ export class CookiesTable extends UI.Widget.VBox {
     }
   }
 
-  private populateContextMenu(contextMenu: UI.ContextMenu.ContextMenu, gridNode: HTMLElement): void {
-    const maybeCookie = this.cookies.find(cookie => cookie.key() === gridNode.dataset.key);
+  private populateContextMenu(data: CookieData, contextMenu: UI.ContextMenu.ContextMenu): void {
+    const maybeCookie = this.cookies.find(cookie => cookie.key() === data.key);
     if (!maybeCookie) {
       return;
     }

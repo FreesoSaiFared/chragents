@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,6 +94,9 @@ export namespace Chrome {
 
       create(title: string, iconPath: string, pagePath: string, callback?: (panel: ExtensionPanel) => unknown): void;
       openResource(url: string, lineNumber: number, columnNumber?: number, callback?: () => unknown): void;
+
+      setOpenResourceHandler(
+          callback?: (resource: Resource, lineNumber: number, columnNumber: number) => void, scheme?: string): void;
 
       /**
        * Fired when the theme changes in DevTools.

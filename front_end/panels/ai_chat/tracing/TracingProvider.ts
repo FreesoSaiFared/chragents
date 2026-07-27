@@ -9,6 +9,25 @@ export interface TracingContext {
   sessionId: string;
   traceId: string;
   parentObservationId?: string;
+  currentGenerationId?: string;
+  currentToolCallId?: string;
+  currentAgentSpanId?: string; // For nesting AgentRunner operations under agent execution
+  executionLevel?: 'stategraph' | 'agentrunner' | 'tool'; // Track execution context level
+  agentContext?: { // Agent-specific context
+    agentName: string;
+    agentType: string;
+    iterationCount?: number;
+  };
+  // Tracing metadata from eval framework for Langfuse integration
+  metadata?: {
+    session_id?: string;
+    trace_id?: string;
+    eval_id?: string;
+    eval_name?: string;
+    category?: string;
+    tags?: string[];
+    [key: string]: any;
+  };
 }
 
 export interface TraceMetadata {

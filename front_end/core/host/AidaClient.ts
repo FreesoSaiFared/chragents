@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@ import * as Common from '../common/common.js';
 import * as Root from '../root/root.js';
 
 import {InspectorFrontendHostInstance} from './InspectorFrontendHost.js';
-import type {AidaClientResult, SyncInformation} from './InspectorFrontendHostAPI.js';
+import type {AidaClientResult, AidaCodeCompleteResult, SyncInformation} from './InspectorFrontendHostAPI.js';
 import {bindOutputStream} from './ResourceLoader.js';
 
 export enum Role {
@@ -93,7 +93,7 @@ export interface FunctionDeclaration<T extends string|number|symbol = string> {
   parameters: FunctionObjectParam<T>;
 }
 
-// Raw media bytes.
+/** Raw media bytes. **/
 export interface MediaBlob {
   // The IANA standard MIME type of the source data.
   // Currently supported types are: image/png, image/jpeg.
@@ -113,6 +113,7 @@ export enum FunctionalityType {
   AGENTIC_CHAT = 5,
 }
 
+/** See: cs/aida.proto (google3). **/
 export enum ClientFeature {
   // Unspecified client feature.
   CLIENT_FEATURE_UNSPECIFIED = 0,
@@ -122,16 +123,20 @@ export enum ClientFeature {
   CHROME_STYLING_AGENT = 2,
   // Chrome AI Assistance Network Agent.
   CHROME_NETWORK_AGENT = 7,
-  // Chrome AI Assistance Performance Agent.
-  CHROME_PERFORMANCE_AGENT = 8,
   // Chrome AI Annotations Performance Agent
   CHROME_PERFORMANCE_ANNOTATIONS_AGENT = 20,
   // Chrome AI Assistance File Agent.
   CHROME_FILE_AGENT = 9,
   // Chrome AI Patch Agent.
   CHROME_PATCH_AGENT = 12,
+  // Chrome AI Assistance Performance Agent.
+  CHROME_PERFORMANCE_FULL_AGENT = 24,
+
+  // Removed features (for reference).
   // Chrome AI Assistance Performance Insights Agent.
-  CHROME_PERFORMANCE_INSIGHTS_AGENT = 13,
+  // CHROME_PERFORMANCE_INSIGHTS_AGENT = 13,
+  // Chrome AI Assistance Performance Agent (call trees).
+  // CHROME_PERFORMANCE_AGENT = 8,
 }
 
 export enum UserTier {
@@ -145,7 +150,7 @@ export enum UserTier {
   PUBLIC = 3,
 }
 
-// Googlers: see the Aida `retrieval` proto; this type is based on that.
+/** Googlers: see the Aida `retrieval` proto; this type is based on that. **/
 export interface RequestFactMetadata {
   /**
    * A description of where the fact comes from.
@@ -169,40 +174,132 @@ export interface RequestFact {
 export type RpcGlobalId = string|number;
 
 /* eslint-disable @typescript-eslint/naming-convention */
-export interface AidaRequest {
+export interface RequestMetadata {
+  string_session_id?: string;
+  user_tier?: UserTier;
+  disable_user_content_logging: boolean;
+  client_version: string;
+}
+/* eslint-enable @typescript-eslint/naming-convention */
+
+/* eslint-disable @typescript-eslint/naming-convention */
+export interface ConversationOptions {
+  temperature?: number;
+  model_id?: string;
+}
+/* eslint-enable @typescript-eslint/naming-convention */
+
+/* eslint-disable @typescript-eslint/naming-convention */
+export interface DoConversationRequest {
   client: string;
   current_message: Content;
   preamble?: string;
   historical_contexts?: Content[];
   function_declarations?: FunctionDeclaration[];
   facts?: RequestFact[];
-  options?: {
-    temperature?: number,
-    model_id?: string,
-  };
-  metadata: {
-    disable_user_content_logging: boolean,
-    client_version: string,
-    string_session_id?: string,
-    user_tier?: UserTier,
-  };
+  options?: ConversationOptions;
+  metadata: RequestMetadata;
   functionality_type?: FunctionalityType;
   client_feature?: ClientFeature;
 }
 /* eslint-enable @typescript-eslint/naming-convention */
 
+/* eslint-disable @typescript-eslint/naming-convention */
+export interface CompleteCodeOptions {
+  temperature?: number;
+  model_id?: string;
+  inference_language?: AidaInferenceLanguage;
+  stop_sequences?: string[];
+}
+/* eslint-enable @typescript-eslint/naming-convention */
+
+export enum EditType {
+  // Unknown edit type
+  EDIT_TYPE_UNSPECIFIED = 0,
+  // User typed code/text into file
+  ADD = 1,
+  // User deleted code/text from file
+  DELETE = 2,
+  // User pasted into file (this includes smart paste)
+  PASTE = 3,
+  // User performs an undo action
+  UNDO = 4,
+  // User performs a redo action
+  REDO = 5,
+  // User accepted a completion from AIDA
+  ACCEPT_COMPLETION = 6,
+}
+
+export enum Reason {
+  // Unknown reason.
+  UNKNOWN = 0,
+
+  // The file is currently open.
+  CURRENTLY_OPEN = 1,
+
+  // The file is opened recently.
+  RECENTLY_OPENED = 2,
+
+  // The file is edited recently.
+  RECENTLY_EDITED = 3,
+
+  // The file is located within the same directory.
+  COLOCATED = 4,
+
+  // Included based on relation to code around the cursor (e.g: could be
+  // provided by local IDE analysis)
+  RELATED_FILE = 5,
+}
+
+/* eslint-disable @typescript-eslint/naming-convention */
+export interface CompletionRequest {
+  client: string;
+  prefix: string;
+  suffix?: string;
+  options?: CompleteCodeOptions;
+  metadata: RequestMetadata;
+  last_user_action?: EditType;
+  additional_files?: Array<{
+    path: string,
+    content: string,
+    included_reason: Reason,
+  }>;
+}
+/* eslint-enable @typescript-eslint/naming-convention */
+
 /* eslint-disable @typescript-eslint/naming-convention  */
-export interface AidaDoConversationClientEvent {
-  corresponding_aida_rpc_global_id: RpcGlobalId;
-  disable_user_content_logging: boolean;
-  do_conversation_client_event: {
-    user_feedback: {
-      sentiment?: Rating,
-      user_input?: {
-        comment?: string,
-      },
+export interface DoConversationClientEvent {
+  user_feedback: {
+    sentiment?: Rating,
+    user_input?: {
+      comment?: string,
     },
   };
+}
+
+export interface UserImpression {
+  sample: {
+    sample_id: number,
+  };
+  latency: {
+    duration: {
+      seconds: number,
+      nanos: number,
+    },
+  };
+}
+
+export interface UserAcceptance {
+  sample: {
+    sample_id: number,
+  };
+}
+
+export interface AidaRegisterClientEvent {
+  corresponding_aida_rpc_global_id: RpcGlobalId;
+  disable_user_content_logging: boolean;
+  do_conversation_client_event?: DoConversationClientEvent;
+  complete_code_client_event?: {user_acceptance: UserAcceptance}|{user_impression: UserImpression};
 }
 /* eslint-enable @typescript-eslint/naming-convention */
 
@@ -248,17 +345,29 @@ export interface FactualityMetadata {
   facts: FactualityFact[];
 }
 
-export interface AidaResponseMetadata {
+export interface ResponseMetadata {
   rpcGlobalId?: RpcGlobalId;
   attributionMetadata?: AttributionMetadata;
   factualityMetadata?: FactualityMetadata;
 }
 
-export interface AidaResponse {
+export interface DoConversationResponse {
   explanation: string;
-  metadata: AidaResponseMetadata;
+  metadata: ResponseMetadata;
   functionCalls?: [AidaFunctionCallResponse, ...AidaFunctionCallResponse[]];
   completed: boolean;
+}
+
+export interface CompletionResponse {
+  generatedSamples: GenerationSample[];
+  metadata: ResponseMetadata;
+}
+
+export interface GenerationSample {
+  generationString: string;
+  score: number;
+  sampleId: number;
+  attributionMetadata?: AttributionMetadata;
 }
 
 export const enum AidaAccessPreconditions {
@@ -270,7 +379,7 @@ export const enum AidaAccessPreconditions {
   SYNC_IS_PAUSED = 'sync-is-paused',
 }
 
-const enum AidaInferenceLanguage {
+export const enum AidaInferenceLanguage {
   CPP = 'CPP',
   PYTHON = 'PYTHON',
   KOTLIN = 'KOTLIN',
@@ -314,13 +423,13 @@ export class AidaAbortError extends Error {}
 export class AidaBlockError extends Error {}
 
 export class AidaClient {
-  static buildConsoleInsightsRequest(input: string): AidaRequest {
+  static buildConsoleInsightsRequest(input: string): DoConversationRequest {
     const disallowLogging = Root.Runtime.hostConfig.aidaAvailability?.disallowLogging ?? true;
     const chromeVersion = Root.Runtime.getChromeVersion();
     if (!chromeVersion) {
       throw new Error('Cannot determine Chrome version');
     }
-    const request: AidaRequest = {
+    const request: DoConversationRequest = {
       current_message: {parts: [{text: input}], role: Role.USER},
       client: CLIENT_NAME,
       functionality_type: FunctionalityType.EXPLAIN_ERROR,
@@ -366,7 +475,9 @@ export class AidaClient {
     return AidaAccessPreconditions.AVAILABLE;
   }
 
-  async * fetch(request: AidaRequest, options?: {signal?: AbortSignal}): AsyncGenerator<AidaResponse, void, void> {
+  async *
+      doConversation(request: DoConversationRequest, options?: {signal?: AbortSignal}):
+          AsyncGenerator<DoConversationResponse, void, void> {
     if (!InspectorFrontendHostInstance.doAidaConversation) {
       throw new Error('doAidaConversation is not available');
     }
@@ -407,7 +518,7 @@ export class AidaClient {
     const text = [];
     let inCodeChunk = false;
     const functionCalls: AidaFunctionCallResponse[] = [];
-    let metadata: AidaResponseMetadata = {rpcGlobalId: 0};
+    let metadata: ResponseMetadata = {rpcGlobalId: 0};
     while ((chunk = await stream.read())) {
       let textUpdated = false;
       // The AIDA response is a JSON array of objects, split at the object
@@ -486,7 +597,7 @@ export class AidaClient {
     };
   }
 
-  registerClientEvent(clientEvent: AidaDoConversationClientEvent): Promise<AidaClientResult> {
+  registerClientEvent(clientEvent: AidaRegisterClientEvent): Promise<AidaClientResult> {
     const {promise, resolve} = Promise.withResolvers<AidaClientResult>();
     InspectorFrontendHostInstance.registerAidaClientEvent(
         JSON.stringify({
@@ -498,6 +609,53 @@ export class AidaClient {
     );
 
     return promise;
+  }
+
+  async completeCode(request: CompletionRequest): Promise<CompletionResponse|null> {
+    if (!InspectorFrontendHostInstance.aidaCodeComplete) {
+      throw new Error('aidaCodeComplete is not available');
+    }
+    const {promise, resolve} = Promise.withResolvers<AidaCodeCompleteResult>();
+    InspectorFrontendHostInstance.aidaCodeComplete(JSON.stringify(request), resolve);
+    const completeCodeResult = await promise;
+
+    if (completeCodeResult.error) {
+      throw new Error(`Cannot send request: ${completeCodeResult.error} ${completeCodeResult.detail || ''}`);
+    }
+    const response = completeCodeResult.response;
+    if (!response?.length) {
+      throw new Error('Empty response');
+    }
+    let parsedResponse;
+    try {
+      parsedResponse = JSON.parse(response);
+    } catch (error) {
+      throw new Error('Cannot parse response: ' + response, {cause: error});
+    }
+
+    const generatedSamples: GenerationSample[] = [];
+    let metadata: ResponseMetadata = {rpcGlobalId: 0};
+    if ('metadata' in parsedResponse) {
+      metadata = parsedResponse.metadata;
+    }
+
+    if ('generatedSamples' in parsedResponse) {
+      for (const generatedSample of parsedResponse.generatedSamples) {
+        const sample: GenerationSample = {
+          generationString: generatedSample.generationString,
+          score: generatedSample.score,
+          sampleId: generatedSample.sampleId,
+        };
+        if ('metadata' in generatedSample && 'attributionMetadata' in generatedSample.metadata) {
+          sample.attributionMetadata = generatedSample.metadata.attributionMetadata;
+        }
+        generatedSamples.push(sample);
+      }
+    } else {
+      return null;
+    }
+
+    return {generatedSamples, metadata};
   }
 }
 
@@ -559,6 +717,8 @@ export class HostConfigTracker extends Common.ObjectWrapper.ObjectWrapper<EventT
       const config =
           await new Promise<Root.Runtime.HostConfig>(resolve => InspectorFrontendHostInstance.getHostConfig(resolve));
       Object.assign(Root.Runtime.hostConfig, config);
+      // TODO(crbug.com/442545623): Send `currentAidaAvailability` to the listeners as part of the event so that
+      // `await AidaClient.checkAccessPreconditions()` does not need to be called again in the event handlers.
       this.dispatchEventToListeners(Events.AIDA_AVAILABILITY_CHANGED);
     }
   }

@@ -103,7 +103,7 @@ export class LiteLLMProvider extends LLMBaseProvider {
 
       if (!response.ok) {
         const errorData = await response.json();
-        logger.error('LiteLLM API error:', errorData);
+        logger.error('LiteLLM API error:', JSON.stringify(errorData, null, 2));
         throw new Error(`LiteLLM API error: ${response.statusText} - ${errorData?.error?.message || 'Unknown error'}`);
       }
 
@@ -209,6 +209,12 @@ export class LiteLLMProvider extends LLMBaseProvider {
         payloadBody.tool_choice = options.tool_choice;
       }
 
+      // Add tracing metadata for Langfuse integration
+      // LiteLLM forwards this to Langfuse callbacks
+      if (options?.tracingMetadata) {
+        payloadBody.metadata = options.tracingMetadata;
+      }
+
       logger.info('Request payload:', payloadBody);
 
       const data = await this.makeAPIRequest(payloadBody);
@@ -268,7 +274,7 @@ export class LiteLLMProvider extends LLMBaseProvider {
 
       if (!response.ok) {
         const errorData = await response.json();
-        logger.error('LiteLLM models API error:', errorData);
+        logger.error('LiteLLM models API error:', JSON.stringify(errorData, null, 2));
         throw new Error(`LiteLLM models API error: ${response.statusText} - ${errorData?.error?.message || 'Unknown error'}`);
       }
 

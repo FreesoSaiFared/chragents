@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,11 +10,12 @@ import {
   navigateToCoverageTestSite,
   startInstrumentingCoverage,
   stopInstrumentingCoverage,
+  waitForCoverageData,
   waitForTheCoveragePanelToLoad,
 } from '../../e2e/helpers/coverage-helpers.js';
 import {
   clickOnContextMenuItemFromTab,
-  MOVE_TO_MAIN_PANEL_SELECTOR,
+  MOVE_TO_MAIN_TAB_BAR_SELECTOR,
   tabExistsInMainPanel,
 } from '../../e2e/helpers/cross-tool-helper.js';
 
@@ -38,18 +39,20 @@ describe('The Coverage Panel', () => {
     await navigateToCoverageTestSite(inspectedPage);
     await startInstrumentingCoverage(devToolsPage);
     const URL_PREFIX = `${inspectedPage.getResourcesPath()}/coverage`;
-    assert.deepEqual(await getCoverageData(2, devToolsPage), [
-      {
-        total: '193',
-        unused: '35',
-        url: `${URL_PREFIX}/default.html`,
-      },
-      {
-        total: '43',
-        unused: '31',
-        url: `${URL_PREFIX}/script.js`,
-      },
-    ]);
+    await waitForCoverageData(
+        [
+          {
+            total: '193',
+            unused: '35',
+            url: `${URL_PREFIX}/default.html`,
+          },
+          {
+            total: '43',
+            unused: '31',
+            url: `${URL_PREFIX}/script.js`,
+          },
+        ],
+        devToolsPage);
   });
 
   it(
@@ -57,38 +60,39 @@ describe('The Coverage Panel', () => {
         await inspectedPage.goToResource('coverage/unused-css-coverage.html');
         await waitForTheCoveragePanelToLoad(devToolsPage);
         // Bring the coverage panel to the top to ensure it has enough height to show all the rows.
-        await clickOnContextMenuItemFromTab(COVERAGE_TAB_ID, MOVE_TO_MAIN_PANEL_SELECTOR, devToolsPage);
+        await clickOnContextMenuItemFromTab(COVERAGE_TAB_ID, MOVE_TO_MAIN_TAB_BAR_SELECTOR, devToolsPage);
         await tabExistsInMainPanel(COVERAGE_TAB_ID, devToolsPage);
         await startInstrumentingCoverage(devToolsPage);
         const URL_PREFIX = `${inspectedPage.getResourcesPath()}/coverage`;
-        assert.deepEqual(await getCoverageData(5, devToolsPage), [
-          {
-            total: '283',
-            unused: '276',
-            url: `${URL_PREFIX}/unused-css-coverage.html`,
-          },
-          {
-            total: '198',
-            unused: '198',
-            url: `${URL_PREFIX}/not-initially-used.css`,
-          },
-          {
-            total: '196',
-            unused: '196',
-            url: `${URL_PREFIX}/unused.css`,
-          },
-          {
-            total: '198',
-            unused: '174',
-            url: `${URL_PREFIX}/used.css`,
-          },
-          {
-            total: '0',
-            unused: '0',
-            url: `${URL_PREFIX}/empty.css`,
-          },
-        ]);
-
+        await waitForCoverageData(
+            [
+              {
+                total: '283',
+                unused: '276',
+                url: `${URL_PREFIX}/unused-css-coverage.html`,
+              },
+              {
+                total: '176',
+                unused: '176',
+                url: `${URL_PREFIX}/not-initially-used.css`,
+              },
+              {
+                total: '174',
+                unused: '174',
+                url: `${URL_PREFIX}/unused.css`,
+              },
+              {
+                total: '176',
+                unused: '152',
+                url: `${URL_PREFIX}/used.css`,
+              },
+              {
+                total: '0',
+                unused: '0',
+                url: `${URL_PREFIX}/empty.css`,
+              },
+            ],
+            devToolsPage);
         await inspectedPage.evaluate('appendStylesheet()');
 
         assert.deepInclude(await getCoverageData(6, devToolsPage), {
@@ -99,10 +103,12 @@ describe('The Coverage Panel', () => {
 
         await inspectedPage.evaluate('appendElement()');
 
-        await devToolsPage.waitForElementWithTextContent(`${URL_PREFIX}/not-initially-used.cssCSS198198100%`);
+        // This is the expected `textContent` for the coverage row.
+        // It reads as {URL}{type: CSS}{Total Bytes: 176}{Unused Bytes: 176 100%}
+        await devToolsPage.waitForElementWithTextContent(`${URL_PREFIX}/not-initially-used.cssCSS17615286.4%`);
         assert.deepInclude(await getCoverageData(6, devToolsPage), {
-          total: '198',
-          unused: '198',
+          total: '176',
+          unused: '152',
           url: `${URL_PREFIX}/not-initially-used.css`,
         });
       });

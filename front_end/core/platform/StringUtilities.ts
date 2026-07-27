@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -251,7 +251,7 @@ export const stripLineBreaks = (inputStr: string): string => {
 const EXTENDED_KEBAB_CASE_REGEXP = /^([a-z0-9]+(?:-[a-z0-9]+)*\.)*[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
- * Tests if the `inputStr` is following the extended Kebab Case naming convetion,
+ * Tests if the `inputStr` is following the extended Kebab Case naming convention,
  * where words are separated with either a dash (`-`) or a dot (`.`), and all
  * characters must be lower-case alphanumeric.
  *
@@ -259,7 +259,7 @@ const EXTENDED_KEBAB_CASE_REGEXP = /^([a-z0-9]+(?:-[a-z0-9]+)*\.)*[a-z0-9]+(?:-[
  * for `'Another.AmazingLiteral'` or '`another_amazing_literal'`.
  *
  * @param inputStr the input string to test.
- * @return `true` if the `inputStr` follows the extended Kebab Case convention.
+ * @returns `true` if the `inputStr` follows the extended Kebab Case convention.
  */
 export const isExtendedKebabCase = (inputStr: string): boolean => {
   return EXTENDED_KEBAB_CASE_REGEXP.test(inputStr);
@@ -386,7 +386,7 @@ export const escapeForRegExp = (str: string): string => {
 
 export const naturalOrderComparator = (a: string, b: string): number => {
   const chunk = /^\d+|^\D+/;
-  let chunka, chunkb, anum, bnum;
+  let chunkA, chunkB, numA, numB;
   while (true) {
     if (a) {
       if (!b) {
@@ -398,32 +398,32 @@ export const naturalOrderComparator = (a: string, b: string): number => {
       }
       return 0;
     }
-    chunka = (a.match(chunk) as string[])[0];
-    chunkb = (b.match(chunk) as string[])[0];
-    anum = !Number.isNaN(Number(chunka));
-    bnum = !Number.isNaN(Number(chunkb));
-    if (anum && !bnum) {
+    chunkA = (a.match(chunk) as string[])[0];
+    chunkB = (b.match(chunk) as string[])[0];
+    numA = !Number.isNaN(Number(chunkA));
+    numB = !Number.isNaN(Number(chunkB));
+    if (numA && !numB) {
       return -1;
     }
-    if (bnum && !anum) {
+    if (numB && !numA) {
       return 1;
     }
-    if (anum && bnum) {
-      const diff = Number(chunka) - Number(chunkb);
+    if (numA && numB) {
+      const diff = Number(chunkA) - Number(chunkB);
       if (diff) {
         return diff;
       }
-      if (chunka.length !== chunkb.length) {
-        if (!Number(chunka) && !Number(chunkb)) {  // chunks are strings of all 0s (special case)
-          return chunka.length - chunkb.length;
+      if (chunkA.length !== chunkB.length) {
+        if (!Number(chunkA) && !Number(chunkB)) {  // chunks are strings of all 0s (special case)
+          return chunkA.length - chunkB.length;
         }
-        return chunkb.length - chunka.length;
+        return chunkB.length - chunkA.length;
       }
-    } else if (chunka !== chunkb) {
-      return (chunka < chunkb) ? -1 : 1;
+    } else if (chunkA !== chunkB) {
+      return (chunkA < chunkB) ? -1 : 1;
     }
-    a = a.substring(chunka.length);
-    b = b.substring(chunkb.length);
+    a = a.substring(chunkA.length);
+    b = b.substring(chunkB.length);
   }
 };
 
@@ -499,35 +499,64 @@ export const toLowerCaseString = function(input: string): LowerCaseString {
   return input.toLowerCase() as LowerCaseString;
 };
 
+/**
+ * 1: two or more consecutive uppercase letters. This is useful for identifying acronyms
+ * 2: lookahead assertion that matches a word boundary
+ * 3: numeronym: single letter followed by number and another letter
+ * 4: word starting with an optional uppercase letter
+ * 5: single digit followed by word to handle '3D' or '2px' (this might be controverial)
+ * 6: single uppercase letter or number
+ * 7: a dot character. We extract it into a separate word and remove dashes around it later.
+ * This is makes more sense conceptually and allows accounting for all possible word variants.
+ * Making dot a part of a word prevent us from handling acronyms or numeronyms after the word
+ * correctly without making the RegExp prohibitively complicated.
+ * https://regex101.com/r/FhMVKc/1
+ *            <---1---><------------2-----------> <---------3--------> <-----4----> <------5-----> <-----6----> <7>
+ */
 const WORD = /[A-Z]{2,}(?=[A-Z0-9][a-z0-9]+|\b|_)|[A-Za-z][0-9]+[a-z]?|[A-Z]?[a-z]+|[0-9][A-Za-z]+|[A-Z]|[0-9]+|[.]/g;
-//            <---1---><------------2-----------> <---------3--------> <-----4----> <------5-----> <-----6----> <7>
-// 1: two or more consecutive uppercase letters. This is useful for identifying acronyms
-// 2: lookahead assertion that matches a word boundary
-// 3: numeronym: single letter followed by number and another letter
-// 4: word starting with an optional uppercase letter
-// 5: single digit followed by word to handle '3D' or '2px' (this might be controverial)
-// 6: single uppercase letter or number
-// 7: a dot character. We extract it into a separate word and remove dashes around it later.
-//    This is makes more sense conceptually and allows accounting for all possible word variants.
-//    Making dot a part of a word prevent us from handling acronyms or numeronyms after the word
-//    correctly without making the RegExp prohibitively complicated.
-// https://regex101.com/r/FhMVKc/1
+
 export const toKebabCase = function(input: string): Lowercase<string> {
   return (input.match?.(WORD)?.map(w => w.toLowerCase()).join('-').replaceAll('-.-', '.') || input) as
       Lowercase<string>;
 };
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-export function toKebabCaseKeys(settingValue: Record<string, any>): Record<string, any> {
-  const result: Record<string, any> = {};
-  for (const [key, value] of Object.entries(settingValue)) {
-    result[toKebabCase(key)] = value;
+export function toKebabCaseKeys<T>(settingValue: Record<string, T>): Record<string, T> {
+  return Object.fromEntries(Object.entries(settingValue).map(([key, value]) => [toKebabCase(key), value]));
+}
+
+/**
+ * Converts a given string to snake_case.
+ * This function handles camelCase, PascalCase, and acronyms, including transitions between letters and numbers.
+ * It uses Unicode-aware regular expressions (`\p{L}`, `\p{N}`, `\p{Lu}`, `\p{Ll}` with the `u` flag)
+ * to correctly process letters and numbers from various languages.
+ *
+ * @param text The input string to convert to snake_case.
+ * @returns The snake_case version of the input string.
+ */
+export function toSnakeCase(text: string): string {
+  if (!text) {
+    return '';
   }
+  // First, handle case-based transformations to insert underscores correctly.
+  // 1. Add underscore between a letter and a number.
+  //    e.g., "version2" -> "version_2"
+  // 2. Add underscore between an uppercase letter sequence and a following uppercase+lowercase sequence.
+  //    e.g., "APIFlags" -> "API_Flags"
+  // 3. Add underscore between a lowercase/number and an uppercase letter.
+  //    e.g., "lastName" -> "last_Name", "version_2Update" -> "version_2_Update"
+  // 4. Replace sequences of non-alphanumeric with a single underscore
+  // 5. Remove any leading or trailing underscores.
+  const result = text.replace(/(\p{L})(\p{N})/gu, '$1_$2')           // 1
+                     .replace(/(\p{Lu}+)(\p{Lu}\p{Ll})/gu, '$1_$2')  // 2
+                     .replace(/(\p{Ll}|\p{N})(\p{Lu})/gu, '$1_$2')   // 3
+                     .toLowerCase()
+                     .replace(/[^\p{L}\p{N}]+/gu, '_')  // 4
+                     .replace(/^_|_$/g, '');            // 5
+
   return result;
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
-// Replaces the last ocurrence of parameter `search` with parameter `replacement` in `input`
+/** Replaces the last occurrence of parameter `search` with parameter `replacement` in `input` **/
 export const replaceLast = function(input: string, search: string, replacement: string): string {
   const replacementStartIndex = input.lastIndexOf(search);
   if (replacementStartIndex === -1) {

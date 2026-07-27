@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 import * as i18n from '../../../core/i18n/i18n.js';
-import {type ChatMessage, ChatMessageEntity, type ImageInputData} from '../ui/ChatView.js';
+import {type ChatMessage, ChatMessageEntity, type ImageInputData} from '../models/ChatTypes.js';
+import type {TracingContext} from '../tracing/TracingProvider.js';
+import type { AgentDescriptor } from './AgentDescriptorRegistry.js';
 
 const UIStrings = {
 } as const;
@@ -52,11 +54,12 @@ export interface DevToolsContext {
   // Counter for tracking the number of intermediate steps in the current chain
   intermediateStepsCount?: number;
   // Tracing context for distributed tracing
-  tracingContext?: {
-    sessionId: string;
-    traceId: string;
-    parentObservationId?: string;
-  };
+  tracingContext?: TracingContext;
+  // Descriptor describing the active agent configuration
+  agentDescriptor?: AgentDescriptor;
+  // Execution tracking for cancellation support
+  executionId?: string;
+  abortSignal?: AbortSignal;
 }
 
 /**

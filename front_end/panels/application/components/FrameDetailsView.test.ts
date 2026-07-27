@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,10 +98,12 @@ describeWithMockConnection('FrameDetailsView', () => {
   it('renders report keys and values', async () => {
     const workspace = Workspace.Workspace.WorkspaceImpl.instance({forceNew: true});
     const targetManager = SDK.TargetManager.TargetManager.instance();
+    const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
     Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
       forceNew: true,
       resourceMapping: new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace),
       targetManager,
+      ignoreListManager,
     });
 
     const target = createTarget();
@@ -207,8 +209,8 @@ describeWithMockConnection('FrameDetailsView', () => {
       '/ad-script2.$script',
       'Yes\xA0Localhost is always a secure context',
       'Yes',
-      'None',
-      'SameOrigin',
+      'none',
+      'same-origin',
       `HTTP header
 base-uri: 'self'
 object-src: 'none'

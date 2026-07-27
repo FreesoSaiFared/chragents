@@ -2,15 +2,50 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import { AgentService } from '../core/AgentService.js';
 import type { Tool } from '../tools/Tools.js';
-import { AIChatPanel } from '../ui/AIChatPanel.js';
-import { ChatMessageEntity, type ChatMessage } from '../ui/ChatView.js';
+import { ChatMessageEntity, type ChatMessage } from '../models/ChatTypes.js';
 import { createLogger } from '../core/Logger.js';
+import { AgentDescriptorRegistry, type AgentDescriptor } from '../core/AgentDescriptorRegistry.js';
+import { getCurrentTracingContext } from '../tracing/TracingConfig.js';
+import { MODEL_SENTINELS } from '../core/Constants.js';
+import type { AgentSession } from './AgentSessionTypes.js';
+import type { LLMProvider } from '../LLM/LLMTypes.js';
+import type { CDPSessionAdapter } from '../cdp/CDPSessionAdapter.js';
+import { getRuntime } from './RuntimeContext.js';
 
 const logger = createLogger('ConfigurableAgentTool');
+const DEFAULT_AGENT_TOOL_VERSION = '2025-09-17';
 
 import { AgentRunner, type AgentRunnerConfig, type AgentRunnerHooks } from './AgentRunner.js';
+
+// Context passed along with agent/tool calls
+export interface CallCtx {
+  apiKey?: string,
+  provider?: LLMProvider,
+  model?: string,
+  miniModel?: string,
+  nanoModel?: string,
+  mainModel?: string,
+  getVisionCapability?: (modelName: string) => Promise<boolean> | boolean,
+  overrideSessionId?: string,
+  overrideParentSessionId?: string,
+  overrideTraceId?: string,
+  abortSignal?: AbortSignal,
+  agentDescriptor?: AgentDescriptor,
+  /** If true, don't emit UI progress events (for background agents) */
+  background?: boolean,
+  /**
+   * CDP session adapter for browser interactions.
+   * When provided, tools use this adapter instead of the global SDK.Target.
+   * This enables running agents from contexts outside DevTools (e.g., eval runner).
+   */
+  cdpAdapter?: CDPSessionAdapter,
+  /**
+   * Called before each tool execution (for logging/debugging).
+   * Useful for capturing screenshots or state before actions.
+   */
+  onBeforeToolExecution?: (toolName: string, toolArgs: unknown) => Promise<void>,
+}
 
 /**
  * Defines the possible reasons an agent run might terminate.
@@ -47,6 +82,31 @@ export interface HandoffConfig {
 }
 
 /**
+ * UI display configuration for an agent
+ */
+export interface AgentUIConfig {
+  /**
+   * Display name for the agent (human-readable)
+   */
+  displayName?: string;
+
+  /**
+   * Avatar/icon for the agent (emoji or icon class)
+   */
+  avatar?: string;
+
+  /**
+   * Primary color for the agent (hex code)
+   */
+  color?: string;
+
+  /**
+   * Background color for the agent (hex code)
+   */
+  backgroundColor?: string;
+}
+
+/**
  * JSON configuration for an agent tool
  */
 export interface AgentToolConfig {
@@ -69,6 +129,11 @@ export interface AgentToolConfig {
    * Tool names to make available to the agent
    */
   tools: string[];
+
+  /**
+   * Semantic version identifier for this agent configuration
+   */
+  version?: string;
 
   /**
    * Defines potential handoffs to other agents.
@@ -102,6 +167,11 @@ export interface AgentToolConfig {
   };
 
   /**
+   * UI display configuration for the agent
+   */
+  ui?: AgentUIConfig;
+
+  /**
    * Custom initialization function name
    */
   init?: (agent: ConfigurableAgentTool) => void;
@@ -126,6 +196,36 @@ export interface AgentToolConfig {
    * (both success and error results). Defaults to false (steps are omitted).
    */
   includeIntermediateStepsOnReturn?: boolean;
+
+  /**
+   * If true, generate a summary of the agent's execution and append it to the final answer.
+   * Summary includes: user request, agent decisions, and final outcome.
+   * Defaults to false (no summary generated).
+   * Use this for agents where understanding the execution process is valuable (e.g., web automation agents).
+   */
+  includeSummaryInAnswer?: boolean;
+
+  /**
+   * Optional lifecycle hook that runs before the agent starts executing.
+   * Use this for agent-specific pre-execution logic such as environment setup,
+   * page navigation, or prerequisite checks.
+   *
+   * @param callCtx - The call context containing API keys, models, and other execution context
+   * @returns Promise that resolves when pre-execution is complete
+   */
+  beforeExecute?: (callCtx: CallCtx) => Promise<void>;
+
+  /**
+   * Optional lifecycle hook that runs after the agent completes execution.
+   * Use this for agent-specific post-execution logic such as saving results,
+   * cleanup operations, or data aggregation.
+   *
+   * @param result - The final agent execution result (success or error)
+   * @param agentSession - The complete agent session with all messages and tool calls
+   * @param callCtx - The call context containing API keys, models, and other execution context
+   * @returns Promise that resolves when post-execution is complete
+   */
+  afterExecute?: (result: ConfigurableAgentResult, agentSession: AgentSession, callCtx: CallCtx) => Promise<void>;
 }
 
 /**
@@ -150,7 +250,7 @@ export class ToolRegistry {
     try {
         const instance = factory();
         this.registeredTools.set(name, instance);
-        logger.info('Registered and instantiated tool: ${name}');
+        logger.info(`Registered and instantiated tool: ${name}`);
     } catch (error) {
         logger.error(`Failed to instantiate tool '${name}' during registration:`, error);
         // Remove the factory entry if instantiation fails
@@ -177,6 +277,13 @@ export class ToolRegistry {
         return null;
     }
     return instance;
+  }
+
+  /**
+   * Get all registered tool names
+   */
+  static getRegisteredToolNames(): string[] {
+    return Array.from(this.registeredTools.keys());
   }
 }
 
@@ -228,6 +335,21 @@ export interface ConfigurableAgentResult {
    * Termination reason for the agent run
    */
   terminationReason: AgentRunTerminationReason;
+
+  /**
+   * Structured summary of agent execution
+   */
+  summary?: {
+    /**
+     * Type of completion
+     */
+    type: 'completion' | 'error' | 'timeout';
+    
+    /**
+     * Formatted summary text
+     */
+    content: string;
+  };
 }
 
 /**
@@ -253,6 +375,21 @@ export class ConfigurableAgentTool implements Tool<ConfigurableAgentArgs, Config
     if (!config.systemPrompt) {
       throw new Error(`ConfigurableAgentTool: systemPrompt is required for ${config.name}`);
     }
+
+    AgentDescriptorRegistry.registerSource({
+      name: config.name,
+      type: 'configurable_agent',
+      version: config.version ?? DEFAULT_AGENT_TOOL_VERSION,
+      promptProvider: () => config.systemPrompt,
+      toolNamesProvider: () => [...config.tools],
+      metadataProvider: () => ({
+        handoffs: (config.handoffs || []).map(handoff => ({
+          targetAgentName: handoff.targetAgentName,
+          trigger: handoff.trigger || 'llm_tool_call',
+          includeToolResults: handoff.includeToolResults ? [...handoff.includeToolResults] : undefined
+        }))
+      })
+    });
 
     // Call custom init function directly if provided
     if (config.init) {
@@ -336,38 +473,124 @@ export class ConfigurableAgentTool implements Tool<ConfigurableAgentArgs, Config
   /**
    * Execute the agent
    */
-  async execute(args: ConfigurableAgentArgs): Promise<ConfigurableAgentResult> {
-    logger.info('Executing ${this.name} via AgentRunner with args:', args);
+  async execute(args: ConfigurableAgentArgs, _ctx?: unknown): Promise<ConfigurableAgentResult & { agentSession: AgentSession }> {
+    logger.info(`Executing ${this.name} via AgentRunner with args:`, args);
 
-    const agentService = AgentService.getInstance();
-    const apiKey = agentService.getApiKey();
+    // Get current tracing context for debugging
+    const tracingContext = getCurrentTracingContext();
+    const callCtx = (_ctx || {}) as CallCtx;
+    const apiKey = callCtx.apiKey;
+    const provider = callCtx.provider;
 
-    if (!apiKey) {
-      return this.createErrorResult(`API key not configured for ${this.name}`, [], 'error');
+    // Check if API key is required based on provider
+    // LiteLLM and BrowserOperator have optional API keys
+    // Other providers (OpenAI, Groq, OpenRouter) require API keys
+    const requiresApiKey = provider !== 'litellm' && provider !== 'browseroperator';
+
+    if (requiresApiKey && !apiKey) {
+      const errorResult = this.createErrorResult(`API key not configured for ${this.name}`, [], 'error');
+      // Create minimal error session
+      const errorSession: AgentSession = {
+        agentName: this.name,
+        agentQuery: args.query,
+        agentReasoning: args.reasoning,
+        sessionId: getRuntime().generateId(),
+        status: 'error',
+        startTime: getRuntime().now(),
+        endTime: getRuntime().now(),
+        messages: [],
+        nestedSessions: [],
+        tools: [],
+        terminationReason: 'error'
+      };
+      return { ...errorResult, agentSession: errorSession };
+    }
+
+    // Execute beforeExecute lifecycle hook if defined
+    if (this.config.beforeExecute) {
+      try {
+        await this.config.beforeExecute(callCtx);
+      } catch (error) {
+        logger.warn(`beforeExecute hook failed for ${this.name}:`, error);
+        // Continue with agent execution even if beforeExecute fails
+      }
     }
 
     // Initialize
     const maxIterations = this.config.maxIterations || 10;
-    const modelName = typeof this.config.modelName === 'function'
-      ? this.config.modelName()
-      : (this.config.modelName || AIChatPanel.instance().getSelectedModel());
-    const temperature = this.config.temperature ?? 0;
+    
+    // Resolve model name from context or configuration
+    let modelName: string;
+    if (this.config.modelName === MODEL_SENTINELS.USE_MINI) {
+      // Fall back to main model if mini model is not configured
+      modelName = callCtx.miniModel || callCtx.mainModel || callCtx.model || '';
+      if (!modelName) {
+        throw new Error(`Mini model not provided in context for agent '${this.name}'. Ensure context includes miniModel or mainModel.`);
+      }
+    } else if (this.config.modelName === MODEL_SENTINELS.USE_NANO) {
+      // Fall back through nano -> mini -> main model chain
+      modelName = callCtx.nanoModel || callCtx.miniModel || callCtx.mainModel || callCtx.model || '';
+      if (!modelName) {
+        throw new Error(`Nano model not provided in context for agent '${this.name}'. Ensure context includes nanoModel, miniModel, or mainModel.`);
+      }
+    } else if (typeof this.config.modelName === 'function') {
+      modelName = this.config.modelName();
+    } else if (this.config.modelName) {
+      modelName = this.config.modelName;
+    } else {
+      // Use main model from context, or fallback to context model
+      const contextModel = callCtx.mainModel || callCtx.model;
+      if (!contextModel) {
+        throw new Error(`No model provided for agent '${this.name}'. Ensure context includes model or mainModel.`);
+      }
+      modelName = contextModel;
+    }
+    
+    // Override with context model only if agent doesn't have its own model configuration
+    if (callCtx.model && !this.config.modelName) {
+      modelName = callCtx.model;
+    }
 
+    // Update context with resolved fallback models for tools to use
+    // This ensures tools that check ctx.miniModel or ctx.nanoModel get the fallback
+    if (this.config.modelName === MODEL_SENTINELS.USE_MINI && !callCtx.miniModel) {
+      callCtx.miniModel = modelName;  // Use the resolved fallback
+    }
+    if (this.config.modelName === MODEL_SENTINELS.USE_NANO && !callCtx.nanoModel) {
+      callCtx.nanoModel = modelName;  // Use the resolved fallback
+    }
+
+    // Validate required context
+    if (!callCtx.provider) {
+      throw new Error(`Provider not provided in context for agent '${this.name}'. Ensure context includes provider.`);
+    }
+
+    const temperature = this.config.temperature ?? 0;
     const systemPrompt = this.config.systemPrompt;
     const tools = this.getToolInstances();
 
     // Prepare initial messages
     const internalMessages = this.prepareInitialMessages(args);
-
-    // Prepare runner config and hooks
     const runnerConfig: AgentRunnerConfig = {
-      apiKey,
+      apiKey: apiKey || '',  // Use empty string if undefined for BrowserOperator
       modelName,
       systemPrompt,
       tools,
       maxIterations,
       temperature,
+      provider: callCtx.provider,
+      getVisionCapability: callCtx.getVisionCapability ?? (() => false),
+      miniModel: callCtx.miniModel,
+      nanoModel: callCtx.nanoModel,
+      cdpAdapter: callCtx.cdpAdapter,
+      onBeforeToolExecution: callCtx.onBeforeToolExecution,
     };
+
+    const descriptor = await AgentDescriptorRegistry.getDescriptor(this.name);
+    if (descriptor) {
+      runnerConfig.agentDescriptor = descriptor;
+      callCtx.agentDescriptor = descriptor;
+    }
 
     const runnerHooks: AgentRunnerHooks = {
       prepareInitialMessages: undefined, // initial messages already prepared above
@@ -377,18 +600,34 @@ export class ConfigurableAgentTool implements Tool<ConfigurableAgentArgs, Config
       createErrorResult: this.config.createErrorResult
         ? (err, steps, reason) => this.config.createErrorResult!(err, steps, reason, this.config)
         : (err, steps, reason) => this.createErrorResult(err, steps, reason),
+      // Wrap afterExecute to pass callCtx (AgentRunner doesn't have access to callCtx)
+      afterExecute: this.config.afterExecute
+        ? async (result, agentSession) => this.config.afterExecute!(result, agentSession, callCtx)
+        : undefined,
     };
 
     // Run the agent
+    const ctx: any = callCtx || {};
     const result = await AgentRunner.run(
       internalMessages,
       args,
       runnerConfig,
       runnerHooks,
-      this // Pass the current agent instance as executingAgent
+      this, // executingAgent
+      undefined,
+      {
+        sessionId: ctx.overrideSessionId,
+        parentSessionId: ctx.overrideParentSessionId,
+        traceId: ctx.overrideTraceId,
+        background: ctx.background,
+      },
+      callCtx.abortSignal
     );
 
-    // Return the direct result from the runner
+    // Note: afterExecute hook is handled by AgentRunner via runnerHooks
+    // No need to call it here as it's already been executed
+
+    // Return the direct result from the runner (including agentSession)
     return result;
   }
 }

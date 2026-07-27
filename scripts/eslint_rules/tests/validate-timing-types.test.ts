@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,9 +6,9 @@ import {TSESTree} from '@typescript-eslint/typescript-estree';
 
 import rule from '../lib/validate-timing-types.ts';
 
-import {createTypedRuleTester} from './utils/RuleTester.ts';
+import {RuleTester, typeCheckingOptions} from './utils/RuleTester.ts';
 
-createTypedRuleTester().run('validate-timing-types', rule, {
+new RuleTester(typeCheckingOptions).run('validate-timing-types', rule, {
   valid: [
     {
       code: `

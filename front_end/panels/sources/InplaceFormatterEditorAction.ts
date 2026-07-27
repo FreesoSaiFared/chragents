@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -7,6 +7,7 @@ import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Formatter from '../../models/formatter/formatter.js';
 import * as Persistence from '../../models/persistence/persistence.js';
+import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
@@ -21,12 +22,12 @@ import type {UISourceCodeFrame} from './UISourceCodeFrame.js';
 
 const UIStrings = {
   /**
-   *@description Title of the format button in the Sources panel
-   *@example {file name} PH1
+   * @description Title of the format button in the Sources panel
+   * @example {file name} PH1
    */
   formatS: 'Format {PH1}',
   /**
-   *@description Tooltip text that appears when hovering over the largeicon pretty print button in the Inplace Formatter Editor Action of the Sources panel
+   * @description Tooltip text that appears when hovering over the largeicon pretty print button in the Inplace Formatter Editor Action of the Sources panel
    */
   format: 'Format',
 } as const;
@@ -119,9 +120,11 @@ export class InplaceFormatterEditorAction implements EditorAction {
     if (uiSourceCode.isDirty()) {
       void this.contentLoaded(uiSourceCode, sourceFrame, uiSourceCode.workingCopy());
     } else {
-      void uiSourceCode.requestContent().then(deferredContent => {
-        void this.contentLoaded(uiSourceCode, sourceFrame, deferredContent.content || '');
-      });
+      void uiSourceCode.requestContentData()
+          .then(contentDataOrError => TextUtils.ContentData.ContentData.textOr(contentDataOrError, ''))
+          .then(content => {
+            void this.contentLoaded(uiSourceCode, sourceFrame, content);
+          });
     }
   }
 

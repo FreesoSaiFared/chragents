@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@ import * as Handlers from '../handlers/handlers.js';
 import * as Helpers from '../helpers/helpers.js';
 import * as Types from '../types/types.js';
 
+import {calculateDocFirstByteTs} from './Common.js';
 import {
   InsightCategory,
   InsightKeys,
@@ -19,7 +20,7 @@ import {
 
 export const UIStrings = {
   /**
-   *@description Title of an insight that provides details about the LCP metric, broken down by parts.
+   * @description Title of an insight that provides details about the LCP metric, broken down by parts.
    */
   title: 'LCP breakdown',
   /**
@@ -27,25 +28,25 @@ export const UIStrings = {
    * This is displayed after a user expands the section to see more. No character length limits.
    */
   description:
-      'Each [subpart has specific improvement strategies](https://web.dev/articles/optimize-lcp#lcp-breakdown). Ideally, most of the LCP time should be spent on loading the resources, not within delays.',
+      'Each [subpart has specific improvement strategies](https://developer.chrome.com/docs/performance/insights/lcp-breakdown). Ideally, most of the LCP time should be spent on loading the resources, not within delays.',
   /**
-   *@description Time to first byte title for the Largest Contentful Paint's subparts timespan breakdown.
+   * @description Time to first byte title for the Largest Contentful Paint's subparts timespan breakdown.
    */
   timeToFirstByte: 'Time to first byte',
   /**
-   *@description Resource load delay title for the Largest Contentful Paint subparts timespan breakdown.
+   * @description Resource load delay title for the Largest Contentful Paint subparts timespan breakdown.
    */
   resourceLoadDelay: 'Resource load delay',
   /**
-   *@description Resource load duration title for the Largest Contentful Paint subparts timespan breakdown.
+   * @description Resource load duration title for the Largest Contentful Paint subparts timespan breakdown.
    */
   resourceLoadDuration: 'Resource load duration',
   /**
-   *@description Element render delay title for the Largest Contentful Paint subparts timespan breakdown.
+   * @description Element render delay title for the Largest Contentful Paint subparts timespan breakdown.
    */
   elementRenderDelay: 'Element render delay',
   /**
-   *@description Label used for the subpart (section) of a larger duration.
+   * @description Label used for the subpart (section) of a larger duration.
    */
   subpart: 'Subpart',
   /**
@@ -64,7 +65,7 @@ export const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('models/trace/insights/LCPBreakdown.ts', UIStrings);
 export const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-// A TraceWindow plus its UIString.
+/** A TraceWindow plus its UIString. **/
 export type Subpart = Types.Timing.TraceWindowMicro&{label: Common.UIString.LocalizedString};
 interface LCPSubparts {
   /**
@@ -88,7 +89,7 @@ interface LCPSubparts {
   renderDelay: Subpart;
 }
 
-export function isLCPBreakdown(model: InsightModel): model is LCPBreakdownInsightModel {
+export function isLCPBreakdownInsight(model: InsightModel): model is LCPBreakdownInsightModel {
   return model.insightKey === 'LCPBreakdown';
 }
 export type LCPBreakdownInsightModel = InsightModel<typeof UIStrings, {
@@ -113,13 +114,10 @@ function determineSubparts(
     nav: Types.Events.NavigationStart, docRequest: Types.Events.SyntheticNetworkRequest,
     lcpEvent: Types.Events.LargestContentfulPaintCandidate,
     lcpRequest: Types.Events.SyntheticNetworkRequest|undefined): LCPSubparts|null {
-  const docReqTiming = docRequest.args.data.timing;
-  if (!docReqTiming) {
-    throw new Error('no timing for document request');
+  const firstDocByteTs = calculateDocFirstByteTs(docRequest);
+  if (firstDocByteTs === null) {
+    return null;
   }
-  const firstDocByteTs = Types.Timing.Micro(
-      Helpers.Timing.secondsToMicro(docReqTiming.requestTime) +
-      Helpers.Timing.milliToMicro(docReqTiming.receiveHeadersStart));
 
   const ttfb = Helpers.Timing.traceWindowFromMicroSeconds(nav.ts, firstDocByteTs) as Subpart;
   ttfb.label = i18nString(UIStrings.timeToFirstByte);
@@ -129,7 +127,8 @@ function determineSubparts(
 
   // If the LCP is text, we don't have a request, so just 2 subparts.
   if (!lcpRequest) {
-    /** Text LCP. 2 subparts, thus 3 timestamps
+    /**
+     * Text LCP. 2 subparts, thus 3 timestamps
      *
      *       |          ttfb           |             renderDelay              |
      *                                                                        ^ lcpEvent.ts
@@ -142,7 +141,8 @@ function determineSubparts(
     return {ttfb, renderDelay};
   }
 
-  /** Image LCP. 4 subparts means 5 timestamps
+  /**
+   * Image LCP. 4 subparts means 5 timestamps
    *
    *       |  ttfb   |    loadDelay     |     loadTime    |    renderDelay    |
    *                                                                          ^ lcpEvent.ts
@@ -180,27 +180,40 @@ function finalize(partialModel: PartialInsightModel<LCPBreakdownInsightModel>): 
   if (partialModel.lcpRequest) {
     relatedEvents.push(partialModel.lcpRequest);
   }
+
+  let state: LCPBreakdownInsightModel['state'] = 'pass';
+  if (partialModel.lcpMs !== undefined) {
+    const classification = Handlers.ModelHandlers.PageLoadMetrics.scoreClassificationForLargestContentfulPaint(
+        Helpers.Timing.milliToMicro(partialModel.lcpMs));
+    if (classification === Handlers.ModelHandlers.PageLoadMetrics.ScoreClassification.GOOD) {
+      state = 'informative';
+    } else {
+      state = 'fail';
+    }
+  }
+
   return {
     insightKey: InsightKeys.LCP_BREAKDOWN,
     strings: UIStrings,
     title: i18nString(UIStrings.title),
     description: i18nString(UIStrings.description),
+    docs: 'https://developer.chrome.com/docs/performance/insights/lcp-breakdown',
     category: InsightCategory.LCP,
-    state: partialModel.lcpEvent || partialModel.lcpRequest ? 'informative' : 'pass',
+    state,
     ...partialModel,
     relatedEvents,
   };
 }
 
 export function generateInsight(
-    parsedTrace: Handlers.Types.ParsedTrace, context: InsightSetContext): LCPBreakdownInsightModel {
+    data: Handlers.Types.HandlerData, context: InsightSetContext): LCPBreakdownInsightModel {
   if (!context.navigation) {
     return finalize({});
   }
 
-  const networkRequests = parsedTrace.NetworkRequests;
+  const networkRequests = data.NetworkRequests;
 
-  const frameMetrics = parsedTrace.PageLoadMetrics.metricScoresByFrameId.get(context.frameId);
+  const frameMetrics = data.PageLoadMetrics.metricScoresByFrameId.get(context.frameId);
   if (!frameMetrics) {
     throw new Error('no frame metrics');
   }
@@ -219,7 +232,7 @@ export function generateInsight(
   const lcpMs = Helpers.Timing.microToMilli(metricScore.timing);
   // This helps position things on the timeline's UI accurately for a trace.
   const lcpTs = metricScore.event?.ts ? Helpers.Timing.microToMilli(metricScore.event?.ts) : undefined;
-  const lcpRequest = parsedTrace.LargestImagePaint.lcpRequestByNavigationId.get(context.navigationId);
+  const lcpRequest = data.LargestImagePaint.lcpRequestByNavigationId.get(context.navigationId);
 
   const docRequest = networkRequests.byId.get(context.navigationId);
   if (!docRequest) {
@@ -233,4 +246,23 @@ export function generateInsight(
     lcpRequest,
     subparts: determineSubparts(context.navigation, docRequest, lcpEvent, lcpRequest) ?? undefined,
   });
+}
+
+export function createOverlays(model: LCPBreakdownInsightModel): Types.Overlays.Overlay[] {
+  if (!model.subparts || !model.lcpTs) {
+    return [];
+  }
+
+  const overlays: Types.Overlays.Overlay[] = [
+    {
+      type: 'TIMESPAN_BREAKDOWN',
+      sections: Object.values(model.subparts)
+                    .map((subpart: Subpart) => ({bounds: subpart, label: subpart.label, showDuration: true})),
+    },
+  ];
+  if (model.lcpRequest) {
+    overlays.push({type: 'ENTRY_OUTLINE', entry: model.lcpRequest, outlineReason: 'INFO'});
+  }
+
+  return overlays;
 }

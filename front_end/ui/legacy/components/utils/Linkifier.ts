@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2012 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2012 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
@@ -47,25 +21,25 @@ import * as UI from '../../legacy.js';
 
 const UIStrings = {
   /**
-   *@description Text in Linkifier
+   * @description Text in Linkifier
    */
   unknown: '(unknown)',
   /**
-   *@description Text short for automatic
+   * @description Text short for automatic
    */
   auto: 'auto',
   /**
-   *@description Text in Linkifier
-   *@example {Sources panel} PH1
+   * @description Text in Linkifier
+   * @example {Sources panel} PH1
    */
   revealInS: 'Reveal in {PH1}',
   /**
-   *@description Text for revealing an item in its destination
+   * @description Text for revealing an item in its destination
    */
   reveal: 'Reveal',
   /**
-   *@description A context menu item in the Linkifier
-   *@example {Extension} PH1
+   * @description A context menu item in the Linkifier
+   * @example {Extension} PH1
    */
   openUsingS: 'Open using {PH1}',
   /**
@@ -87,7 +61,8 @@ const infoByAnchor = new WeakMap<Node, LinkInfo>();
 
 const textByAnchor = new WeakMap<Node, string>();
 
-const linkHandlers = new Map<string, LinkHandler>();
+// Maps a DevTools Extension origin to a particular LinkHandler.
+const linkHandlers = new Map<string, LinkHandlerRegistration>();
 
 let linkHandlerSettingInstance: Common.Settings.Setting<string>;
 
@@ -479,17 +454,6 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
     }
     const uiLocation = await liveLocation.uiLocation();
     if (!uiLocation) {
-      if (liveLocation instanceof Bindings.CSSWorkspaceBinding.LiveLocation) {
-        const header = (liveLocation).header();
-        if (header?.ownerNode) {
-          anchor.addEventListener('click', event => {
-            event.consume(true);
-            void Common.Revealer.reveal(header.ownerNode || null);
-          }, false);
-          Linkifier.setTrimmedText(anchor, '<style>');
-        }
-      }
-
       anchor.classList.add('invalid-link');
       anchor.removeAttribute('role');
       return;
@@ -520,7 +484,8 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
       }
     }
     UI.Tooltip.Tooltip.install(anchor, titleText);
-    anchor.classList.toggle('ignore-list-link', await liveLocation.isIgnoreListed());
+    const isIgnoreListed = Boolean(uiLocation?.isIgnoreListed());
+    anchor.classList.toggle('ignore-list-link', isIgnoreListed);
     Linkifier.updateLinkDecorations(anchor);
   }
 
@@ -769,14 +734,47 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
     return linkHandlerSettingInstance;
   }
 
-  static registerLinkHandler(title: string, handler: LinkHandler): void {
-    linkHandlers.set(title, handler);
+  static registerLinkHandler(registration: LinkHandlerRegistration): void {
+    for (const origin of linkHandlers.keys()) {
+      const existingHandler = linkHandlers.get(origin);
+      if (existingHandler?.scheme === registration.scheme) {
+        const schemeString = registration.scheme ? `scheme '${registration.scheme}'` : 'all schemes';
+        Common.Console.Console.instance().warn(
+            `DevTools extension '${registration.title}' registered with setOpenResourceHandler for ${
+                schemeString}, which is already registered by '${
+                existingHandler?.title}'. This can lead to unexpected results.`);
+      }
+    }
+
+    linkHandlers.set(registration.origin, registration);
     LinkHandlerSettingUI.instance().update();
   }
 
-  static unregisterLinkHandler(title: string): void {
-    linkHandlers.delete(title);
+  static unregisterLinkHandler(registration: LinkHandlerRegistration): void {
+    const {origin} = registration;
+    linkHandlers.delete(origin);
     LinkHandlerSettingUI.instance().update();
+  }
+
+  // The primary filter implementation for the openResourceHandlers. Returns false
+  // if the handler is NOT supposed to handle the `url`. Usually, this happens if
+  // a handler has registered for a particular `scheme` and the scheme for that url
+  // does not match. If no openResourceScheme is provided, it means the handler is
+  // interested in all urls (except those handled by scheme-specific handlers, see
+  // otherSchemeRegistrations).
+  static shouldHandleOpenResource(
+      openResourceScheme: string|null, url: Platform.DevToolsPath.UrlString,
+      otherSchemeRegistrations: Set<string>): boolean {
+    // If this is a scheme-specific handler, make sure the registered scheme is
+    // present in the url.
+    if (openResourceScheme) {
+      return url.startsWith(openResourceScheme);
+    }
+
+    // Global handlers (that register for no scheme) can handle all urls, with the
+    // exception of urls that scheme-specific handlers have registered for.
+    const scheme = URL.parse(url)?.protocol || '';
+    return !otherSchemeRegistrations.has(scheme);
   }
 
   static uiLocation(link: Element): Workspace.UISourceCode.UILocation|null {
@@ -826,24 +824,35 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
         handler: () => Common.Revealer.reveal(revealable),
       });
     }
-    if (contentProvider) {
-      const lineNumber = uiLocation ? uiLocation.lineNumber : info.lineNumber || 0;
-      for (const title of linkHandlers.keys()) {
-        const handler = linkHandlers.get(title);
-        if (!handler) {
-          continue;
-        }
-        const action = {
-          section: 'reveal',
-          title: i18nString(UIStrings.openUsingS, {PH1: title}),
-          jslogContext: 'open-using',
-          handler: handler.bind(null, contentProvider, lineNumber),
-        };
-        if (title === Linkifier.linkHandlerSetting().get()) {
-          result.unshift(action);
-        } else {
-          result.push(action);
-        }
+
+    const contentProviderOrUrl = contentProvider || url;
+    const lineNumber = uiLocation ? uiLocation.lineNumber : info.lineNumber || 0;
+    const columnNumber = uiLocation ? uiLocation.columnNumber : info.columnNumber || 0;
+
+    // Build the set of schemes that the currently registered extensions handle
+    // (not counting ones that are scheme-agnostic).
+    const specificSchemeHandlers = new Set<string>();
+    for (const registration of linkHandlers.values()) {
+      if (registration.scheme) {
+        specificSchemeHandlers.add(registration.scheme);
+      }
+    }
+
+    for (const registration of linkHandlers.values().filter(r => r.handler)) {
+      const {title, handler, shouldHandleOpenResource} = registration;
+      if (url && !shouldHandleOpenResource(url, specificSchemeHandlers)) {
+        continue;
+      }
+      const action = {
+        section: 'reveal',
+        title: i18nString(UIStrings.openUsingS, {PH1: title}),
+        jslogContext: 'open-using',
+        handler: handler.bind(null, contentProviderOrUrl, lineNumber, columnNumber),
+      };
+      if (title === Linkifier.linkHandlerSetting().get()) {
+        result.unshift(action);
+      } else {
+        result.push(action);
       }
     }
     if (resource || info.url) {
@@ -965,10 +974,7 @@ function listenForNewComponentLinkifierEvents(): void {
   listeningToNewEvents = true;
 
   window.addEventListener('linkifieractivated', function(event: Event) {
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const unknownEvent = (event as any);
-    const eventWithData = (unknownEvent as {
+    const eventWithData = (event as unknown as {
       data: LinkInfo,
     });
     Linkifier.handleClickFromNewComponentLand(eventWithData.data);
@@ -998,13 +1004,14 @@ export class ContentProviderContextMenuProvider implements
                   contentUrl),
           {jslogContext: 'open-in-new-tab'});
     }
-    for (const title of linkHandlers.keys()) {
-      const handler = linkHandlers.get(title);
-      if (!handler) {
+    for (const origin of linkHandlers.keys()) {
+      const registration = linkHandlers.get(origin);
+      if (!registration) {
         continue;
       }
+      const {title} = registration;
       contextMenu.revealSection().appendItem(
-          i18nString(UIStrings.openUsingS, {PH1: title}), handler.bind(null, contentProvider, 0),
+          i18nString(UIStrings.openUsingS, {PH1: title}), registration.handler.bind(null, contentProvider, 0),
           {jslogContext: 'open-using'});
     }
     if (contentProvider instanceof SDK.NetworkRequest.NetworkRequest) {
@@ -1100,7 +1107,33 @@ interface LinkDisplayOptions {
   revealBreakpoint?: boolean;
 }
 
-export type LinkHandler = (arg0: TextUtils.ContentProvider.ContentProvider, arg1: number) => void;
+/**
+ * The filter function for the openResourceHandlers. Returns true if the `url`
+ * should be considered for a particular handler. `specificSchemeHandlers`
+ * is the set of all schemes handled by all registered DevTools extensions
+ * (that specify a particular scheme).
+ **/
+export type LinkHandlerPredicate = (url: Platform.DevToolsPath.UrlString, specificSchemeHandlers: Set<string>) =>
+    boolean;
+
+export type LinkHandler =
+    (arg0: TextUtils.ContentProvider.ContentProvider|Platform.DevToolsPath.UrlString, lineNumber: number,
+     columnNumber?: number) => void;
+
+export interface LinkHandlerRegistration {
+  // The title (read: manifest name) of DevTools extension registering as an openResourceHandler.
+  // This value is provided by the developer of the extension.
+  title: string;
+  // The origin of the DevTools extension handling the url.
+  origin: Platform.DevToolsPath.UrlString;
+  // The scheme that the handler wants to register for. If set, only links that match this scheme
+  // will be considered, otherwise all links will be considered.
+  scheme?: string;
+  // The openResourceHandler handling the requests to open a resource.
+  handler: LinkHandler;
+  // A filter function used to determine whether the `handler` wants to handle the link clicks.
+  shouldHandleOpenResource: LinkHandlerPredicate;
+}
 
 export const enum Events {
   LIVE_LOCATION_UPDATED = 'liveLocationUpdated',

@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,7 @@ import type {NetworkNode} from './NetworkNode.js';
 export type Node<T = Lantern.AnyNetworkObject> = CPUNode<T>|NetworkNode<T>;
 
 /**
- * @fileoverview This class encapsulates logic for handling resources and tasks used to model the
+ * @file This class encapsulates logic for handling resources and tasks used to model the
  * execution dependency graph of the page. A node has a unique identifier and can depend on other
  * nodes/be depended on. The construction of the graph maintains some important invariants that are
  * inherent to the model:

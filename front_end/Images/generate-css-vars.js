@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 const path = require('path');
@@ -7,7 +7,7 @@ const {writeIfChanged} = require('../../scripts/build/ninja/write-if-changed.js'
 const [, , buildTimestamp, targetGenDir, targetName, ...imageSources] = process.argv;
 
 /**
- * @param {string} fileName
+ * @param fileName
  */
 function generateCSSVariableDefinition(fileName) {
   // The `style` referenced here is the `:root` style rule in the constructed stylesheet down below
@@ -21,7 +21,7 @@ function generateCSSVariableDefinition(fileName) {
 
 const CURRENT_YEAR = new Date(Number(buildTimestamp) * 1000).getUTCFullYear();
 const newContents = `
-// Copyright ${CURRENT_YEAR} The Chromium Authors. All rights reserved.
+// Copyright ${CURRENT_YEAR} The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 const sheet = new CSSStyleSheet();

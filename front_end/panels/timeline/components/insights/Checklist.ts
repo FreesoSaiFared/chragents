@@ -1,10 +1,10 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 /**
- * @fileoverview A list of pass/fail conditions for an insight.
+ * @file A list of pass/fail conditions for an insight.
  */
 
 import '../../../../ui/components/icon_button/icon_button.js';
@@ -13,19 +13,18 @@ import * as i18n from '../../../../core/i18n/i18n.js';
 import type * as Trace from '../../../../models/trace/trace.js';
 import * as ComponentHelpers from '../../../../ui/components/helpers/helpers.js';
 import * as Lit from '../../../../ui/lit/lit.js';
-import type * as Overlays from '../../overlays/overlays.js';
 
 import checklistStyles from './checklist.css.js';
 
 const UIStrings = {
   /**
-   *@description Text for a screen-reader label to tell the user that the icon represents a successful insight check
-   *@example {Server response time} PH1
+   * @description Text for a screen-reader label to tell the user that the icon represents a successful insight check
+   * @example {Server response time} PH1
    */
   successAriaLabel: 'Insight check passed: {PH1}',
   /**
-   *@description Text for a screen-reader label to tell the user that the icon represents an unsuccessful insight check
-   *@example {Server response time} PH1
+   * @description Text for a screen-reader label to tell the user that the icon represents an unsuccessful insight check
+   * @example {Server response time} PH1
    */
   failedAriaLabel: 'Insight check failed: {PH1}',
 } as const;
@@ -44,7 +43,7 @@ export interface ChecklistData {
 
 export interface TableDataRow {
   values: Array<number|string|Lit.LitTemplate>;
-  overlays?: Overlays.Overlays.TimelineOverlay[];
+  overlays?: Trace.Types.Overlays.Overlay[];
 }
 
 export class Checklist extends HTMLElement {

@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -21,6 +21,7 @@ devtools_module("common") {
     "Console.ts",
     "Debouncer.ts",
     "EventTarget.ts",
+    "Gzip.ts",
     "JavaScriptMetaData.ts",
     "Lazy.ts",
     "Linkifier.ts",
@@ -32,6 +33,7 @@ devtools_module("common") {
     "QueryParamHandler.ts",
     "ResolverBase.ts",
     "ResourceType.ts",
+    "ReturnToPanel.ts",
     "Revealer.ts",
     "Runnable.ts",
     "SegmentedRange.ts",
@@ -83,6 +85,7 @@ ts_library("unittests") {
     "Console.test.ts",
     "Debouncer.test.ts",
     "EventTarget.test.ts",
+    "Gzip.test.ts",
     "Lazy.test.ts",
     "MapWithDefault.test.ts",
     "Mutex.test.ts",

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -20,23 +20,23 @@ import {VBox} from './Widget.js';
 
 const UIStrings = {
   /**
-   *@description Text on a button to start editing text
+   * @description Text on a button to start editing text
    */
   editString: 'Edit',
   /**
-   *@description Label for an item to remove something
+   * @description Label for an item to remove something
    */
   removeString: 'Remove',
   /**
-   *@description Text to save something
+   * @description Text to save something
    */
   saveString: 'Save',
   /**
-   *@description Text to add something
+   * @description Text to add something
    */
   addString: 'Add',
   /**
-   *@description Text to cancel something
+   * @description Text to cancel something
    */
   cancelString: 'Cancel',
   /**
@@ -64,8 +64,8 @@ export class ListWidget<T> extends VBox {
   private editElement: Element|null;
   private emptyPlaceholder: Element|null;
   private isTable: boolean;
-  constructor(delegate: Delegate<T>, delegatesFocus: boolean|undefined = true, isTable = false) {
-    super(true, delegatesFocus);
+  constructor(delegate: Delegate<T>, delegatesFocus = true, isTable = false) {
+    super({useShadowDom: true, delegatesFocus});
     this.registerRequiredCSS(listWidgetStyles);
     this.delegate = delegate;
 
@@ -210,7 +210,7 @@ export class ListWidget<T> extends VBox {
       const index = this.elements.indexOf(element);
       this.element.focus();
       this.delegate.removeItemRequested(this.items[index], index);
-      ARIAUtils.alert(i18nString(UIStrings.removedItem));
+      ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.removedItem));
       if (this.elements.length >= 1) {
         // focus on the next item in the list, or the last item if we're removing the last item
         (this.elements[Math.min(index, this.elements.length - 1)] as HTMLElement).focus();
@@ -269,7 +269,7 @@ export class ListWidget<T> extends VBox {
     this.stopEditing();
     if (editItem !== null) {
       this.delegate.commitEdit(editItem, editor, isNew);
-      ARIAUtils.alert(i18nString(UIStrings.changesSaved));
+      ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.changesSaved));
       if (this.elements[focusElementIndex]) {
         (this.elements[focusElementIndex] as HTMLElement).focus();
       }
@@ -312,7 +312,7 @@ export type EditorControl<T = string> = (HTMLInputElement|HTMLSelectElement|Cust
 
 export class Editor<T> {
   element: HTMLDivElement;
-  private readonly contentElementInternal: HTMLElement;
+  readonly #contentElement: HTMLElement;
   private commitButton: Buttons.Button.Button;
   private readonly cancelButton: Buttons.Button.Button;
   private errorMessageContainer: HTMLElement;
@@ -331,8 +331,8 @@ export class Editor<T> {
     this.element.addEventListener(
         'keydown', onKeyDown.bind(null, Platform.KeyboardUtilities.isEscKey, this.cancelClicked.bind(this)), false);
 
-    this.contentElementInternal = this.element.createChild('div', 'editor-content');
-    this.contentElementInternal.addEventListener('keydown', onKeyDown.bind(null, event => {
+    this.#contentElement = this.element.createChild('div', 'editor-content');
+    this.#contentElement.addEventListener('keydown', onKeyDown.bind(null, event => {
       if (event.key !== 'Enter') {
         return false;
       }
@@ -368,7 +368,7 @@ export class Editor<T> {
   }
 
   contentElement(): Element {
-    return this.contentElementInternal;
+    return this.#contentElement;
   }
 
   createInput(

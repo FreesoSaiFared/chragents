@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -16,7 +16,6 @@ devtools_module("bindings") {
     "DebuggerWorkspaceBinding.ts",
     "DefaultScriptMapping.ts",
     "FileUtils.ts",
-    "IgnoreListManager.ts",
     "LiveLocation.ts",
     "NetworkProject.ts",
     "PresentationConsoleMessageHelper.ts",
@@ -37,6 +36,8 @@ devtools_module("bindings") {
     "../../core/root:bundle",
     "../../core/sdk:bundle",
     "../../generated:protocol",
+    "../../models/stack_trace:bundle",
+    "../../models/stack_trace:impl",
     "../../models/text_utils:bundle",
     "../../models/workspace:bundle",
   ]
@@ -61,6 +62,7 @@ devtools_entrypoint("bundle") {
     "../../panels/profiler/*",
     "../../panels/protocol_monitor/*",
     "../../panels/recorder/*",
+    "../../panels/settings/*",
     "../../panels/sources/*",
     "../../panels/timeline/*",
     "../../testing/*",
@@ -76,6 +78,8 @@ devtools_entrypoint("bundle") {
     "../issues_manager/*",
     "../persistence/*",
     "../source_map_scopes/*",
+    "../trace_source_maps_resolver/*",
+    "../workspace/*",
   ]
 
   visibility += devtools_models_visibility
@@ -91,7 +95,6 @@ ts_library("unittests") {
     "DebuggerWorkspaceBinding.test.ts",
     "DefaultScriptMapping.test.ts",
     "FileUtils.test.ts",
-    "IgnoreListManager.test.ts",
     "LiveLocation.test.ts",
     "PresentationConsoleMessageHelper.test.ts",
     "ResourceMapping.test.ts",
@@ -104,6 +107,7 @@ ts_library("unittests") {
     "../../core/common:bundle",
     "../../testing",
     "../persistence:bundle",
+    "../stack_trace:impl",
     "../text_utils:bundle",
     "../workspace:bundle",
   ]

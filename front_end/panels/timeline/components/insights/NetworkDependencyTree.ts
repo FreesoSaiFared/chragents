@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,11 +12,10 @@ import type {
   '../../../../models/trace/insights/NetworkDependencyTree.js';
 import * as Trace from '../../../../models/trace/trace.js';
 import * as Lit from '../../../../ui/lit/lit.js';
-import type * as Overlays from '../../overlays/overlays.js';
-import {md} from '../../utils/Helpers.js';
 
 import {BaseInsightComponent} from './BaseInsightComponent.js';
 import {eventRef} from './EventRef.js';
+import {md} from './Helpers.js';
 import networkDependencyTreeInsightStyles from './networkDependencyTreeInsight.css.js';
 import type {NodeLinkData} from './NodeLink.js';
 import {renderOthersLabel, type TableData, type TableDataRow} from './Table.js';
@@ -34,19 +33,13 @@ export class NetworkDependencyTree extends BaseInsightComponent<NetworkDependenc
   #relatedRequests: Set<Trace.Types.Events.SyntheticNetworkRequest>|null = null;
   #countOfChains = 0;
 
-  override createOverlays(): Overlays.Overlays.TimelineOverlay[] {
-    if (!this.model) {
-      return [];
-    }
-
-    const overlays: Overlays.Overlays.TimelineOverlay[] = [];
-    getAllOverlays(this.model.rootNodes, overlays);
-
-    return overlays;
+  protected override hasAskAiSupport(): boolean {
+    return true;
   }
 
-  #createOverlayForChain(requests: Set<Trace.Types.Events.SyntheticNetworkRequest>): Overlays.Overlays.EntryOutline[] {
-    const overlays: Overlays.Overlays.EntryOutline[] = [];
+  #createOverlayForChain(requests: Set<Trace.Types.Events.SyntheticNetworkRequest>):
+      Trace.Types.Overlays.EntryOutline[] {
+    const overlays: Trace.Types.Overlays.EntryOutline[] = [];
     requests.forEach(entry => overlays.push({
       type: 'ENTRY_OUTLINE',
       entry,
@@ -316,17 +309,6 @@ export class NetworkDependencyTree extends BaseInsightComponent<NetworkDependenc
       ${this.#renderEstSavingTable()}
     `;
   }
-}
-
-function getAllOverlays(nodes: CriticalRequestNode[], overlays: Overlays.Overlays.TimelineOverlay[]): void {
-  nodes.forEach(node => {
-    overlays.push({
-      type: 'ENTRY_OUTLINE',
-      entry: node.request,
-      outlineReason: 'ERROR',
-    });
-    getAllOverlays(node.children, overlays);
-  });
 }
 
 declare global {

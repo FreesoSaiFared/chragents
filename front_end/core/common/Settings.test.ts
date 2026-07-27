@@ -1,29 +1,13 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+import {MockStore} from '../../testing/MockSettingStorage.js';
 
 import * as Common from './common.js';
 
 const SettingsStorage = Common.Settings.SettingsStorage;
 const VersionController = Common.Settings.VersionController;
-
-class MockStore implements Common.Settings.SettingsBackingStore {
-  #store = new Map();
-  register() {
-  }
-  set(key: string, value: string) {
-    this.#store.set(key, value);
-  }
-  get(key: string) {
-    return this.#store.get(key);
-  }
-  remove(key: string) {
-    this.#store.delete(key);
-  }
-  clear() {
-    this.#store.clear();
-  }
-}
 
 describe('SettingsStorage class', () => {
   it('is able to set a name', () => {
@@ -679,6 +663,155 @@ describe('updateVersionFrom38To39', () => {
     const versionController = new VersionController();
     versionController.updateVersionFrom38To39();
     assert.isFalse(settings.globalStorage.has('preferred-network-condition'));
+  });
+
+  describe('updateVersionFrom39To40', () => {
+    let settings: Common.Settings.Settings;
+    let customNetworkCondSetting: Common.Settings.Setting<Array<{key?: string}>>;
+    let preferredNetworkCondSetting: Common.Settings.Setting<{i18nTitleKey: string}>;
+
+    beforeEach(() => {
+      const mockStore = new MockStore();
+      const syncedStorage = new Common.Settings.SettingsStorage({}, mockStore);
+      const globalStorage = new Common.Settings.SettingsStorage({}, mockStore);
+      const localStorage = new Common.Settings.SettingsStorage({}, mockStore);
+
+      Common.Settings.registerSettingExtension({
+        settingName: 'custom-network-conditions',
+        settingType: Common.Settings.SettingType.ARRAY,
+        defaultValue: [],
+      });
+
+      settings = Common.Settings.Settings.instance({
+        forceNew: true,
+        syncedStorage,
+        globalStorage,
+        localStorage,
+      });
+      customNetworkCondSetting = settings.moduleSetting('custom-network-conditions');
+      preferredNetworkCondSetting = settings.createSetting('preferred-network-condition', {i18nTitleKey: 'Offline'});
+    });
+
+    afterEach(() => {
+      Common.Settings.Settings.removeInstance();
+      Common.Settings.resetSettings();  // Clear SettingsRegistrations.
+    });
+
+    it('updates all settings to have a key', () => {
+      // In reality these values are SDK.NetworkManager.Conditions but we
+      // cannot refer to SDK here, and for this test we are only testing the
+      // addition of the key which does not care about the data in the
+      // object.
+      customNetworkCondSetting.set([{}, {}]);
+      const versionController = new VersionController();
+      versionController.updateVersionFrom39To40();
+      assert.deepEqual(customNetworkCondSetting.get(), [
+        {
+          key: 'USER_CUSTOM_SETTING_1',
+        },
+        {
+          key: 'USER_CUSTOM_SETTING_2',
+        }
+      ]);
+    });
+
+    it('does not update settings that have a key already', () => {
+      customNetworkCondSetting.set([{key: 'KEY'}]);
+      const versionController = new VersionController();
+      versionController.updateVersionFrom39To40();
+      assert.deepEqual(customNetworkCondSetting.get(), [
+        {
+          key: 'KEY',
+        },
+      ]);
+    });
+
+    it('migrates users who have a preferred-network-condition set to "Fast 4G"', () => {
+      preferredNetworkCondSetting.set({i18nTitleKey: 'Fast 4G'});
+      const versionController = new VersionController();
+      versionController.updateVersionFrom39To40();
+
+      const activeKeySetting = settings.globalStorage.get('active-network-condition-key');
+      assert.strictEqual(activeKeySetting, JSON.stringify('SPEED_FAST_4G'));
+      assert.isFalse(settings.globalStorage.has('preferred-network-condition'));
+    });
+
+    it('migrates users who have a preferred-network-condition set to "Slow 4G"', () => {
+      preferredNetworkCondSetting.set({i18nTitleKey: 'Slow 4G'});
+      const versionController = new VersionController();
+      versionController.updateVersionFrom39To40();
+
+      const activeKeySetting = settings.globalStorage.get('active-network-condition-key');
+      assert.strictEqual(activeKeySetting, JSON.stringify('SPEED_SLOW_4G'));
+      assert.isFalse(settings.globalStorage.has('preferred-network-condition'));
+    });
+
+    it('migrates users who have a preferred-network-condition set to "Slow 4G"', () => {
+      preferredNetworkCondSetting.set({i18nTitleKey: 'Slow 4G'});
+      const versionController = new VersionController();
+      versionController.updateVersionFrom39To40();
+
+      const activeKeySetting = settings.globalStorage.get('active-network-condition-key');
+      assert.strictEqual(activeKeySetting, JSON.stringify('SPEED_SLOW_4G'));
+      assert.isFalse(settings.globalStorage.has('preferred-network-condition'));
+    });
+
+    it('migrates users who have a preferred-network-condition set to "3G"', () => {
+      preferredNetworkCondSetting.set({i18nTitleKey: '3G'});
+      const versionController = new VersionController();
+      versionController.updateVersionFrom39To40();
+
+      const activeKeySetting = settings.globalStorage.get('active-network-condition-key');
+      assert.strictEqual(activeKeySetting, JSON.stringify('SPEED_3G'));
+      assert.isFalse(settings.globalStorage.has('preferred-network-condition'));
+    });
+
+    it('migrates users who have a preferred-network-condition set to "Offline"', () => {
+      preferredNetworkCondSetting.set({i18nTitleKey: 'Offline'});
+      const versionController = new VersionController();
+      versionController.updateVersionFrom39To40();
+
+      const activeKeySetting = settings.globalStorage.get('active-network-condition-key');
+      assert.strictEqual(activeKeySetting, JSON.stringify('OFFLINE'));
+      assert.isFalse(settings.globalStorage.has('preferred-network-condition'));
+    });
+
+    it('sets the default setting value correctly to No Throttling', () => {
+      preferredNetworkCondSetting.set({i18nTitleKey: 'Offline'});
+      const versionController = new VersionController();
+      versionController.updateVersionFrom39To40();
+
+      const activeKeySetting = settings.globalStorage.get('active-network-condition-key');
+      assert.strictEqual(activeKeySetting, JSON.stringify('OFFLINE'));
+
+      const newSetting = Common.Settings.Settings.instance().createSetting('active-network-condition-key', 'INVALID');
+      assert.strictEqual(newSetting.defaultValue, 'NO_THROTTLING');
+
+      assert.isFalse(settings.globalStorage.has('preferred-network-condition'));
+    });
+
+    it('migrates users who have a preferred-network-condition set to "No throttling"', () => {
+      preferredNetworkCondSetting.set({i18nTitleKey: 'No throttling'});
+      const versionController = new VersionController();
+      versionController.updateVersionFrom39To40();
+
+      const activeKeySetting = settings.globalStorage.get('active-network-condition-key');
+      assert.strictEqual(activeKeySetting, JSON.stringify('NO_THROTTLING'));
+      assert.isFalse(settings.globalStorage.has('preferred-network-condition'));
+    });
+
+    it('ignores any unexpected values and just deletes the old setting', () => {
+      preferredNetworkCondSetting.set({i18nTitleKey: 'Not a valid key'});
+      const versionController = new VersionController();
+      versionController.updateVersionFrom39To40();
+
+      // Ensure it does not create the new setting, ensuring that it will be
+      // created when the user next navigates to the network / perf panel.
+      assert.isFalse(settings.globalStorage.has('active-network-condition-key'));
+
+      // We still get rid of the old value.
+      assert.isFalse(settings.globalStorage.has('preferred-network-condition'));
+    });
   });
 });
 

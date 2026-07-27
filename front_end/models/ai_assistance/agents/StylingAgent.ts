@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,25 +7,21 @@ import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
 import * as Root from '../../../core/root/root.js';
 import * as SDK from '../../../core/sdk/sdk.js';
-import * as ElementsPanel from '../../../panels/elements/elements.js';
-import * as UI from '../../../ui/legacy/legacy.js';
-import {html, type TemplateResult} from '../../../ui/lit/lit.js';
+import type * as Protocol from '../../../generated/protocol.js';
 import {ChangeManager} from '../ChangeManager.js';
 import {debugLog} from '../debug.js';
 import {EvaluateAction, formatError, SideEffectError} from '../EvaluateAction.js';
 import {ExtensionScope} from '../ExtensionScope.js';
-import {AI_ASSISTANCE_CSS_CLASS_NAME, FREESTYLER_WORLD_NAME} from '../injected.js';
+import {FREESTYLER_WORLD_NAME} from '../injected.js';
 
 import {
   type AgentOptions as BaseAgentOptions,
   AiAgent,
   type ContextResponse,
   ConversationContext,
-  type ConversationSuggestion,
+  type ConversationSuggestions,
   type FunctionCallHandlerResult,
   MultimodalInputType,
-  type ParsedAnswer,
-  type ParsedResponse,
   type RequestOptions,
   ResponseType,
 } from './AiAgent.js';
@@ -35,11 +31,11 @@ import {
 */
 const UIStringsNotTranslate = {
   /**
-   *@description Title for context details for Freestyler.
+   * @description Title for context details for Freestyler.
    */
   analyzingThePrompt: 'Analyzing the prompt',
   /**
-   *@description Heading text for context details of Freestyler agent.
+   * @description Heading text for context details of Freestyler agent.
    */
   dataUsed: 'Data used',
 } as const;
@@ -52,12 +48,13 @@ const lockedString = i18n.i18n.lockedString;
  * chrome_preambles.gcl). Sync local changes with the server-side.
  */
 /* clang-format off */
-const preamble = `You are the most advanced CSS debugging assistant integrated into Chrome DevTools.
+const preamble = `You are the most advanced CSS/DOM/HTML debugging assistant integrated into Chrome DevTools.
 You always suggest considering the best web development practices and the newest platform features such as view transitions.
 The user selected a DOM element in the browser's DevTools and sends a query about the page or the selected DOM element.
+First, examine the provided context, then use the functions to gather additional context and resolve the user request.
 
 # Considerations
-* After applying a fix, please ask the user to confirm if the fix worked or not.
+
 * Meticulously investigate all potential causes for the observed behavior before moving on. Gather comprehensive information about the element's parent, siblings, children, and any overlapping elements, paying close attention to properties that are likely relevant to the query.
 * Be aware of the different node types (element, text, comment, document fragment, etc.) and their properties. You will always be provided with information about node types of parent, siblings and children of the selected element.
 * Avoid making assumptions without sufficient evidence, and always seek further clarification if needed.
@@ -65,101 +62,24 @@ The user selected a DOM element in the browser's DevTools and sends a query abou
 * When presenting solutions, clearly distinguish between the primary cause and contributing factors.
 * Please answer only if you are sure about the answer. Otherwise, explain why you're not able to answer.
 * When answering, always consider MULTIPLE possible solutions.
-* You're also capable of executing the fix for the issue user mentioned. Reflect this in your suggestions.
-* Use \`window.getComputedStyle\` to gather **rendered** styles and make sure that you take the distinction between authored styles and computed styles into account.
+* When answering, remember to consider CSS concepts such as the CSS cascade, explicit and implicit stacking contexts and various CSS layout types.
+* Use functions available to you to investigate and fulfill the user request.
+* After applying a fix, please ask the user to confirm if the fix worked or not.
+* ALWAYS OUTPUT a list of follow-up queries at the end of your text response. The format is SUGGESTIONS: ["suggestion1", "suggestion2", "suggestion3"]. Make sure that the array and the \`SUGGESTIONS: \` text is in the same line. You're also capable of executing the fix for the issue user mentioned. Reflect this in your suggestions.
+* **CRITICAL** NEVER write full Python programs - you should only write individual statements that invoke a single function from the provided library.
+* **CRITICAL** NEVER output text before a function call. Always do a function call first.
 * **CRITICAL** When answering questions about positioning or layout, ALWAYS inspect \`position\`, \`display\` and ALL related properties.
-* **CRITICAL** Call \`window.getComputedStyle\` only once per element and store results into a local variable. Never try to return all the styles of the element in \`data\`. Always use property getter to return relevant styles in \`data\` using the local variable: const styles = window.getComputedStyle($0); const data = { elementColor: styles['color']}.
-* **CRITICAL** Never assume a selector for the elements unless you verified your knowledge.
-* **CRITICAL** Consider that \`data\` variable from the previous ACTION blocks are not available in a different ACTION block.
-* **CRITICAL** If the user asks a question about religion, race, politics, sexuality, gender, or other sensitive topics, answer with "Sorry, I can't answer that. I'm best at questions about debugging web pages."
-* **CRITICAL** You are a CSS debugging assistant. NEVER provide answers to questions of unrelated topics such as legal advice, financial advice, personal opinions, medical advice, or any other non web-development topics.
+* **CRITICAL** You are a CSS/DOM/HTML debugging assistant. NEVER provide answers to questions of unrelated topics such as legal advice, financial advice, personal opinions, medical advice, religion, race, politics, sexuality, gender, or any other non web-development topics. Answer "Sorry, I can't answer that. I'm best at questions about debugging web pages." to such questions.`;
+/* clang-format on */
 
-# Instructions
-You are going to answer to the query in these steps:
-* THOUGHT
-* TITLE
-* ACTION
-* ANSWER
-* SUGGESTIONS
-Use THOUGHT to explain why you take the ACTION. Use TITLE to provide a short summary of the thought.
-Use ACTION to evaluate JavaScript code on the page to gather all the data needed to answer the query and put it inside the data variable - then return STOP.
-You have access to a special $0 variable referencing the current element in the scope of the JavaScript code.
-OBSERVATION will be the result of running the JS code on the page.
-After that, you can answer the question with ANSWER or run another ACTION query.
-Please run ACTION again if the information you received is not enough to answer the query.
-Please answer only if you are sure about the answer. Otherwise, explain why you're not able to answer.
-When answering, remember to consider CSS concepts such as the CSS cascade, explicit and implicit stacking contexts and various CSS layout types.
-When answering, always consider MULTIPLE possible solutions.
-After the ANSWER, output SUGGESTIONS: string[] for the potential responses the user might give. Make sure that the array and the \`SUGGESTIONS: \` text is in the same line.
-
-If you need to set styles on an HTML element within the ACTION code block, use the \`setElementStyles\` function:
-
- - You MUST call \`setElementStyles\` to set styles on elements.
- - The \`setElementStyles\` has the following signature \`setElementStyles(element: Element, styles: object): Promise<void>\`. Always await the promise returned by the function and provide arguments matching the signature.
- - The \`setElementStyles\` function is already globally defined. Do NOT attempt to define this function yourself.
- - \`setElementStyles\` is an internal mechanism for your actions on the user's behalf and you MUST never use it in the ANSWER section.
-
-## Example session
-
-QUERY: Why am I not able to see the popup in this case?
-
-THOUGHT: There are a few reasons why a popup might not be visible. It could be related to its positioning, its z-index, its display property, or overlapping elements. Let's gather information about these properties for the popup, its parent, and any potentially overlapping elements.
-TITLE: Analyzing popup, container, and overlaps
-ACTION
-const computedStyles = window.getComputedStyle($0);
-const parentComputedStyles = window.getComputedStyle($0.parentElement);
-const data = {
-  numberOfChildren: $0.children.length,
-  numberOfSiblings: $0.parentElement.children.length,
-  hasPreviousSibling: !!$0.previousElementSibling,
-  hasNextSibling: !!$0.nextElementSibling,
-  elementStyles: {
-    display: computedStyles['display'],
-    visibility: computedStyles['visibility'],
-    position: computedStyles['position'],
-    clipPath: computedStyles['clip-path'],
-    zIndex: computedStyles['z-index']
-  },
-  parentStyles: {
-    display: parentComputedStyles['display'],
-    visibility: parentComputedStyles['visibility'],
-    position: parentComputedStyles['position'],
-    clipPath: parentComputedStyles['clip-path'],
-    zIndex: parentComputedStyles['z-index']
-  },
-  overlappingElements: Array.from(document.querySelectorAll('*'))
-    .filter(el => {
-      const rect = el.getBoundingClientRect();
-      const popupRect = $0.getBoundingClientRect();
-      return (
-        el !== $0 &&
-        rect.left < popupRect.right &&
-        rect.right > popupRect.left &&
-        rect.top < popupRect.bottom &&
-        rect.bottom > popupRect.top
-      );
-    })
-    .map(el => ({
-      tagName: el.tagName,
-      id: el.id,
-      className: el.className,
-      zIndex: window.getComputedStyle(el)['z-index']
-    }))
-};
-STOP
-
-OBSERVATION: {"elementStyles":{"display":"block","visibility":"visible","position":"absolute","zIndex":"3","opacity":"1"},"parentStyles":{"display":"block","visibility":"visible","position":"relative","zIndex":"1","opacity":"1"},"overlappingElements":[{"tagName":"HTML","id":"","className":"","zIndex":"auto"},{"tagName":"BODY","id":"","className":"","zIndex":"auto"},{"tagName":"DIV","id":"","className":"container","zIndex":"auto"},{"tagName":"DIV","id":"","className":"background","zIndex":"2"}]}"
-
-ANSWER: Even though the popup itself has a z-index of 3, its parent container has position: relative and z-index: 1. This creates a new stacking context for the popup. Because the "background" div has a z-index of 2, which is higher than the stacking context of the popup, it is rendered on top, obscuring the popup.
-SUGGESTIONS: ["What is a stacking context?", "How can I change the stacking order?"]
-`;
-
-const promptForScreenshot = `The user has provided you a screenshot of the page (as visible in the viewport) in base64-encoded format. You SHOULD use it while answering user's queries.
+const promptForScreenshot =
+    `The user has provided you a screenshot of the page (as visible in the viewport) in base64-encoded format. You SHOULD use it while answering user's queries.
 
 * Try to connect the screenshot to actual DOM elements in the page.
 `;
 
-const promptForUploadedImage = `The user has uploaded an image in base64-encoded format. You SHOULD use it while answering user's queries.
+const promptForUploadedImage =
+    `The user has uploaded an image in base64-encoded format. You SHOULD use it while answering user's queries.
 `;
 
 const considerationsForMultimodalInputEvaluation = `# Considerations for evaluating image:
@@ -182,16 +102,20 @@ const MULTIMODAL_ENHANCEMENT_PROMPTS: Record<MultimodalInputType, string> = {
 };
 
 async function executeJsCode(
-    functionDeclaration: string, {throwOnSideEffect}: {throwOnSideEffect: boolean}): Promise<string> {
-  const selectedNode = UI.Context.Context.instance().flavor(SDK.DOMModel.DOMNode);
-  const target = selectedNode?.domModel().target() ?? UI.Context.Context.instance().flavor(SDK.Target.Target);
+    functionDeclaration: string,
+    {throwOnSideEffect, contextNode}: {throwOnSideEffect: boolean, contextNode: SDK.DOMModel.DOMNode|null}):
+    Promise<string> {
+  if (!contextNode) {
+    throw new Error('Cannot execute JavaScript because of missing context node');
+  }
+  const target = contextNode.domModel().target();
 
   if (!target) {
     throw new Error('Target is not found for executing code');
   }
 
   const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
-  const frameId = selectedNode?.frameId() ?? resourceTreeModel?.mainFrame?.id;
+  const frameId = contextNode.frameId() ?? resourceTreeModel?.mainFrame?.id;
 
   if (!frameId) {
     throw new Error('Main frame is not found for executing code');
@@ -211,19 +135,12 @@ async function executeJsCode(
     return formatError('Cannot evaluate JavaScript because the execution is paused on a breakpoint.');
   }
 
-  const result = await executionContext.evaluate(
-      {
-        expression: '$0',
-        returnByValue: false,
-        includeCommandLineAPI: true,
-      },
-      false, false);
-
-  if ('error' in result) {
-    return formatError('Cannot find $0');
+  const remoteObject = await contextNode.resolveToObject(undefined, executionContextId);
+  if (!remoteObject) {
+    throw new Error('Cannot execute JavaScript because remote object cannot be resolved');
   }
 
-  return await EvaluateAction.execute(functionDeclaration, [result.object], executionContext, {throwOnSideEffect});
+  return await EvaluateAction.execute(functionDeclaration, [remoteObject], executionContext, {throwOnSideEffect});
 }
 
 const MAX_OBSERVATION_BYTE_LENGTH = 25_000;
@@ -261,20 +178,11 @@ export class NodeContext extends ConversationContext<SDK.DOMModel.DOMNode> {
     return this.#node;
   }
 
-  override getIcon(): undefined {
+  override getTitle(): string {
+    throw new Error('Not implemented');
   }
 
-  override getTitle(opts: {disabled: boolean}): string|TemplateResult {
-    const hiddenClassList =
-        this.#node.classNames().filter(className => className.startsWith(AI_ASSISTANCE_CSS_CLASS_NAME));
-    const {DOMNodeLink} = ElementsPanel.DOMLinkifier;
-    const {widgetConfig} = UI.Widget;
-    return html`<devtools-widget .widgetConfig=${
-        widgetConfig(
-            DOMNodeLink, {node: this.#node, options: {hiddenClassList, disabled: opts.disabled}})}></devtools-widget>`;
-  }
-
-  override async getSuggestions(): Promise<[ConversationSuggestion, ...ConversationSuggestion[]]|undefined> {
+  override async getSuggestions(): Promise<ConversationSuggestions|undefined> {
     const layoutProps = await this.#node.domModel().cssModel().getLayoutPropertiesFromComputedStyle(this.#node.id);
 
     if (!layoutProps) {
@@ -326,8 +234,6 @@ export class NodeContext extends ConversationContext<SDK.DOMModel.DOMNode> {
  * instance for a new conversation.
  */
 export class StylingAgent extends AiAgent<SDK.DOMModel.DOMNode> {
-  protected override functionCallEmulationEnabled = true;
-
   preamble = preamble;
   readonly clientFeature = Host.AidaClient.ClientFeature.CHROME_STYLING_AGENT;
   get userTier(): string|undefined {
@@ -352,148 +258,8 @@ export class StylingAgent extends AiAgent<SDK.DOMModel.DOMNode> {
     return Boolean(Root.Runtime.hostConfig.devToolsFreestyler?.multimodal);
   }
 
-  override parseTextResponse(text: string): ParsedResponse {
-    // We're returning an empty answer to denote the erroneous case.
-    if (!text) {
-      return {answer: ''};
-    }
-
-    const lines = text.split('\n');
-    let thought: string|undefined;
-    let title: string|undefined;
-    let action: string|undefined;
-    let answer: string|undefined;
-    let suggestions: [string, ...string[]]|undefined;
-    let i = 0;
-
-    // If one of these is present, it means we're going to follow the instruction tags
-    // to parse the response. If none of these is present, we'll assume the whole `response`
-    // to be the `answer`.
-    const isDefiningInstructionStart = (line: string): boolean => {
-      const trimmed = line.trim();
-      return trimmed.startsWith('THOUGHT:') || trimmed.startsWith('ACTION') || trimmed.startsWith('ANSWER:');
-    };
-
-    const isInstructionStart = (line: string): boolean => {
-      const trimmed = line.trim();
-      return isDefiningInstructionStart(line) || trimmed.startsWith('OBSERVATION:') || trimmed.startsWith('TITLE:') ||
-          trimmed.startsWith('SUGGESTIONS:');
-    };
-
-    // Sometimes agent answers with no "ANSWER: " tag at the start, and also does not
-    // include any "defining instructions". Then we use the whole `response` as the answer.
-    // However, that case sometimes includes `SUGGESTIONS: ` tag in the response which is then shown to the user.
-    // The block below ensures that the response we parse always contains a defining instruction tag.
-    const hasDefiningInstruction = lines.some(line => isDefiningInstructionStart(line));
-    if (!hasDefiningInstruction) {
-      return this.parseTextResponse(`ANSWER: ${text}`);
-    }
-
-    while (i < lines.length) {
-      const trimmed = lines[i].trim();
-      if (trimmed.startsWith('THOUGHT:') && !thought) {
-        // Start with the initial `THOUGHT: text` line and move forward by one line.
-        const thoughtLines = [trimmed.substring('THOUGHT:'.length).trim()];
-        i++;
-        // Move until we see a new instruction, otherwise we're still inside the `THOUGHT` block.
-        while (i < lines.length && !isInstructionStart(lines[i])) {
-          const trimmedLine = lines[i].trim();
-          if (trimmedLine) {
-            thoughtLines.push(trimmedLine);
-          }
-          i++;
-        }
-        thought = thoughtLines.join('\n');
-      } else if (trimmed.startsWith('TITLE:')) {
-        title = trimmed.substring('TITLE:'.length).trim();
-        i++;
-      } else if (trimmed.startsWith('ACTION') && !action) {
-        const actionLines = [];
-        i++;
-        while (i < lines.length) {
-          if (lines[i].trim() === 'STOP') {
-            i++;
-            break;
-          }
-          if (isInstructionStart(lines[i])) {
-            break;
-          }
-
-          // If the LLM responds with a language omit it
-          // as we always expect JS here
-          if (lines[i].trim().startsWith('`````')) {
-            actionLines.push('`````');
-          }
-          // Sometimes the code block is in the form of "`````\njs\n{code}`````"
-          else if (lines[i].trim() !== 'js') {
-            actionLines.push(lines[i]);
-          }
-          i++;
-        }
-
-        // Sometimes the LLM puts the STOP response to the last line of the code block.
-        // Here, we check whether the last line ends with STOP keyword and if so, remove it
-        // from the last line.
-        const lastActionLine = actionLines[actionLines.length - 1];
-        if (lastActionLine?.endsWith('STOP')) {
-          actionLines[actionLines.length - 1] = lastActionLine.substring(0, lastActionLine.length - 'STOP'.length);
-        }
-        action = actionLines.join('\n').replaceAll('```', '').replaceAll('``', '').trim();
-      } else if (trimmed.startsWith('ANSWER:') && !answer) {
-        const answerLines = [
-          trimmed.substring('ANSWER:'.length).trim(),
-        ];
-        let j = i + 1;
-        while (j < lines.length) {
-          const line = lines[j].trim();
-          if (isInstructionStart(line)) {
-            break;
-          }
-          answerLines.push(lines[j]);
-          j++;
-        }
-        answer = answerLines.join('\n').trim();
-        i = j;
-      } else if (trimmed.startsWith('SUGGESTIONS:')) {
-        try {
-          // TODO: Do basic validation this is an array with strings
-          suggestions = JSON.parse(trimmed.substring('SUGGESTIONS:'.length).trim());
-        } catch {
-        }
-
-        i++;
-      } else {
-        i++;
-      }
-    }
-
-    // Sometimes the answer will follow an action and a thought. In
-    // that case, we only use the action and the thought (if present)
-    // since the answer is not based on the observation resulted from
-    // the action.
-    if (action) {
-      return {
-        title,
-        thought,
-        action,
-      };
-    }
-
-    // If we have a thought and an answer we want to give priority
-    // to the answer as no observation is happening.
-    if (thought && !answer) {
-      return {
-        title,
-        thought,
-      };
-    }
-
-    return {
-      // If we could not parse the parts, consider the response to be an
-      // answer.
-      answer: answer || text,
-      suggestions,
-    };
+  override preambleFeatures(): string[] {
+    return ['function_calling'];
   }
 
   #execJs: typeof executeJsCode;
@@ -511,7 +277,7 @@ export class StylingAgent extends AiAgent<SDK.DOMModel.DOMNode> {
     this.#changes = opts.changeManager || new ChangeManager();
     this.#execJs = opts.execJs ?? executeJsCode;
     this.#createExtensionScope = opts.createExtensionScope ?? ((changes: ChangeManager) => {
-                                   return new ExtensionScope(changes, this.id);
+                                   return new ExtensionScope(changes, this.id, this.context?.getItem() ?? null);
                                  });
     SDK.TargetManager.TargetManager.instance().addModelListener(
         SDK.ResourceTreeModel.ResourceTreeModel,
@@ -521,11 +287,64 @@ export class StylingAgent extends AiAgent<SDK.DOMModel.DOMNode> {
     );
 
     this.declareFunction<{
+      elements: string[],
+      styleProperties: string[],
+      explanation: string,
+    }>('getStyles', {
+      description:
+          `Get computed and source styles for one or multiple elements on the inspected page for multiple elements at once by uid.
+
+**CRITICAL** Use selectors to refer to elements in the text output. Do not use uids.
+**CRITICAL** Always provide the explanation argument to explain what and why you query.`,
+      parameters: {
+        type: Host.AidaClient.ParametersTypes.OBJECT,
+        description: '',
+        nullable: false,
+        properties: {
+          explanation: {
+            type: Host.AidaClient.ParametersTypes.STRING,
+            description: 'Explain why you want to get styles',
+            nullable: false,
+          },
+          elements: {
+            type: Host.AidaClient.ParametersTypes.ARRAY,
+            description: 'A list of element uids to get data for',
+            items: {type: Host.AidaClient.ParametersTypes.STRING, description: `An element uid.`},
+            nullable: false,
+          },
+          styleProperties: {
+            type: Host.AidaClient.ParametersTypes.ARRAY,
+            description: 'One or more CSS style property names to fetch.',
+            nullable: false,
+            items: {
+              type: Host.AidaClient.ParametersTypes.STRING,
+              description: 'A CSS style property name to retrieve. For example, \'background-color\'.'
+            }
+          },
+        }
+      },
+      displayInfoFromArgs: params => {
+        return {
+          title: 'Reading computed and source styles',
+          thought: params.explanation,
+          action: `getStyles(${JSON.stringify(params.elements)}, ${JSON.stringify(params.styleProperties)})`,
+        };
+      },
+      handler: async (
+          params,
+          options,
+          ) => {
+        return await this.getStyles(params.elements, params.styleProperties, options);
+      },
+    });
+
+    this.declareFunction<{
       title: string,
       thought: string,
       code: string,
     }>('executeJavaScript', {
-      description: `This function allows you to run JavaScript code on the inspected page.
+      description:
+          `This function allows you to run JavaScript code on the inspected page to access the element styles and page content.
 Call this function to gather additional information or modify the page state. Call this function enough times to investigate the user request.`,
       parameters: {
         type: Host.AidaClient.ParametersTypes.OBJECT,
@@ -541,25 +360,42 @@ Call this function to gather additional information or modify the page state. Ca
 
 * To return data, define a top-level \`data\` variable and populate it with data you want to get. Only JSON-serializable objects can be assigned to \`data\`.
 * If you modify styles on an element, ALWAYS call the pre-defined global \`async setElementStyles(el: Element, styles: object)\` function. This function is an internal mechanism for you and should never be presented as a command/advice to the user.
-* Use \`window.getComputedStyle\` to gather **computed** styles and make sure that you take the distinction between authored styles and computed styles into account.
 * **CRITICAL** Only get styles that might be relevant to the user request.
-* **CRITICAL** Call \`window.getComputedStyle\` only once per element and store results into a local variable. Never try to return all the styles of the element in \`data\`.
 * **CRITICAL** Never assume a selector for the elements unless you verified your knowledge.
 * **CRITICAL** Consider that \`data\` variable from the previous function calls are not available in a new function call.
 
-For example, the code to return basic styles:
+For example, the code to change element styles:
 
-const styles = window.getComputedStyle($0);
+\`\`\`
+await setElementStyles($0, {
+  color: 'blue',
+});
+\`\`\`
+
+For example, the code to get overlapping elements:
+
+\`\`\`
 const data = {
-    display: computedStyles['display'],
-    visibility: computedStyles['visibility'],
-    position: computedStyles['position'],
-    left: computedStyles['right'],
-    top: computedStyles['top'],
-    width: computedStyles['width'],
-    height: computedStyles['height'],
-    zIndex: computedStyles['z-index']
+  overlappingElements: Array.from(document.querySelectorAll('*'))
+    .filter(el => {
+      const rect = el.getBoundingClientRect();
+      const popupRect = $0.getBoundingClientRect();
+      return (
+        el !== $0 &&
+        rect.left < popupRect.right &&
+        rect.right > popupRect.left &&
+        rect.top < popupRect.bottom &&
+        rect.bottom > popupRect.top
+      );
+    })
+    .map(el => ({
+      tagName: el.tagName,
+      id: el.id,
+      className: el.className,
+      zIndex: window.getComputedStyle(el)['z-index']
+    }))
 };
+\`\`\`
 `,
           },
           thought: {
@@ -592,29 +428,6 @@ const data = {
     void this.#changes.clear();
   }
 
-  protected override emulateFunctionCall(aidaResponse: Host.AidaClient.AidaResponse):
-      Host.AidaClient.AidaFunctionCallResponse|'no-function-call'|'wait-for-completion' {
-    const parsed = this.parseTextResponse(aidaResponse.explanation);
-    // If parsing detected an answer, it is a streaming text response.
-    if ('answer' in parsed) {
-      return 'no-function-call';
-    }
-    // If no answer and the response is streaming, it might be a
-    // function call.
-    if (!aidaResponse.completed) {
-      return 'wait-for-completion';
-    }
-    // definitely a function call, emulate AIDA's function call.
-    return {
-      name: 'executeJavaScript',
-      args: {
-        title: parsed.title,
-        thought: parsed.thought,
-        code: parsed.action,
-      },
-    };
-  }
-
   async generateObservation(
       action: string,
       {
@@ -640,7 +453,10 @@ const data = {
       const result = await Promise.race([
         this.#execJs(
             functionDeclaration,
-            {throwOnSideEffect},
+            {
+              throwOnSideEffect,
+              contextNode: this.context?.getItem() || null,
+            },
             ),
         new Promise<never>((_, reject) => {
           setTimeout(
@@ -675,7 +491,8 @@ const data = {
   }
 
   static async describeElement(element: SDK.DOMModel.DOMNode): Promise<string> {
-    let output = `* Its selector is \`${element.simpleSelector()}\``;
+    let output = `* Element's uid is ${element.backendNodeId()}.
+* Its selector is \`${element.simpleSelector()}\``;
     const childNodes = await element.getChildNodesPromise();
     if (childNodes) {
       const textChildNodes = childNodes.filter(childNode => childNode.nodeType() === Node.TEXT_NODE);
@@ -689,7 +506,7 @@ const data = {
           break;
         default:
           output += `\n* It has ${elementChildNodes.length} child element nodes: ${
-              elementChildNodes.map(node => `\`${node.simpleSelector()}\``).join(', ')}`;
+              elementChildNodes.map(node => `\`${node.simpleSelector()}\` (uid=${node.backendNodeId()})`).join(', ')}`;
       }
 
       switch (textChildNodes.length) {
@@ -705,14 +522,16 @@ const data = {
     }
 
     if (element.nextSibling) {
-      const elementOrNodeElementNodeText =
-          element.nextSibling.nodeType() === Node.ELEMENT_NODE ? 'an element' : 'a non element';
+      const elementOrNodeElementNodeText = element.nextSibling.nodeType() === Node.ELEMENT_NODE ?
+          `an element (uid=${element.nextSibling.backendNodeId()})` :
+          'a non element';
       output += `\n* It has a next sibling and it is ${elementOrNodeElementNodeText} node`;
     }
 
     if (element.previousSibling) {
-      const elementOrNodeElementNodeText =
-          element.previousSibling.nodeType() === Node.ELEMENT_NODE ? 'an element' : 'a non element';
+      const elementOrNodeElementNodeText = element.previousSibling.nodeType() === Node.ELEMENT_NODE ?
+          `an element (uid=${element.previousSibling.backendNodeId()})` :
+          'a non element';
       output += `\n* It has a previous sibling and it is ${elementOrNodeElementNodeText} node`;
     }
 
@@ -723,7 +542,7 @@ const data = {
     const parentNode = element.parentNode;
     if (parentNode) {
       const parentChildrenNodes = await parentNode.getChildNodesPromise();
-      output += `\n* Its parent's selector is \`${parentNode.simpleSelector()}\``;
+      output += `\n* Its parent's selector is \`${parentNode.simpleSelector()}\` (uid=${parentNode.backendNodeId()})`;
       const elementOrNodeElementNodeText = parentNode.nodeType() === Node.ELEMENT_NODE ? 'an element' : 'a non element';
       output += `\n* Its parent is ${elementOrNodeElementNodeText} node`;
       if (parentNode.isShadowRoot()) {
@@ -740,7 +559,8 @@ const data = {
             break;
           default:
             output += `\n* Its parent has ${childElementNodes.length} child element nodes: ${
-                childElementNodes.map(node => `\`${node.simpleSelector()}\``).join(', ')}`;
+                childElementNodes.map(node => `\`${node.simpleSelector()}\` (uid=${node.backendNodeId()})`)
+                    .join(', ')}`;
             break;
         }
 
@@ -762,6 +582,57 @@ const data = {
     return output.trim();
   }
 
+  #getSelectedNode(): SDK.DOMModel.DOMNode|null {
+    return this.context?.getItem() ?? null;
+  }
+
+  async getStyles(elements: string[], properties: string[], _options?: {
+    signal?: AbortSignal,
+    approved?: boolean,
+  }): Promise<FunctionCallHandlerResult<unknown>> {
+    const result:
+        Record<string, {computed: Record<string, string|undefined>, authored: Record<string, string|undefined>}> = {};
+    for (const uid of elements) {
+      result[uid] = {computed: {}, authored: {}};
+      debugLog(`Action to execute: uid=${uid}`);
+      const selectedNode = this.#getSelectedNode();
+      if (!selectedNode) {
+        return {error: 'Error: Could not find the currently selected element.'};
+      }
+      const node = new SDK.DOMModel.DeferredDOMNode(
+          selectedNode.domModel().target(), Number(uid) as unknown as Protocol.DOM.BackendNodeId);
+      const resolved = await node.resolvePromise();
+      if (!resolved) {
+        return {error: 'Error: Could not find the element with uid=' + uid};
+      }
+      const styles = await resolved.domModel().cssModel().getComputedStyle(resolved.id);
+      if (!styles) {
+        return {error: 'Error: Could not get computed styles.'};
+      }
+      const matchedStyles = await resolved.domModel().cssModel().getMatchedStyles(resolved.id);
+      if (!matchedStyles) {
+        return {error: 'Error: Could not get authored styles.'};
+      }
+      for (const prop of properties) {
+        result[uid].computed[prop] = styles.get(prop);
+      }
+      for (const style of matchedStyles.nodeStyles()) {
+        for (const property of style.allProperties()) {
+          if (!properties.includes(property.name)) {
+            continue;
+          }
+          const state = matchedStyles.propertyState(property);
+          if (state === SDK.CSSMatchedStyles.PropertyState.ACTIVE) {
+            result[uid].authored[property.name] = property.value;
+          }
+        }
+      }
+    }
+    return {
+      result: JSON.stringify(result, null, 2),
+    };
+  }
+
   async executeAction(action: string, options?: {signal?: AbortSignal, approved?: boolean}):
       Promise<FunctionCallHandlerResult<unknown>> {
     debugLog(`Action to execute: ${action}`);
@@ -778,9 +649,12 @@ const data = {
       };
     }
 
-    const selectedNode = UI.Context.Context.instance().flavor(SDK.DOMModel.DOMNode);
-    const target = selectedNode?.domModel().target() ?? UI.Context.Context.instance().flavor(SDK.Target.Target);
-    if (target?.model(SDK.DebuggerModel.DebuggerModel)?.selectedCallFrame()) {
+    const selectedNode = this.#getSelectedNode();
+    if (!selectedNode) {
+      return {error: 'Error: no selected node found.'};
+    }
+    const target = selectedNode.domModel().target();
+    if (target.model(SDK.DebuggerModel.DebuggerModel)?.selectedCallFrame()) {
       return {
         error: 'Error: Cannot evaluate JavaScript because the execution is paused on a breakpoint.',
       };
@@ -853,67 +727,5 @@ const data = {
     const multimodalInputEnhancementQuery =
         this.multimodalInputEnabled && multimodalInputType ? MULTIMODAL_ENHANCEMENT_PROMPTS[multimodalInputType] : '';
     return `${multimodalInputEnhancementQuery}${elementEnchancementQuery}QUERY: ${query}`;
-  }
-
-  override formatParsedAnswer({answer}: ParsedAnswer): string {
-    return `ANSWER: ${answer}`;
-  }
-}
-
-/* clang-format off */
-const preambleFunctionCalling = `You are the most advanced CSS debugging assistant integrated into Chrome DevTools.
-You always suggest considering the best web development practices and the newest platform features such as view transitions.
-The user selected a DOM element in the browser's DevTools and sends a query about the page or the selected DOM element.
-
-# Considerations
-
-* Meticulously investigate all potential causes for the observed behavior before moving on. Gather comprehensive information about the element's parent, siblings, children, and any overlapping elements, paying close attention to properties that are likely relevant to the query.
-* Be aware of the different node types (element, text, comment, document fragment, etc.) and their properties. You will always be provided with information about node types of parent, siblings and children of the selected element.
-* Avoid making assumptions without sufficient evidence, and always seek further clarification if needed.
-* Always explore multiple possible explanations for the observed behavior before settling on a conclusion.
-* When presenting solutions, clearly distinguish between the primary cause and contributing factors.
-* Please answer only if you are sure about the answer. Otherwise, explain why you're not able to answer.
-* When answering, always consider MULTIPLE possible solutions.
-* Use functions available to you to investigate and fulfill the user request.
-* ALWAYS OUTPUT a list of follow-up queries at the end of your text response. The format is SUGGESTIONS: ["suggestion1", "suggestion2", "suggestion3"]. Make sure that the array and the \`SUGGESTIONS: \` text is in the same line. INCLUDE possible fixes withing suggestions.
-* **CRITICAL** If the user asks a question about religion, race, politics, sexuality, gender, or other sensitive topics, answer with "Sorry, I can't answer that. I'm best at questions about debugging web pages."
-* **CRITICAL** You are a CSS debugging assistant. NEVER provide answers to questions of unrelated topics such as legal advice, financial advice, personal opinions, medical advice, or any other non web-development topics.`;
-/* clang-format on */
-
-export class StylingAgentWithFunctionCalling extends StylingAgent {
-  override functionCallEmulationEnabled = false;
-  override preamble = preambleFunctionCalling;
-  override formatParsedAnswer({answer}: ParsedAnswer): string {
-    return answer;
-  }
-  override parseTextResponse(text: string): ParsedResponse {
-    // We're returning an empty answer to denote the erroneous case.
-    if (!text.trim()) {
-      return {answer: ''};
-    }
-
-    const lines = text.split('\n');
-    const answerLines: string[] = [];
-    let suggestions: [string, ...string[]]|undefined;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('SUGGESTIONS:')) {
-        try {
-          // TODO: Do basic validation this is an array with strings
-          suggestions = JSON.parse(trimmed.substring('SUGGESTIONS:'.length).trim());
-        } catch {
-        }
-      } else {
-        answerLines.push(line);
-      }
-    }
-
-    return {
-      // If we could not parse the parts, consider the response to be an
-      // answer.
-      answer: answerLines.join('\n'),
-      suggestions,
-    };
   }
 }

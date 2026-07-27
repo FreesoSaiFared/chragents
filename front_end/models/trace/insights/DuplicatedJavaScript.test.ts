@@ -1,14 +1,14 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {getFirstOrError, getInsightOrError, processTrace} from '../../../testing/InsightHelpers.js';
-import {fetchFixture, TraceLoader} from '../../../testing/TraceLoader.js';
+import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as Trace from '../trace.js';
 
 describeWithEnvironment('DuplicatedJavaScript', function() {
-  it('works (external source maps)', async () => {
+  it('works (external source maps)', async function() {
     const {data, insights} = await processTrace(this, 'dupe-js.json.gz');
     assert.strictEqual(insights.size, 1);
     const insight = getInsightOrError(
@@ -95,16 +95,15 @@ describeWithEnvironment('DuplicatedJavaScript', function() {
 
   it('works (inline source maps in metadata)', async function() {
     // Load this trace in a way that mutating it is safe.
-    const traceText = await fetchFixture(
+    const fileContents = await TraceLoader.loadTraceFileFromURL(
         new URL('../../../panels/timeline/fixtures/traces/dupe-js-inline-maps.json.gz', import.meta.url));
-    const fileContents = JSON.parse(traceText) as Trace.Types.File.TraceFile;
 
     // Remove the source map data urls from the trace, and move to metadata.
     // This reflects how Chromium will elide data source map urls.
     // The original trace here was recorded at a time where sourceMapUrl could be a
     // large data url.
     for (const event of fileContents.traceEvents) {
-      if (Trace.Types.Events.isV8SourceRundownEvent(event)) {
+      if (Trace.Types.Events.isRundownScript(event)) {
         const {sourceMapUrl, url} = event.args.data;
         if (sourceMapUrl?.startsWith('data:') && url) {
           const sourceMap = await (await fetch(sourceMapUrl)).json();
@@ -115,8 +114,8 @@ describeWithEnvironment('DuplicatedJavaScript', function() {
       }
     }
 
-    const parsedTraceData = await TraceLoader.executeTraceEngineOnFileContents(fileContents);
-    const {parsedTrace: data, insights} = parsedTraceData;
+    const {parsedTrace} = await TraceLoader.executeTraceEngineOnFileContents(fileContents);
+    const {data, insights} = parsedTrace;
     if (!insights) {
       throw new Error('invalid insights');
     }

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -19,20 +19,20 @@ import throttlingSettingsTabStyles from './throttlingSettingsTab.css.js';
 
 const UIStrings = {
   /**
-   *@description Text in Throttling Settings Tab of the Network panel
+   * @description Text in Throttling Settings Tab of the Network panel
    */
   networkThrottlingProfiles: 'Network throttling profiles',
   /**
-   *@description Text of add conditions button in Throttling Settings Tab of the Network panel
+   * @description Text of add conditions button in Throttling Settings Tab of the Network panel
    */
   addCustomProfile: 'Add profile',
   /**
-   *@description A value in milliseconds
-   *@example {3} PH1
+   * @description A value in milliseconds
+   * @example {3} PH1
    */
   dms: '{PH1} `ms`',
   /**
-   *@description Text in Throttling Settings Tab of the Network panel
+   * @description Text in Throttling Settings Tab of the Network panel
    */
   profileName: 'Profile Name',
   /**
@@ -66,35 +66,35 @@ const UIStrings = {
    */
   packet: 'packet',
   /**
-   *@description Text in Throttling Settings Tab of the Network panel
+   * @description Text in Throttling Settings Tab of the Network panel
    */
   optional: 'optional',
   /**
-   *@description Error message for Profile Name input in Throtting pane of the Settings
-   *@example {49} PH1
+   * @description Error message for Profile Name input in Throtting pane of the Settings
+   * @example {49} PH1
    */
   profileNameCharactersLengthMust: 'Profile Name characters length must be between 1 to {PH1} inclusive',
   /**
-   *@description Error message for Download and Upload inputs in Throttling pane of the Settings
-   *@example {Download} PH1
-   *@example {0} PH2
-   *@example {10000000} PH3
+   * @description Error message for Download and Upload inputs in Throttling pane of the Settings
+   * @example {Download} PH1
+   * @example {0} PH2
+   * @example {10000000} PH3
    */
   sMustBeANumberBetweenSkbsToSkbs: '{PH1} must be a number between {PH2} `kbit/s` to {PH3} `kbit/s` inclusive',
   /**
-   *@description Error message for Latency input in Throttling pane of the Settings
-   *@example {0} PH1
-   *@example {1000000} PH2
+   * @description Error message for Latency input in Throttling pane of the Settings
+   * @example {0} PH1
+   * @example {1000000} PH2
    */
   latencyMustBeAnIntegerBetweenSms: 'Latency must be an integer between {PH1} `ms` to {PH2} `ms` inclusive',
   /**
-   *@description Error message for Packet Loss input in Throttling pane of the Settings
-   *@example {0} PH1
-   *@example {100} PH2
+   * @description Error message for Packet Loss input in Throttling pane of the Settings
+   * @example {0} PH1
+   * @example {100} PH2
    */
   packetLossMustBeAnIntegerBetweenSpct: 'Packet Loss must be a number between {PH1} `%` to {PH2} `%` inclusive',
   /**
-   *@description Error message for Packet Queue Length input in Throttling pane of the Settings
+   * @description Error message for Packet Queue Length input in Throttling pane of the Settings
    */
   packetQueueLengthMustBeAnIntegerGreaterOrEqualToZero: 'Packet Queue Length must be greater or equal to 0',
   /**
@@ -119,7 +119,7 @@ const UIStrings = {
   off: 'Off',
 
   /**
-   *@description Text in Throttling Settings Tab of the Settings panel
+   * @description Text in Throttling Settings Tab of the Settings panel
    */
   cpuThrottlingPresets: 'CPU throttling presets',
   /**
@@ -143,30 +143,30 @@ const UIStrings = {
    */
   needsCalibration: 'Needs calibration',
   /**
-   *@description Text to explain why the user should run the CPU calibration process.
+   * @description Text to explain why the user should run the CPU calibration process.
    */
   calibrationCTA:
       'To use the CPU throttling presets, run the calibration process to determine the ideal throttling rate for your device.',
   /**
-   *@description Text to explain what CPU throttling presets are.
+   * @description Text to explain what CPU throttling presets are.
    */
   cpuCalibrationDescription:
       'These presets throttle your CPU to approximate the performance of typical low or mid-tier mobile devices.',
   /**
-   *@description Text to explain how the CPU calibration process will work.
+   * @description Text to explain how the CPU calibration process will work.
    */
   calibrationConfirmationPrompt:
       'Calibration will take ~5 seconds, and temporarily navigate away from your current page. Do you wish to continue?',
   /**
-   *@description Text to explain an issue that may impact the CPU calibration process.
+   * @description Text to explain an issue that may impact the CPU calibration process.
    */
   calibrationWarningHighCPU: 'CPU utilization is too high',
   /**
-   *@description Text to explain an issue that may impact the CPU calibration process.
+   * @description Text to explain an issue that may impact the CPU calibration process.
    */
   calibrationWarningRunningOnBattery: 'Device is running on battery, please plug in charger for best results',
   /**
-   *@description Text to explain an issue that may impact the CPU calibration process.
+   * @description Text to explain an issue that may impact the CPU calibration process.
    */
   calibrationWarningLowBattery: 'Device battery is low (<20%), results may be impacted by CPU throttling',
   /**
@@ -258,8 +258,8 @@ export class CPUThrottlingCard {
 
     this.textEl = this.calibrateEl.createChild('div', 'text-container');
 
-    this.progress = new UI.ProgressIndicator.ProgressIndicator({showStopButton: false});
-    this.calibrateEl.append(this.progress.element);
+    this.progress = this.calibrateEl.createChild('devtools-progress');
+    this.progress.setAttribute('no-stop-button', '');
 
     this.updateState();
   }
@@ -288,7 +288,7 @@ export class CPUThrottlingCard {
     this.calibrateButton.style.display = 'none';
     this.textEl.style.display = 'none';
     this.cancelButton.style.display = 'none';
-    this.progress.element.style.display = 'none';
+    this.progress.style.display = 'none';
 
     if (this.state === 'cta') {
       this.calibrateButton.style.display = '';
@@ -314,7 +314,7 @@ export class CPUThrottlingCard {
       this.textEl.append(this.createTextWithIcon(i18nString(UIStrings.calibrationConfirmationPrompt), 'info'));
     } else if (this.state === 'calibrating') {
       this.cancelButton.style.display = '';
-      this.progress.element.style.display = '';
+      this.progress.style.display = '';
     }
 
     const resultToString = (result: number|SDK.CPUThrottlingManager.CalibrationError|undefined): string => {
@@ -400,8 +400,8 @@ export class CPUThrottlingCard {
   }
 
   private async runCalibration(): Promise<void> {
-    this.progress.setWorked(0);
-    this.progress.setTotalWork(1);
+    this.progress.worked = 0;
+    this.progress.totalWork = 1;
 
     this.controller = new CalibrationController();
 
@@ -412,7 +412,7 @@ export class CPUThrottlingCard {
       }
 
       for await (const result of this.controller.iterator()) {
-        this.progress.setWorked(result.progress);
+        this.progress.worked = result.progress;
       }
     } catch (e) {
       console.error(e);
@@ -424,7 +424,7 @@ export class CPUThrottlingCard {
     if (result && (result.low || result.mid)) {
       this.setting.set(result);
       // Let the user bask in the glory of a 100% progress bar, for a bit.
-      this.progress.setWorked(1);
+      this.progress.worked = 1;
       await new Promise(resolve => setTimeout(resolve, 200));
     }
 
@@ -433,18 +433,35 @@ export class CPUThrottlingCard {
   }
 }
 
+function extractCustomSettingIndex(key: SDK.NetworkManager.UserDefinedThrottlingConditionKey): number {
+  const match = key.match(/USER_CUSTOM_SETTING_(\d+)/);
+  if (match?.[1]) {
+    return parseInt(match[1], 10);
+  }
+  return 0;
+}
+
 export class ThrottlingSettingsTab extends UI.Widget.VBox implements
     UI.ListWidget.Delegate<SDK.NetworkManager.Conditions> {
   private readonly list: UI.ListWidget.ListWidget<SDK.NetworkManager.Conditions>;
-  private readonly customSetting: Common.Settings.Setting<SDK.NetworkManager.Conditions[]>;
+  private readonly customUserConditions: Common.Settings.Setting<SDK.NetworkManager.Conditions[]>;
   private editor?: UI.ListWidget.Editor<SDK.NetworkManager.Conditions>;
   private cpuThrottlingCard: CPUThrottlingCard;
+  /**
+   * We store how many custom conditions the user has defined when we load up
+   * DevTools. This is because when the user creates a new one, we need to
+   * generate a unique key. We take this value, increment it, and use that as part of the unique key.
+   * This means that we are resilient to the user adding & then deleting a
+   * profile; we always use this counter which is only ever incremented.
+   */
+  #customUserConditionsCount: number;
 
   constructor() {
-    super(true);
+    super({
+      jslog: `${VisualLogging.pane('throttling-conditions')}`,
+      useShadowDom: true,
+    });
     this.registerRequiredCSS(throttlingSettingsTabStyles);
-
-    this.element.setAttribute('jslog', `${VisualLogging.pane('throttling-conditions')}`);
 
     const settingsContent =
         this.contentElement.createChild('div', 'settings-card-container-wrapper').createChild('div');
@@ -473,8 +490,26 @@ export class ThrottlingSettingsTab extends UI.Widget.VBox implements
     this.list.show(container);
     container.appendChild(addButton);
 
-    this.customSetting = Common.Settings.Settings.instance().moduleSetting('custom-network-conditions');
-    this.customSetting.addChangeListener(this.conditionsUpdated, this);
+    this.customUserConditions = SDK.NetworkManager.customUserNetworkConditionsSetting();
+    this.customUserConditions.addChangeListener(this.conditionsUpdated, this);
+
+    const customConditions = this.customUserConditions.get();
+    // We need to parse out the current max condition key index. If the last
+    // one added is USER_CUSTOM_SETTING_9, then we need to set the
+    // customUserConditionsCount property to 9, so that the next item added
+    // gets index 10.
+    // Because we always increment the index and append it to the list, we
+    // know that the last item in the list will have the largest custom key
+    // index, hence why we can just pluck the last item rather than search for
+    // the one with the largest index.
+    const lastCondition = customConditions.at(-1);
+    const key = lastCondition?.key;
+    if (key && SDK.NetworkManager.keyIsCustomUser(key)) {
+      const maxIndex = extractCustomSettingIndex(key);
+      this.#customUserConditionsCount = maxIndex;
+    } else {
+      this.#customUserConditionsCount = 0;
+    }
   }
 
   override wasShown(): void {
@@ -491,7 +526,7 @@ export class ThrottlingSettingsTab extends UI.Widget.VBox implements
   private conditionsUpdated(): void {
     this.list.clear();
 
-    const conditions = this.customSetting.get();
+    const conditions = this.customUserConditions.get();
     for (let i = 0; i < conditions.length; ++i) {
       this.list.appendItem(conditions[i], true);
     }
@@ -500,9 +535,16 @@ export class ThrottlingSettingsTab extends UI.Widget.VBox implements
   }
 
   private addButtonClicked(): void {
-    this.list.addNewItem(
-        this.customSetting.get().length,
-        {title: () => '', download: -1, upload: -1, latency: 0, packetLoss: 0, packetReordering: false});
+    this.#customUserConditionsCount++;
+    this.list.addNewItem(this.customUserConditions.get().length, {
+      key: `USER_CUSTOM_SETTING_${this.#customUserConditionsCount}`,
+      title: () => '',
+      download: -1,
+      upload: -1,
+      latency: 0,
+      packetLoss: 0,
+      packetReordering: false
+    });
   }
 
   renderItem(conditions: SDK.NetworkManager.Conditions, _editable: boolean): Element {
@@ -532,9 +574,9 @@ export class ThrottlingSettingsTab extends UI.Widget.VBox implements
   }
 
   removeItemRequested(_item: SDK.NetworkManager.Conditions, index: number): void {
-    const list = this.customSetting.get();
+    const list = this.customUserConditions.get();
     list.splice(index, 1);
-    this.customSetting.set(list);
+    this.customUserConditions.set(list);
   }
 
   retrieveOptionsTitle(conditions: SDK.NetworkManager.Conditions): string {
@@ -560,12 +602,12 @@ export class ThrottlingSettingsTab extends UI.Widget.VBox implements
     const packetReordering = (editor.control('packetReordering') as HTMLInputElement).checked;
     conditions.packetReordering = packetReordering;
 
-    const list = this.customSetting.get();
+    const list = this.customUserConditions.get();
     if (isNew) {
       list.push(conditions);
     }
 
-    this.customSetting.set(list);
+    this.customUserConditions.set(list);
   }
 
   beginEdit(conditions: SDK.NetworkManager.Conditions): UI.ListWidget.Editor<SDK.NetworkManager.Conditions> {

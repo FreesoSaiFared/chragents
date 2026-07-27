@@ -1,7 +1,6 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-/* eslint-disable rulesdir/inject-checkbox-styles */
 
 import '../../ui/components/node_text/node_text.js';
 
@@ -10,7 +9,6 @@ import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
-import * as Input from '../../ui/components/input/input.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as Lit from '../../ui/lit/lit.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
@@ -19,43 +17,43 @@ import layoutPaneStyles from './layoutPane.css.js';
 
 const UIStrings = {
   /**
-   *@description Title of the input to select the overlay color for an element using the color picker
+   * @description Title of the input to select the overlay color for an element using the color picker
    */
   chooseElementOverlayColor: 'Choose the overlay color for this element',
   /**
-   *@description Title of the show element button in the Layout pane of the Elements panel
+   * @description Title of the show element button in the Layout pane of the Elements panel
    */
   showElementInTheElementsPanel: 'Show element in the Elements panel',
   /**
-   *@description Title of a section on CSS Grid tooling
+   * @description Title of a section on CSS Grid/Masonry tooling
    */
-  grid: 'Grid',
+  gridOrMasonry: 'Grid / Masonry',
   /**
-   *@description Title of a section in the Layout Sidebar pane of the Elements panel
+   * @description Title of a section in the Layout Sidebar pane of the Elements panel
    */
   overlayDisplaySettings: 'Overlay display settings',
   /**
-   *@description Title of a section in Layout sidebar pane
+   * @description Title of a section in Layout sidebar pane
    */
-  gridOverlays: 'Grid overlays',
+  gridOrMasonryOverlays: 'Grid / Masonry overlays',
   /**
-   *@description Message in the Layout panel informing users that no CSS Grid layouts were found on the page
+   * @description Message in the Layout panel informing users that no CSS Grid/Masonry layouts were found on the page
    */
-  noGridLayoutsFoundOnThisPage: 'No grid layouts found on this page',
+  noGridOrMasonryLayoutsFoundOnThisPage: 'No grid or masonry layouts found on this page',
   /**
-   *@description Title of the Flexbox section in the Layout panel
+   * @description Title of the Flexbox section in the Layout panel
    */
   flexbox: 'Flexbox',
   /**
-   *@description Title of a section in the Layout panel
+   * @description Title of a section in the Layout panel
    */
   flexboxOverlays: 'Flexbox overlays',
   /**
-   *@description Text in the Layout panel, when no flexbox elements are found
+   * @description Text in the Layout panel, when no flexbox elements are found
    */
   noFlexboxLayoutsFoundOnThisPage: 'No flexbox layouts found on this page',
   /**
-   *@description Screen reader announcement when opening color picker tool.
+   * @description Screen reader announcement when opening color picker tool.
    */
   colorPickerOpened: 'Color picker opened.',
 } as const;
@@ -204,7 +202,7 @@ interface ViewInput {
   onColorChange(element: LayoutElement, e: Event): unknown;
   onMouseLeave(element: LayoutElement, e: MouseEvent): unknown;
   onMouseEnter(element: LayoutElement, e: MouseEvent): unknown;
-  onElementToggle(element: LayoutElement, e: InputEvent): unknown;
+  onElementToggle(element: LayoutElement, e: Event): unknown;
   onBooleanSettingChange(setting: BooleanSetting, e: Event): unknown;
   enumSettings: EnumSetting[];
   booleanSettings: BooleanSetting[];
@@ -221,7 +219,7 @@ const DEFAULT_VIEW: View = (input, output, target) => {
     const target = event.target as HTMLLabelElement;
     const input = target.querySelector('input') as HTMLInputElement;
     input.click();
-    UI.ARIAUtils.alert(i18nString(UIStrings.colorPickerOpened));
+    UI.ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.colorPickerOpened));
     event.preventDefault();
   };
   const onColorLabelKeyDown = (event: KeyboardEvent): void => {
@@ -233,15 +231,14 @@ const DEFAULT_VIEW: View = (input, output, target) => {
   const renderElement = (element: LayoutElement): Lit.LitTemplate => html`<div
           class="element"
           jslog=${VisualLogging.item()}>
-        <label data-element="true" class="checkbox-label">
-          <input
-            data-input="true"
-            type="checkbox"
-            .checked=${element.enabled}
-            @change=${(e: InputEvent) => input.onElementToggle(element, e)}
-            jslog=${VisualLogging.toggle().track({
+        <devtools-checkbox
+          data-element="true"
+          class="checkbox-label"
+          .checked=${element.enabled}
+          @change=${(e: Event) => input.onElementToggle(element, e)}
+          jslog=${VisualLogging.toggle().track({
     click: true
-  })} />
+  })}>
           <span
               class="node-text-container"
               data-label="true"
@@ -252,7 +249,7 @@ const DEFAULT_VIEW: View = (input, output, target) => {
   }
   }></devtools-node-text>
           </span>
-        </label>
+        </devtools-checkbox>
         <label
             @keyup=${onColorLabelKeyUp}
             @keydown=${onColorLabelKeyDown}
@@ -286,14 +283,13 @@ const DEFAULT_VIEW: View = (input, output, target) => {
   // clang-format off
   render(html`
       <div style="min-width: min-content;" jslog=${VisualLogging.pane('layout').track({resize: true})}>
-        <style>${Input.checkboxStyles}</style>
         <style>${layoutPaneStyles}</style>
-        <style>${UI.inspectorCommonStyles}</style>
+        <style>@scope to (devtools-widget > *) { ${UI.inspectorCommonStyles} }</style>
         <details open>
           <summary class="header"
             @keydown=${input.onSummaryKeyDown}
             jslog=${VisualLogging.sectionHeader('grid-settings').track({click: true})}>
-            ${i18nString(UIStrings.grid)}
+            ${i18nString(UIStrings.gridOrMasonry)}
           </summary>
           <div class="content-section" jslog=${VisualLogging.section('grid-settings')}>
             <h3 class="content-section-title">${i18nString(UIStrings.overlayDisplaySettings)}</h3>
@@ -316,26 +312,23 @@ const DEFAULT_VIEW: View = (input, output, target) => {
             </div>
             <div class="checkbox-settings">
               ${input.booleanSettings.map(setting =>
-                  html`<label
-                          data-boolean-setting="true"
-                          class="checkbox-label"
-                          title=${setting.title}
-                          jslog=${VisualLogging.toggle().track({click: true}).context(setting.name)}>
-                      <input
-                          data-input="true"
-                          type="checkbox"
-                          .checked=${setting.value}
-                          @change=${(e: Event) => input.onBooleanSettingChange(setting, e)} />
-                      <span data-label="true">${setting.title}</span>
-                    </label>`)}
+                  html`<devtools-checkbox
+                      data-boolean-setting="true"
+                      class="checkbox-label"
+                      title=${setting.title}
+                      .checked=${setting.value}
+                      @change=${(e: Event) => input.onBooleanSettingChange(setting, e)}
+                      jslog=${VisualLogging.toggle().track({click: true}).context(setting.name)}>
+                    ${setting.title}
+                  </devtools-checkbox>`)}
             </div>
           </div>
           ${input.gridElements ?
             html`<div class="content-section" jslog=${VisualLogging.section('grid-overlays')}>
               <h3 class="content-section-title">
                 ${input.gridElements.length ?
-                    i18nString(UIStrings.gridOverlays) :
-                    i18nString(UIStrings.noGridLayoutsFoundOnThisPage)}
+                    i18nString(UIStrings.gridOrMasonryOverlays) :
+                    i18nString(UIStrings.noGridOrMasonryLayoutsFoundOnThisPage)}
               </h3>
               ${input.gridElements.length ?
                   html`<div class="elements">${input.gridElements.map(renderElement)}</div>` :
@@ -366,7 +359,7 @@ const DEFAULT_VIEW: View = (input, output, target) => {
         : ''}
       </div>`,
       // clang-format on
-      target, {host: input});
+      target);
 };
 
 type View = (input: ViewInput, output: object, element: HTMLElement) => void;
@@ -377,7 +370,7 @@ export class LayoutPane extends UI.Widget.Widget {
   readonly #view: View;
 
   constructor(element?: HTMLElement, view: View = DEFAULT_VIEW) {
-    super(false, false, element);
+    super(element);
     this.#settings = this.#makeSettings();
     this.#uaShadowDOMSetting = Common.Settings.Settings.instance().moduleSetting('show-ua-shadow-dom');
     this.#domModels = [];
@@ -437,7 +430,10 @@ export class LayoutPane extends UI.Widget.Widget {
   }
 
   async #fetchGridNodes(): Promise<SDK.DOMModel.DOMNode[]> {
-    return await this.#fetchNodesByStyle([{name: 'display', value: 'grid'}, {name: 'display', value: 'inline-grid'}]);
+    return await this.#fetchNodesByStyle([
+      {name: 'display', value: 'grid'}, {name: 'display', value: 'inline-grid'}, {name: 'display', value: 'masonry'},
+      {name: 'display', value: 'inline-masonry'}
+    ]);
   }
 
   async #fetchFlexContainerNodes(): Promise<SDK.DOMModel.DOMNode[]> {
@@ -559,9 +555,9 @@ export class LayoutPane extends UI.Widget.Widget {
     return this.#settings.filter(isBooleanSetting);
   }
 
-  #onBooleanSettingChange(setting: BooleanSetting, event: HTMLInputElementEvent): void {
+  #onBooleanSettingChange(setting: BooleanSetting, event: Event): void {
     event.preventDefault();
-    this.onSettingChanged(setting.name, event.target.checked);
+    this.onSettingChanged(setting.name, (event.target as UI.UIUtils.CheckboxLabel).checked);
   }
 
   #onEnumSettingChange(setting: EnumSetting, event: HTMLInputElementEvent): void {
@@ -569,9 +565,9 @@ export class LayoutPane extends UI.Widget.Widget {
     this.onSettingChanged(setting.name, event.target.value);
   }
 
-  #onElementToggle(element: LayoutElement, event: HTMLInputElementEvent): void {
+  #onElementToggle(element: LayoutElement, event: Event): void {
     event.preventDefault();
-    element.toggle(event.target.checked);
+    element.toggle((event.target as UI.UIUtils.CheckboxLabel).checked);
   }
 
   #onElementClick(element: LayoutElement, event: MouseEvent): void {

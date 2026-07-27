@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,7 +25,7 @@ export default defineConfig([
     // Don't include third party code
     'third_party/',
 
-    'front_end/diff/diff_match_patch.jD',
+    'front_end/diff/diff_match_patch.js',
     'front_end/models/javascript_metadata/NativeFunctions.js',
     // All of these scripts are auto-generated so don't lint them.
     'front_end/generated/ARIAProperties.js',
@@ -93,7 +93,7 @@ export default defineConfig([
         'single',
         {
           avoidEscape: true,
-          allowTemplateLiterals: false,
+          allowTemplateLiterals: 'always',
         },
       ],
 
@@ -122,7 +122,7 @@ export default defineConfig([
 
       curly: 'error',
       '@stylistic/new-parens': 'error',
-      '@stylistic/func-call-spacing': 'error',
+      '@stylistic/function-call-spacing': 'error',
       '@stylistic/arrow-parens': ['error', 'as-needed'],
       '@stylistic/eol-last': 'error',
       'object-shorthand': ['error', 'properties'],
@@ -285,12 +285,33 @@ export default defineConfig([
       'rulesdir/no-commented-out-console': 'error',
       // Prevent imports being commented out rather than deleted.
       'rulesdir/no-commented-out-import': 'error',
-      'rulesdir/check-license-header': 'error',
       /**
-       * Ensures that JS Doc comments are properly aligned - all the starting
-       * `*` are in the right place.
+       * Enforce some consistency and usefulness of JSDoc comments, to make sure
+       * we actually benefit from them.
        */
       'jsdoc/check-alignment': 'error',
+      'jsdoc/check-tag-names': [
+        'error',
+        {
+          definedTags: [
+            'attribute',  // @attribute is used by lit-analyzer (through web-component-analyzer)
+            'meaning',    // @meaning is used by localization
+          ],
+        },
+      ],
+      'jsdoc/empty-tags': 'error',
+      'jsdoc/multiline-blocks': 'error',
+      'jsdoc/no-bad-blocks': 'error',
+      'jsdoc/no-blank-blocks': [
+        'error',
+        {
+          enableFixer: true,
+        },
+      ],
+      'jsdoc/require-asterisk-prefix': 'error',
+      'jsdoc/require-param-name': 'error',
+      'jsdoc/require-hyphen-before-param-description': ['error', 'never'],
+      'jsdoc/sort-tags': 'error',
     },
   },
   {
@@ -565,6 +586,11 @@ export default defineConfig([
       ],
 
       'rulesdir/validate-timing-types': 'error',
+
+      // Disallow redundant (and potentially conflicting) type information
+      // within JSDoc comments.
+      'jsdoc/no-types': 'error',
+      'jsdoc/require-returns-description': 'error',
     },
   },
   {
@@ -635,6 +661,7 @@ export default defineConfig([
         },
       ],
       'rulesdir/enforce-ui-strings-as-const': 'error',
+      'rulesdir/no-new-lit-element-components': 'error',
     },
   },
   {
@@ -664,9 +691,6 @@ export default defineConfig([
     ],
 
     rules: {
-      // errors on it('test') with no body
-      'mocha/no-pending-tests': 'error',
-
       // errors on {describe, it}.only
       'mocha/no-exclusive-tests': 'error',
 
@@ -696,6 +720,7 @@ export default defineConfig([
       'rulesdir/no-assert-deep-strict-equal': 'error',
       'rulesdir/no-assert-equal': 'error',
       'rulesdir/no-assert-equal-boolean-null-undefined': 'error',
+      'rulesdir/no-capture-screenshot': 'error',
       'rulesdir/no-imperative-dom-api': 'off',
       'rulesdir/no-lit-render-outside-of-view': 'off',
       'rulesdir/prefer-assert-instance-of': 'error',
@@ -729,11 +754,6 @@ export default defineConfig([
         {
           name: 'describeWithMockConnection',
           type: 'suite',
-          interfaces: ['BDD', 'TDD'],
-        },
-        {
-          name: 'itScreenshot',
-          type: 'testCase',
           interfaces: ['BDD', 'TDD'],
         },
       ],
@@ -784,7 +804,7 @@ export default defineConfig([
     },
   },
   {
-    name: 'Front end component docs',
+    name: 'Front-end component docs',
     files: ['front_end/ui/components/docs/**/*.ts'],
     rules: {
       // This makes the component doc examples very verbose and doesn't add
@@ -799,17 +819,69 @@ export default defineConfig([
     },
   },
   {
-    name: 'No SDK in models/trace',
+    name: 'Keep models/trace isolated',
     files: ['front_end/models/trace/**/*.ts'],
     ignores: ['front_end/models/trace/**/*.test.ts'],
     rules: {
       'rulesdir/no-imports-in-directory': [
         'error',
         {
-          bannedImportPaths: [{
-            bannedPath: join(import.meta.dirname, 'front_end', 'core', 'sdk', 'sdk.js'),
-            allowTypeImports: true,
-          }],
+          bannedImportPaths: [
+            {
+              bannedPath: join(
+                  import.meta.dirname,
+                  'front_end',
+                  'core',
+                  'sdk',
+                  'sdk.js',
+                  ),
+              allowTypeImports: true,
+            },
+            {
+              bannedPath: join(
+                  import.meta.dirname,
+                  'front_end',
+                  'ui',
+                  'legacy',
+                  'legacy.js',
+                  ),
+              allowTypeImports: false,
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    name: 'No UI in models',
+    files: ['front_end/models/**/*.ts'],
+    ignores: ['front_end/models/**/*.test.ts'],
+    rules: {
+      'rulesdir/no-imports-in-directory': [
+        'error',
+        {
+          bannedImportPaths: [
+            {
+              bannedPath: join(
+                  import.meta.dirname,
+                  'front_end',
+                  'ui',
+                  'legacy',
+                  'legacy.js',
+                  ),
+              allowTypeImports: false,
+            },
+            {
+              bannedPath: join(
+                  import.meta.dirname,
+                  'front_end',
+                  'ui',
+                  'lit',
+                  'lit.js',
+                  ),
+              allowTypeImports: false,
+            },
+          ],
         },
       ],
     },

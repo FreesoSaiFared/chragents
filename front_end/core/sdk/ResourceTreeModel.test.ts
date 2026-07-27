@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,7 +47,7 @@ describeWithMockConnection('ResourceTreeModel', () => {
     const target = createTarget();
     const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
     assert.isEmpty(resourceTreeModel!.frames());
-    setMockConnectionResponseHandler('Storage.getStorageKeyForFrame', () => ({storageKey: testKey}));
+    setMockConnectionResponseHandler('Storage.getStorageKey', () => ({storageKey: testKey}));
     navigate(getMainFrame(target));
     const frames = resourceTreeModel!.frames();
     assert.lengthOf(frames, 1);
@@ -69,7 +69,7 @@ describeWithMockConnection('ResourceTreeModel', () => {
         resolve();
       });
     });
-    setMockConnectionResponseHandler('Storage.getStorageKeyForFrame', () => ({storageKey: testKey}));
+    setMockConnectionResponseHandler('Storage.getStorageKey', () => ({storageKey: testKey}));
     navigate(getMainFrame(target));
     await storageKeyAddedPromise;
     assert.strictEqual(resourceTreeModel?.frames().length, 1);

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -41,6 +41,7 @@ import * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
+import * as Badges from '../../models/badges/badges.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
@@ -59,58 +60,58 @@ import {StylesSidebarPane} from './StylesSidebarPane.js';
 
 const UIStrings = {
   /**
-   *@description Tooltip text that appears when hovering over the largeicon add button in the Styles Sidebar Pane of the Elements panel
+   * @description Tooltip text that appears when hovering over the largeicon add button in the Styles Sidebar Pane of the Elements panel
    */
   insertStyleRuleBelow: 'Insert style rule below',
   /**
-   *@description Text in Styles Sidebar Pane of the Elements panel
+   * @description Text in Styles Sidebar Pane of the Elements panel
    */
   constructedStylesheet: 'constructed stylesheet',
   /**
-   *@description Text in Styles Sidebar Pane of the Elements panel
+   * @description Text in Styles Sidebar Pane of the Elements panel
    */
   userAgentStylesheet: 'user agent stylesheet',
   /**
-   *@description Text in Styles Sidebar Pane of the Elements panel
+   * @description Text in Styles Sidebar Pane of the Elements panel
    */
   injectedStylesheet: 'injected stylesheet',
   /**
-   *@description Text in Styles Sidebar Pane of the Elements panel
+   * @description Text in Styles Sidebar Pane of the Elements panel
    */
   viaInspector: 'via inspector',
   /**
-   *@description Text in Styles Sidebar Pane of the Elements panel
+   * @description Text in Styles Sidebar Pane of the Elements panel
    */
   styleAttribute: '`style` attribute',
   /**
-   *@description Text in Styles Sidebar Pane of the Elements panel
-   *@example {html} PH1
+   * @description Text in Styles Sidebar Pane of the Elements panel
+   * @example {html} PH1
    */
   sattributesStyle: '{PH1}[Attributes Style]',
   /**
-   *@description Show all button text content in Styles Sidebar Pane of the Elements panel
-   *@example {3} PH1
+   * @description Show all button text content in Styles Sidebar Pane of the Elements panel
+   * @example {3} PH1
    */
   showAllPropertiesSMore: 'Show all properties ({PH1} more)',
   /**
-   *@description Text in Elements Tree Element of the Elements panel, copy should be used as a verb
+   * @description Text in Elements Tree Element of the Elements panel, copy should be used as a verb
    */
   copySelector: 'Copy `selector`',
   /**
-   *@description A context menu item in Styles panel to copy CSS rule
+   * @description A context menu item in Styles panel to copy CSS rule
    */
   copyRule: 'Copy rule',
   /**
-   *@description A context menu item in Styles panel to copy all CSS declarations
+   * @description A context menu item in Styles panel to copy all CSS declarations
    */
   copyAllDeclarations: 'Copy all declarations',
   /**
-   *@description Text that is announced by the screen reader when the user focuses on an input field for editing the name of a CSS selector in the Styles panel
+   * @description Text that is announced by the screen reader when the user focuses on an input field for editing the name of a CSS selector in the Styles panel
    */
   cssSelector: '`CSS` selector',
   /**
-   *@description Text displayed in tooltip that shows specificity information.
-   *@example {(0,0,1)} PH1
+   * @description Text displayed in tooltip that shows specificity information.
+   * @example {(0,0,1)} PH1
    */
   specificity: 'Specificity: {PH1}',
 } as const;
@@ -147,7 +148,7 @@ export class StylePropertiesSection {
   navigable: boolean|null|undefined;
   protected readonly selectorRefElement: HTMLElement;
   private hoverableSelectorsMode: boolean;
-  private isHiddenInternal: boolean;
+  #isHidden: boolean;
   protected customPopulateCallback: () => void;
 
   nestingLevel = 0;
@@ -296,9 +297,8 @@ export class StylePropertiesSection {
       if (rule.isUserAgent() || rule.isInjected()) {
         this.editable = false;
         // Check this is a real CSSRule, not a bogus object coming from BlankStylePropertiesSection.
-      } else if (rule.styleSheetId) {
-        const header = rule.cssModel().styleSheetHeaderForId(rule.styleSheetId);
-        this.navigable = header && !header.isAnonymousInlineStyleSheet();
+      } else if (rule.header) {
+        this.navigable = !rule.header.isAnonymousInlineStyleSheet();
       }
     }
 
@@ -317,7 +317,7 @@ export class StylePropertiesSection {
       this.propertiesTreeOutline.element.classList.add('read-only');
     }
     this.hoverableSelectorsMode = false;
-    this.isHiddenInternal = false;
+    this.#isHidden = false;
     this.markSelectorMatches();
     this.onpopulate();
   }
@@ -385,17 +385,17 @@ export class StylePropertiesSection {
 
     const ruleLocation = StylePropertiesSection.getRuleLocationFromCSSRule(rule);
 
-    const header = rule.styleSheetId ? matchedStyles.cssModel().styleSheetHeaderForId(rule.styleSheetId) : null;
+    const header = rule.header;
 
     function linkifyRuleLocation(): Node|null {
       if (!rule) {
         return null;
       }
-      if (ruleLocation && rule.styleSheetId && header &&
+      if (ruleLocation && header &&
           (!header.isAnonymousInlineStyleSheet() ||
            matchedStyles.cssModel().sourceMapManager().sourceMapForClient(header))) {
         return StylePropertiesSection.linkifyRuleLocation(
-            matchedStyles.cssModel(), linkifier, rule.styleSheetId, ruleLocation);
+            matchedStyles.cssModel(), linkifier, rule.header, ruleLocation);
       }
       return null;
     }
@@ -469,27 +469,25 @@ export class StylePropertiesSection {
     }
 
     const ruleLocation = this.getRuleLocationFromCSSRule(rule);
-    const header = rule.styleSheetId ? matchedStyles.cssModel().styleSheetHeaderForId(rule.styleSheetId) : null;
+    const header = rule.header;
 
-    if (ruleLocation && rule.styleSheetId && header && !header.isAnonymousInlineStyleSheet()) {
-      const matchingSelectorLocation =
-          this.getCSSSelectorLocation(matchedStyles.cssModel(), rule.styleSheetId, ruleLocation);
+    if (ruleLocation && header && !header.isAnonymousInlineStyleSheet()) {
+      const matchingSelectorLocation = this.getCSSSelectorLocation(matchedStyles.cssModel(), rule.header, ruleLocation);
       this.revealSelectorSource(matchingSelectorLocation, true);
     }
   }
 
   protected static linkifyRuleLocation(
       cssModel: SDK.CSSModel.CSSModel, linkifier: Components.Linkifier.Linkifier,
-      styleSheetId: Protocol.CSS.StyleSheetId, ruleLocation: TextUtils.TextRange.TextRange): Node {
-    const matchingSelectorLocation = this.getCSSSelectorLocation(cssModel, styleSheetId, ruleLocation);
+      styleSheetHeader: SDK.CSSStyleSheetHeader.CSSStyleSheetHeader,
+      ruleLocation: TextUtils.TextRange.TextRange): Node {
+    const matchingSelectorLocation = this.getCSSSelectorLocation(cssModel, styleSheetHeader, ruleLocation);
     return linkifier.linkifyCSSLocation(matchingSelectorLocation);
   }
 
   private static getCSSSelectorLocation(
-      cssModel: SDK.CSSModel.CSSModel, styleSheetId: Protocol.CSS.StyleSheetId,
+      cssModel: SDK.CSSModel.CSSModel, styleSheetHeader: SDK.CSSStyleSheetHeader.CSSStyleSheetHeader,
       ruleLocation: TextUtils.TextRange.TextRange): SDK.CSSModel.CSSLocation {
-    const styleSheetHeader =
-        (cssModel.styleSheetHeaderForId(styleSheetId) as SDK.CSSStyleSheetHeader.CSSStyleSheetHeader);
     const lineNumber = styleSheetHeader.lineNumberInSource(ruleLocation.startLine);
     const columnNumber = styleSheetHeader.columnNumberInSource(ruleLocation.startLine, ruleLocation.startColumn);
     return new SDK.CSSModel.CSSLocation(styleSheetHeader, lineNumber, columnNumber);
@@ -546,8 +544,8 @@ export class StylePropertiesSection {
     }
   }
 
-  private onKeyDown(event: Event): void {
-    const keyboardEvent = (event as KeyboardEvent);
+  private onKeyDown(event: KeyboardEvent): void {
+    const keyboardEvent = event;
     if (UI.UIUtils.isEditing() || !this.editable || keyboardEvent.altKey || keyboardEvent.ctrlKey ||
         keyboardEvent.metaKey) {
       return;
@@ -753,12 +751,12 @@ export class StylePropertiesSection {
   private onNewRuleClick(event: Common.EventTarget.EventTargetEvent<Event>): void {
     event.data.consume();
     const rule = this.styleInternal.parentRule;
-    if (!rule?.style.range || rule.styleSheetId === undefined) {
+    if (!rule?.style.range || !rule.header) {
       return;
     }
     const range =
         TextUtils.TextRange.TextRange.createFromLocation(rule.style.range.endLine, rule.style.range.endColumn + 1);
-    this.parentPane.addBlankSection(this, rule.styleSheetId, range);
+    this.parentPane.addBlankSection(this, rule.header, range);
   }
 
   styleSheetEdited(edit: SDK.CSSModel.Edit): void {
@@ -797,6 +795,11 @@ export class StylePropertiesSection {
           break;
         case Protocol.CSS.CSSRuleType.StyleRule:
           ancestorRuleElement = this.createNestingElement(rule.nestingSelectors?.[nestingIndex++]);
+          break;
+        case Protocol.CSS.CSSRuleType.StartingStyleRule:
+          if (Root.Runtime.hostConfig.devToolsStartingStyleDebugging?.enabled) {
+            ancestorRuleElement = this.createStartingStyleElement();
+          }
           break;
       }
       if (ancestorRuleElement) {
@@ -919,6 +922,17 @@ export class StylePropertiesSection {
     return scopeElement;
   }
 
+  protected createStartingStyleElement(/* startingStyle: SDK.CSSStartingStyle.CSSStartingStyle*/):
+      ElementsComponents.CSSQuery.CSSQuery|undefined {
+    const startingStyleElement = new ElementsComponents.CSSQuery.CSSQuery();
+    startingStyleElement.data = {
+      queryPrefix: '@starting-style',
+      queryText: '',
+      jslogContext: 'starting-style',
+    };
+    return startingStyleElement;
+  }
+
   protected createSupportsElement(supports: SDK.CSSSupports.CSSSupports): ElementsComponents.CSSQuery.CSSQuery
       |undefined {
     if (!supports.text) {
@@ -961,7 +975,8 @@ export class StylePropertiesSection {
       queryName: containerQuery.name,
       onContainerLinkClick: event => {
         event.preventDefault();
-        void ElementsPanel.instance().revealAndSelectNode(container.containerNode, true, true);
+        void ElementsPanel.instance().revealAndSelectNode(
+            container.containerNode, {showPanel: true, focusNode: true, highlightInOverlay: false});
         void container.containerNode.scrollIntoView();
       },
     };
@@ -1133,7 +1148,7 @@ export class StylePropertiesSection {
 
     const regex = this.parentPane.filterRegex();
     const hideRule = !hasMatchingChild && regex !== null && !regex.test(this.element.deepTextContent());
-    this.isHiddenInternal = hideRule;
+    this.#isHidden = hideRule;
     this.element.classList.toggle('hidden', hideRule);
     if (!hideRule && this.styleInternal.parentRule) {
       this.markSelectorHighlights();
@@ -1142,7 +1157,7 @@ export class StylePropertiesSection {
   }
 
   isHidden(): boolean {
-    return this.isHiddenInternal;
+    return this.#isHidden;
   }
 
   markSelectorMatches(): void {
@@ -1184,12 +1199,11 @@ export class StylePropertiesSection {
       elementToSelectorIndex.set(span, i);
       span.textContent = selectors[i].text;
       if (specificityTooltipId && selector.specificity) {
-        span.setAttribute('aria-details', specificityTooltipId);
+        span.setAttribute('aria-describedby', specificityTooltipId);
         const PH1 = `(${selector.specificity.a},${selector.specificity.b},${selector.specificity.c})`;
         const tooltip = this.#specificityTooltips.appendChild(new Tooltips.Tooltip.Tooltip({
           id: specificityTooltipId,
           anchor: span,
-          variant: 'rich',
           jslogContext: 'elements.css-selector-specificity',
         }));
         tooltip.textContent = i18nString(UIStrings.specificity, {PH1});
@@ -1369,12 +1383,12 @@ export class StylePropertiesSection {
   private editingMediaTextCommittedForTest(): void {
   }
 
-  private handleSelectorClick(event: Event): void {
+  private handleSelectorClick(event: MouseEvent): void {
     const target = (event.target as Element | null);
     if (!target) {
       return;
     }
-    if (UI.KeyboardShortcut.KeyboardShortcut.eventHasCtrlEquivalentKey((event as MouseEvent)) && this.navigable &&
+    if (UI.KeyboardShortcut.KeyboardShortcut.eventHasCtrlEquivalentKey(event) && this.navigable &&
         target.classList.contains('simple-selector')) {
       const selectorIndex = this.elementToSelectorIndex.get(target);
       if (selectorIndex) {
@@ -1421,10 +1435,10 @@ export class StylePropertiesSection {
       return;
     }
     const rule = (this.styleInternal.parentRule as SDK.CSSRule.CSSStyleRule | null);
-    if (rule?.styleSheetId === undefined) {
+    if (!rule?.header) {
       return;
     }
-    const header = cssModel.styleSheetHeaderForId(rule.styleSheetId);
+    const header = cssModel.styleSheetHeaderForId(rule.header.id);
     if (!header) {
       return;
     }
@@ -1549,6 +1563,8 @@ export class StylePropertiesSection {
       if (!success) {
         return Promise.resolve();
       }
+
+      Badges.UserBadges.instance().recordAction(Badges.BadgeAction.CSS_RULE_MODIFIED);
       return this.matchedStyles.recomputeMatchingSelectors(rule).then(updateSourceRanges.bind(this, rule));
     }
 
@@ -1609,21 +1625,21 @@ export class StylePropertiesSection {
 export class BlankStylePropertiesSection extends StylePropertiesSection {
   private normal: boolean;
   private readonly ruleLocation: TextUtils.TextRange.TextRange;
-  private readonly styleSheetId: Protocol.CSS.StyleSheetId;
+  private readonly styleSheetHeader;
 
   constructor(
       stylesPane: StylesSidebarPane, matchedStyles: SDK.CSSMatchedStyles.CSSMatchedStyles, defaultSelectorText: string,
-      styleSheetId: Protocol.CSS.StyleSheetId, ruleLocation: TextUtils.TextRange.TextRange,
+      styleSheetHeader: SDK.CSSStyleSheetHeader.CSSStyleSheetHeader, ruleLocation: TextUtils.TextRange.TextRange,
       insertAfterStyle: SDK.CSSStyleDeclaration.CSSStyleDeclaration, sectionIdx: number) {
     const cssModel = (stylesPane.cssModel() as SDK.CSSModel.CSSModel);
     const rule = SDK.CSSRule.CSSStyleRule.createDummyRule(cssModel, defaultSelectorText);
     super(stylesPane, matchedStyles, rule.style, sectionIdx, null, null);
     this.normal = false;
     this.ruleLocation = ruleLocation;
-    this.styleSheetId = styleSheetId;
+    this.styleSheetHeader = styleSheetHeader;
     this.selectorRefElement.removeChildren();
     this.selectorRefElement.appendChild(StylePropertiesSection.linkifyRuleLocation(
-        cssModel, this.parentPane.linkifier, styleSheetId, this.actualRuleLocation()));
+        cssModel, this.parentPane.linkifier, styleSheetHeader, this.actualRuleLocation()));
     if (insertAfterStyle?.parentRule && insertAfterStyle.parentRule instanceof SDK.CSSRule.CSSStyleRule) {
       this.createAncestorRules(insertAfterStyle.parentRule);
     }
@@ -1693,7 +1709,7 @@ export class BlankStylePropertiesSection extends StylePropertiesSection {
     const cssModel = this.parentPane.cssModel();
     const ruleText = this.rulePrefix() + newContent + ' {}';
     if (cssModel) {
-      void cssModel.addRule(this.styleSheetId, ruleText, this.ruleLocation).then(onRuleAdded.bind(this));
+      void cssModel.addRule(this.styleSheetHeader.id, ruleText, this.ruleLocation).then(onRuleAdded.bind(this));
     }
   }
 

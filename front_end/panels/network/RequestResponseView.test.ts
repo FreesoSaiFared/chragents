@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -91,4 +91,62 @@ describeWithEnvironment('RequestResponseView', () => {
     component.detach();
   });
 
+  it('forwards calls to reveal position to the SearchableContainer', async () => {
+    const request = SDK.NetworkRequest.NetworkRequest.create(
+        'requestId' as Protocol.Network.RequestId, urlString`http://devtools-frontend.test/module.wasm`, urlString``,
+        null, null, null);
+    request.setContentDataProvider(
+        () => Promise.resolve(new TextUtils.ContentData.ContentData(
+            'AGFzbQEAAAABBQFgAAF/AwIBAAcHAQNiYXIAAAoGAQQAQQILACQEbmFtZQAQD3Nob3ctd2FzbS0yLndhdAEGAQADYmFyAgMBAAA=',
+            true, 'application/wasm')));
+    request.mimeType = 'application/wasm';
+    request.finished = true;
+
+    // This is required, as it otherwise tries to create and wait for a worker to fetch and disassemble wasm
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    sinon.stub(SourceFrame.ResourceSourceFrame.ResourceSourceFrame.prototype as any, 'setContentDataOrError')
+        .callsFake(() => {});
+    const component = new Network.RequestResponseView.RequestResponseView(request);
+    assert.deepEqual(component.getMimeTypeForDisplay(), 'application/wasm');
+    renderElementIntoDOM(component);
+
+    await component.updateComplete;
+
+    const widget = component.contentElement.querySelector('devtools-widget') as
+            UI.Widget.WidgetElement<SourceFrame.ResourceSourceFrame.SearchableContainer>|
+        null;
+    const searchableContainer = widget?.getWidget();
+    assert.instanceOf(searchableContainer, SourceFrame.ResourceSourceFrame.SearchableContainer);
+    const searchableSpy = sinon.spy(searchableContainer, 'revealPosition');
+    try {
+      await component.revealPosition(0);
+      sinon.assert.calledOnce(searchableSpy);
+    } catch {
+      assert.fail('Revealing a position should not throw.');
+    }
+
+    component.detach();
+  });
+
+  it('shows no response data if the request failed', async () => {
+    const request = SDK.NetworkRequest.NetworkRequest.create(
+        'requestId' as Protocol.Network.RequestId, urlString`http://devtools-frontend.test/module.wasm`, urlString``,
+        null, null, null);
+    request.setContentDataProvider(
+        () => Promise.resolve(new TextUtils.ContentData.ContentData(
+            'AGFzbQEAAAABBQFgAAF/AwIBAAcHAQNiYXIAAAoGAQQAQQILACQEbmFtZQAQD3Nob3ctd2FzbS0yLndhdAEGAQADYmFyAgMBAAA=',
+            true, 'application/wasm')));
+    request.mimeType = 'application/wasm';
+    request.finished = true;
+    request.failed = true;
+
+    const component = new Network.RequestResponseView.RequestResponseView(request);
+    assert.deepEqual(component.getMimeTypeForDisplay(), 'application/wasm');
+    renderElementIntoDOM(component);
+
+    await component.updateComplete;
+    assert.strictEqual(
+        component.contentElement.querySelector<HTMLElement>('devtools-widget')?.innerText,
+        'Nothing to preview\nThis request has no response data available');
+  });
 });

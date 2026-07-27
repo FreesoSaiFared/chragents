@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -26,6 +26,7 @@ devtools_module("sdk") {
     "CSSQuery.ts",
     "CSSRule.ts",
     "CSSScope.ts",
+    "CSSStartingStyle.ts",
     "CSSStyleDeclaration.ts",
     "CSSStyleSheetHeader.ts",
     "CSSSupports.ts",
@@ -70,6 +71,7 @@ devtools_module("sdk") {
     "ResourceTreeModel.ts",
     "RuntimeModel.ts",
     "SDKModel.ts",
+    "ScopeTreeCache.ts",
     "ScreenCaptureModel.ts",
     "Script.ts",
     "SecurityOriginManager.ts",
@@ -79,10 +81,10 @@ devtools_module("sdk") {
     "ServiceWorkerCacheModel.ts",
     "ServiceWorkerManager.ts",
     "SourceMap.ts",
+    "SourceMapCache.ts",
     "SourceMapFunctionRanges.ts",
     "SourceMapManager.ts",
     "SourceMapScopeChainEntry.ts",
-    "SourceMapScopes.ts",
     "SourceMapScopesInfo.ts",
     "StorageBucketsModel.ts",
     "StorageKeyManager.ts",
@@ -102,7 +104,9 @@ devtools_module("sdk") {
     "../../generated",
     "../../generated:protocol",
     "../../models/cpu_profile:bundle",
+    "../../models/formatter:bundle",
     "../../models/text_utils:bundle",
+    "../../third_party/source-map-scopes-codec:bundle",
   ]
 }
 
@@ -166,6 +170,7 @@ ts_library("unittests") {
     "RemoteObject.test.ts",
     "ResourceTreeModel.test.ts",
     "RuntimeModel.test.ts",
+    "ScopeTreeCache.test.ts",
     "ScreenCaptureModel.test.ts",
     "Script.test.ts",
     "ServerSentEventsProtocol.test.ts",
@@ -173,10 +178,10 @@ ts_library("unittests") {
     "ServiceWorkerCacheModel.test.ts",
     "ServiceWorkerManager.test.ts",
     "SourceMap.test.ts",
+    "SourceMapCache.test.ts",
     "SourceMapFunctionRanges.test.ts",
     "SourceMapManager.test.ts",
     "SourceMapScopeChainEntry.test.ts",
-    "SourceMapScopes.test.ts",
     "SourceMapScopesInfo.test.ts",
     "StorageBucketsModel.test.ts",
     "StorageKeyManager.test.ts",
@@ -189,6 +194,7 @@ ts_library("unittests") {
     ":bundle",
     "../../generated:protocol",
     "../../models/bindings:bundle",
+    "../../models/formatter:bundle",
     "../../models/persistence:bundle",
     "../../models/text_utils:bundle",
     "../../models/trace:bundle",

@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,8 +52,8 @@ export function commandLineArgs<T = Record<string, unknown>>(yargs: Yargs.Argv<T
       })
       .option('headless', {
         type: 'boolean',
-        default: false,
-        desc: 'Run tests headless even when in debug mode',
+        default: undefined,
+        desc: 'Whether to run tests headless. If unspecified, the default depends on the `debug` option',
       })
       .option('coverage', {
         type: 'boolean',
@@ -103,5 +103,31 @@ export function commandLineArgs<T = Record<string, unknown>>(yargs: Yargs.Argv<T
         type: 'boolean',
         default: false,
         desc: 'Invert the grep/fgrep result',
+      })
+      .option('cpu-throttle', {
+        type: 'number',
+        default: 1,
+        desc: 'Throttle the CPU during tests. The number provided is the multiplier used.',
+      })
+      .option('shard-count', {
+        type: 'number',
+        desc: 'Total number of shards to split the tests into.',
+        implies: 'shard-number',
+        default: 1,
+      })
+      .option('shard-number', {
+        type: 'number',
+        desc: 'The shard number to run (1-based).',
+        implies: 'shard-count',
+        default: 1,
+      })
+      .option('shard-bias', {
+        type: 'number',
+        desc: 'The bias to be used when calculating the sharding ' +
+            'hash. Biases the distribution of tests between different ' +
+            'shards for a given shard count. This is useful for ' +
+            're-sharding without changing the shard count.',
+        implies: ['shard-count', 'shard-number'],  // shard-bias only makes sense if sharding is enabled
+        default: 0,
       });
 }

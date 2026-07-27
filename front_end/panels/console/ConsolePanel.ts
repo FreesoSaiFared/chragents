@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -94,9 +94,8 @@ export class WrapperView extends UI.Widget.VBox {
   private readonly view: ConsoleView;
 
   private constructor() {
-    super();
+    super({jslog: `${VisualLogging.panel('console').track({resize: true})}`});
     this.view = ConsoleView.instance();
-    this.element.setAttribute('jslog', `${VisualLogging.panel('console').track({resize: true})}`);
   }
 
   static instance(): WrapperView {

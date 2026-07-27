@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -116,16 +116,6 @@ new RuleTester().run('check-test-definitions', rule, {
       describe('e2e-test', async () => {
         // Explaining comment
         it.skip(\`normal test \${withVariable}\`, async () => {
-        });
-      });
-      `,
-      filename: 'test/e2e/folder/file.ts',
-      errors: [{messageId: 'missingBugId'}],
-    },
-    {
-      code: `describe('e2e-test', async () => {
-        // Explaining comment
-        itScreenshot.skip(\`normal test \${withVariable}\`, async () => {
         });
       });
       `,

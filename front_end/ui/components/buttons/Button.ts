@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -63,6 +63,10 @@ interface ButtonState {
   jslogContext?: string;
   longClickable?: boolean;
   inverseColorTheme?: boolean;
+  /**
+   * Sets aria-label on the internal <button> element.
+   */
+  accessibleLabel?: string;
 }
 
 interface CommonButtonData {
@@ -84,6 +88,10 @@ interface CommonButtonData {
   jslogContext?: string;
   longClickable?: boolean;
   inverseColorTheme?: boolean;
+  /**
+   * Sets aria-label on the internal <button> element.
+   */
+  accessibleLabel?: string;
 }
 
 export type ButtonData = CommonButtonData&(|{
@@ -143,6 +151,9 @@ export class Button extends HTMLElement {
     if ('size' in data && data.size) {
       this.#props.size = data.size;
     }
+    if (data.accessibleLabel) {
+      this.#props.accessibleLabel = data.accessibleLabel;
+    }
 
     this.#props.active = Boolean(data.active);
     this.#props.spinner = Boolean('spinner' in data ? data.spinner : false);
@@ -184,6 +195,11 @@ export class Button extends HTMLElement {
 
   set size(size: Size) {
     this.#props.size = size;
+    this.#render();
+  }
+
+  set accessibleLabel(label: string) {
+    this.#props.accessibleLabel = label;
     this.#render();
   }
 
@@ -354,16 +370,17 @@ export class Button extends HTMLElement {
       html`
         <style>${buttonStyles}</style>
         <button title=${ifDefined(this.#props.title)}
-                .disabled=${this.#props.disabled}
+                ?disabled=${this.#props.disabled}
                 class=${classMap(classes)}
                 aria-pressed=${ifDefined(this.#props.toggled)}
+                aria-label=${ifDefined(this.#props.accessibleLabel)}
                 jslog=${ifDefined(jslog)}>
           ${hasIcon ? html`
             <devtools-icon name=${ifDefined(this.#props.toggled ? this.#props.toggledIconName : this.#props.iconName)}>
             </devtools-icon>`
             : ''}
           ${this.#props.longClickable ? html`
-              <devtools-icon name=${'triangle-bottom-right'} class="long-click">
+              <devtools-icon name="triangle-bottom-right" class="long-click">
               </devtools-icon>`
             : ''}
           ${this.#props.spinner ? html`<span class=${classMap(spinnerClasses)}></span>` : ''}

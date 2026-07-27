@@ -2,9 +2,34 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as SDK from '../../../core/sdk/sdk.js';
-import { AgentService } from '../core/AgentService.js';
 import { createLogger } from '../core/Logger.js';
+
+// Detect if we're in a Node.js environment (eval runner, tests)
+const isNodeEnvironment = typeof window === 'undefined' || typeof document === 'undefined';
+
+// Lazy-loaded browser-only dependencies
+let SDK: typeof import('../../../core/sdk/sdk.js') | null = null;
+let AgentService: typeof import('../core/AgentService.js').AgentService | null = null;
+let browserDepsLoaded = false;
+
+async function ensureBrowserDeps(): Promise<boolean> {
+  if (isNodeEnvironment) return false;
+  if (browserDepsLoaded) {
+    return SDK !== null;
+  }
+  try {
+    const [sdkModule, agentServiceModule] = await Promise.all([
+      import('../../../core/sdk/sdk.js'),
+      import('../core/AgentService.js'),
+    ]);
+    SDK = sdkModule;
+    AgentService = agentServiceModule.AgentService;
+    browserDepsLoaded = true;  // Only set after successful import
+  } catch {
+    return false;
+  }
+  return SDK !== null;
+}
 
 import {
   HTMLToMarkdownTool,
@@ -13,7 +38,7 @@ import {
   SchemaBasedExtractorTool, type SchemaDefinition
 } from './SchemaBasedExtractorTool.js';
 import {
-  NavigateURLTool, type Tool, type ErrorResult
+  NavigateURLTool, type Tool, type ErrorResult, type LLMContext
 } from './Tools.js';
 
 const logger = createLogger('Tool:CombinedExtraction');
@@ -51,33 +76,6 @@ export class CombinedExtractionTool implements Tool<CombinedExtractionArgs, Comb
   name = 'navigate_url_and_extraction';
   description = 'Navigates to a URL and optionally extracts structured data based on a schema and/or converts the page content to Markdown.';
 
-  private async createToolTracingObservation(toolName: string, args: any): Promise<void> {
-    try {
-      const { getCurrentTracingContext, createTracingProvider } = await import('../tracing/TracingConfig.js');
-      const context = getCurrentTracingContext();
-      if (context) {
-        const tracingProvider = createTracingProvider();
-        await tracingProvider.createObservation({
-          id: `event-tool-execute-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          name: `Tool Execute: ${toolName}`,
-          type: 'event',
-          startTime: new Date(),
-          input: { 
-            toolName, 
-            toolArgs: args,
-            contextInfo: `Direct tool execution in ${toolName}`
-          },
-          metadata: {
-            executionPath: 'direct-tool',
-            toolName
-          }
-        }, context.traceId);
-      }
-    } catch (tracingError) {
-      // Don't fail tool execution due to tracing errors
-      console.error(`[TRACING ERROR in ${toolName}]`, tracingError);
-    }
-  }
 
   schema = {
     type: 'object',
@@ -105,14 +103,23 @@ export class CombinedExtractionTool implements Tool<CombinedExtractionArgs, Comb
   /**
    * Execute the combined extraction
    */
-  async execute(args: CombinedExtractionArgs): Promise<CombinedExtractionResult | ErrorResult> {
-    await this.createToolTracingObservation(this.name, args);
+  async execute(args: CombinedExtractionArgs, ctx?: LLMContext): Promise<CombinedExtractionResult | ErrorResult> {
     logger.info('Executing with args', { args });
     const { url, schema, markdownResponse, reasoning, extractionInstruction } = args;
-    const agentService = AgentService.getInstance();
-    const apiKey = agentService.getApiKey();
 
-    if (!apiKey) {
+    // Get API key from context first, fallback to AgentService in browser
+    let apiKey = ctx?.apiKey;
+    if (!apiKey && !isNodeEnvironment && AgentService) {
+      apiKey = AgentService.getInstance().getApiKey() ?? undefined;
+    }
+
+    // Get provider from context
+    const provider = ctx?.provider;
+
+    // LiteLLM and BrowserOperator have optional API keys
+    const requiresApiKey = provider !== 'litellm' && provider !== 'browseroperator';
+
+    if (requiresApiKey && !apiKey) {
       return {
         success: false,
         url,
@@ -124,7 +131,7 @@ export class CombinedExtractionTool implements Tool<CombinedExtractionArgs, Comb
       // STEP 1: Navigate to the URL using NavigateURLTool
       logger.info('Navigating to URL', { url });
       const navigateUrlTool = new NavigateURLTool();
-      const navigationResult = await navigateUrlTool.execute({ url, reasoning });
+      const navigationResult = await navigateUrlTool.execute({ url, reasoning }, ctx);
 
       // Check if we got an error result
       if ('error' in navigationResult) {
@@ -136,13 +143,8 @@ export class CombinedExtractionTool implements Tool<CombinedExtractionArgs, Comb
       }
 
       // At this point, navigationResult is definitely NavigationResult
-      if (!navigationResult.success) {
-        return {
-          success: false,
-          url,
-          error: `Navigation failed: ${navigationResult.message}`
-        };
-      }
+      // Navigation is considered successful if there's no error field
+      // (NavigationResult doesn't have an error field, only ErrorResult does)
 
       // Basic result with navigation info
       const result: CombinedExtractionResult = {
@@ -152,6 +154,13 @@ export class CombinedExtractionTool implements Tool<CombinedExtractionArgs, Comb
       };
 
       // STEP 2: Wait for target availability
+      if (!(await ensureBrowserDeps()) || !SDK) {
+        return {
+          success: false,
+          url,
+          error: 'SDK not available (Node.js environment)'
+        };
+      }
       const target = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
       if (!target) {
         return {
@@ -169,7 +178,7 @@ export class CombinedExtractionTool implements Tool<CombinedExtractionArgs, Comb
         const schemaResult = await schemaExtractorTool.execute({
           schema,
           instruction: extractionInstruction
-        });
+        }, ctx);
 
         if (!schemaResult.success) {
           // Don't fail the entire operation, just add the error to the result
@@ -186,7 +195,7 @@ export class CombinedExtractionTool implements Tool<CombinedExtractionArgs, Comb
         const markdownResult = await htmlToMarkdownTool.execute({
           instruction: extractionInstruction,
           reasoning: reasoning || 'Converting page content to markdown for readability',
-        });
+        }, ctx);
 
         if (!markdownResult.success) {
           // Don't fail the entire operation if we already have schema data

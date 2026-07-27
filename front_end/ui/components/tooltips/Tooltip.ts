@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -19,6 +19,13 @@ interface ProposedRect {
 interface PositioningParams {
   anchorRect: DOMRect;
   currentPopoverRect: DOMRect;
+}
+
+enum PositionOption {
+  BOTTOM_SPAN_RIGHT = 'bottom-span-right',
+  BOTTOM_SPAN_LEFT = 'bottom-span-left',
+  TOP_SPAN_RIGHT = 'top-span-right',
+  TOP_SPAN_LEFT = 'top-span-left',
 }
 
 const positioningUtils = {
@@ -93,36 +100,50 @@ const positioningUtils = {
   }
 };
 
-const proposedRectForRichTooltip =
-    ({inspectorViewRect, anchorRect, currentPopoverRect}:
-         {inspectorViewRect: DOMRect, anchorRect: DOMRect, currentPopoverRect: DOMRect}): ProposedRect => {
-      // Tries the default positioning of bottom right, bottom left, top right and top left.
-      // If they don't work out, we default back to showing in bottom right and adjust its insets so that the popover is inside the inspector view bounds.
-      let proposedRect = positioningUtils.bottomSpanRight({anchorRect, currentPopoverRect});
-      if (positioningUtils.isInBounds({inspectorViewRect, currentPopoverRect, proposedRect})) {
-        return proposedRect;
-      }
+const proposedRectForRichTooltip = ({inspectorViewRect, anchorRect, currentPopoverRect, preferredPositions}: {
+  inspectorViewRect: DOMRect,
+  anchorRect: DOMRect,
+  currentPopoverRect: DOMRect,
+  preferredPositions: PositionOption[],
+}): ProposedRect => {
+  // The default positioning order is `BOTTOM_SPAN_RIGHT`, `BOTTOM_SPAN_LEFT`, `TOP_SPAN_RIGHT`
+  // and `TOP_SPAN_LEFT`. If `preferredPositions` are given, those are tried first, before
+  // continuing with the remaining options in default order. Duplicate entries are removed.
+  const uniqueOrder = [
+    ...new Set([
+      ...preferredPositions,
+      ...Object.values(PositionOption),
+    ]),
+  ];
 
-      proposedRect = positioningUtils.bottomSpanLeft({anchorRect, currentPopoverRect});
-      if (positioningUtils.isInBounds({inspectorViewRect, currentPopoverRect, proposedRect})) {
-        return proposedRect;
-      }
+  // Tries the positioning options in the order given by `uniqueOrder`.
+  // If none of them work out, we default to showing the tooltip in the bottom right and adjust
+  // its insets so that the tooltip is inside the inspector view bounds.
+  for (const positionOption of uniqueOrder) {
+    let proposedRect;
+    switch (positionOption) {
+      case PositionOption.BOTTOM_SPAN_RIGHT:
+        proposedRect = positioningUtils.bottomSpanRight({anchorRect, currentPopoverRect});
+        break;
+      case PositionOption.BOTTOM_SPAN_LEFT:
+        proposedRect = positioningUtils.bottomSpanLeft({anchorRect, currentPopoverRect});
+        break;
+      case PositionOption.TOP_SPAN_RIGHT:
+        proposedRect = positioningUtils.topSpanRight({anchorRect, currentPopoverRect});
+        break;
+      case PositionOption.TOP_SPAN_LEFT:
+        proposedRect = positioningUtils.topSpanLeft({anchorRect, currentPopoverRect});
+    }
+    if (positioningUtils.isInBounds({inspectorViewRect, currentPopoverRect, proposedRect})) {
+      return proposedRect;
+    }
+  }
 
-      proposedRect = positioningUtils.topSpanRight({anchorRect, currentPopoverRect});
-      if (positioningUtils.isInBounds({inspectorViewRect, currentPopoverRect, proposedRect})) {
-        return proposedRect;
-      }
-
-      proposedRect = positioningUtils.topSpanLeft({anchorRect, currentPopoverRect});
-      if (positioningUtils.isInBounds({inspectorViewRect, currentPopoverRect, proposedRect})) {
-        return proposedRect;
-      }
-
-      // If none of the options work above, we position to bottom right
-      // and adjust the insets so that it does not go out of bounds.
-      proposedRect = positioningUtils.bottomSpanRight({anchorRect, currentPopoverRect});
-      return positioningUtils.insetAdjustedRect({anchorRect, currentPopoverRect, inspectorViewRect, proposedRect});
-    };
+  // If none of the options work above, we position to bottom right
+  // and adjust the insets so that it does not go out of bounds.
+  const proposedRect = positioningUtils.bottomSpanRight({anchorRect, currentPopoverRect});
+  return positioningUtils.insetAdjustedRect({anchorRect, currentPopoverRect, inspectorViewRect, proposedRect});
+};
 
 const proposedRectForSimpleTooltip =
     ({inspectorViewRect, anchorRect, currentPopoverRect}:
@@ -145,27 +166,38 @@ const proposedRectForSimpleTooltip =
     };
 
 export type TooltipVariant = 'simple'|'rich';
+export type PaddingMode = 'small'|'large';
 
 export interface TooltipProperties {
   id: string;
   variant?: TooltipVariant;
+  padding?: PaddingMode;
   anchor?: HTMLElement;
   jslogContext?: string;
 }
 
 /**
- * @attr id - Id of the tooltip. Used for searching an anchor element with aria-describedby.
- * @attr hover-delay - Hover length in ms before the tooltip is shown and hidden.
- * @attr variant - Variant of the tooltip, `"simple"` for strings only, inverted background, `"rich"` for interactive
- *                 content, background according to theme's surface.
- * @attr use-click - If present, the tooltip will be shown on click instead of on hover.
- * @attr use-hotkey - If present, the tooltip will be shown on hover but not when receiving focus. Requires a hotkey to
- *                    open when fosed (Alt-down). When `"use-click"` is present as well, use-click takes precedence.
- * @prop {String} id - reflects the `"id"` attribute.
- * @prop {Number} hoverDelay - reflects the `"hover-delay"` attribute.
- * @prop {String} variant - reflects the `"variant"` attribute.
- * @prop {Boolean} useClick - reflects the `"click"` attribute.
- * @prop {Boolean} useHotkey - reflects the `"use-hotkey"` attribute.
+ * @property useHotkey - reflects the `"use-hotkey"` attribute.
+ * @property id - reflects the `"id"` attribute.
+ * @property hoverDelay - reflects the `"hover-delay"` attribute.
+ * @property variant - reflects the `"variant"` attribute.
+ * @property padding - reflects the `"padding"` attribute.
+ * @property useClick - reflects the `"click"` attribute.
+ * @property verticalDistanceIncrease - reflects the `"vertical-distance-increase"` attribute.
+ * @property preferSpanLeft - reflects the `"prefer-span-left"` attribute.
+ * @attribute id - Id of the tooltip. Used for searching an anchor element with aria-describedby.
+ * @attribute hover-delay - Hover length in ms before the tooltip is shown and hidden.
+ * @attribute variant - Variant of the tooltip, `"simple"` for strings only, inverted background,
+ *                 `"rich"` for interactive content, background according to theme's surface.
+ * @attribute padding - Which padding to use, defaults to `"small"`. Use `"large"` for richer content.
+ * @attribute use-click - If present, the tooltip will be shown on click instead of on hover.
+ * @attribute vertical-distance-increase - The tooltip is moved vertically this many pixels further away from its anchor.
+ * @attribute prefer-span-left - If present, the tooltip's preferred position is `"span-left"` (The right
+ *                 side of the tooltip and its anchor are aligned. The tooltip expands to the left from
+ *                 there.). Applies to rich tooltips only.
+ * @attribute use-hotkey - If present, the tooltip will be shown on hover but not when receiving focus.
+ *                    Requires a hotkey to open when fosed (Alt-down). When `"use-click"` is present
+ *                    as well, use-click takes precedence.
  */
 export class Tooltip extends HTMLElement {
   static readonly observedAttributes = ['id', 'variant', 'jslogcontext'];
@@ -211,7 +243,7 @@ export class Tooltip extends HTMLElement {
   }
 
   get hoverDelay(): number {
-    return this.hasAttribute('hover-delay') ? Number(this.getAttribute('hover-delay')) : 200;
+    return this.hasAttribute('hover-delay') ? Number(this.getAttribute('hover-delay')) : 300;
   }
   set hoverDelay(delay: number) {
     this.setAttribute('hover-delay', delay.toString());
@@ -224,6 +256,13 @@ export class Tooltip extends HTMLElement {
     this.setAttribute('variant', variant);
   }
 
+  get padding(): PaddingMode {
+    return this.getAttribute('padding') === 'large' ? 'large' : 'small';
+  }
+  set padding(padding: PaddingMode) {
+    this.setAttribute('padding', padding);
+  }
+
   get jslogContext(): string|null {
     return this.getAttribute('jslogcontext');
   }
@@ -232,27 +271,51 @@ export class Tooltip extends HTMLElement {
     this.#updateJslog();
   }
 
+  get verticalDistanceIncrease(): number {
+    return this.hasAttribute('vertical-distance-increase') ? Number(this.getAttribute('vertical-distance-increase')) :
+                                                             0;
+  }
+  set verticalDistanceIncrease(increase: number) {
+    this.setAttribute('vertical-distance-increase', increase.toString());
+  }
+
+  get preferSpanLeft(): boolean {
+    return this.hasAttribute('prefer-span-left');
+  }
+
+  set preferSpanLeft(value: boolean) {
+    if (value) {
+      this.setAttribute('prefer-span-left', '');
+    } else {
+      this.removeAttribute('prefer-span-left');
+    }
+  }
+
   get anchor(): HTMLElement|null {
     return this.#anchor;
   }
 
   constructor(properties?: TooltipProperties) {
     super();
-    if (properties) {
-      this.id = properties.id;
+    const {id, variant, padding, jslogContext, anchor} = properties ?? {};
+    if (id) {
+      this.id = id;
     }
-    if (properties?.variant) {
-      this.variant = properties.variant;
+    if (variant) {
+      this.variant = variant;
     }
-    if (properties?.jslogContext) {
-      this.jslogContext = properties.jslogContext;
+    if (padding) {
+      this.padding = padding;
     }
-    if (properties?.anchor) {
-      const ref = properties.anchor.getAttribute('aria-details') ?? properties.anchor.getAttribute('aria-describedby');
-      if (ref !== properties.id) {
+    if (jslogContext) {
+      this.jslogContext = jslogContext;
+    }
+    if (anchor) {
+      const ref = anchor.getAttribute('aria-details') ?? anchor.getAttribute('aria-describedby');
+      if (ref !== id) {
         throw new Error('aria-details or aria-describedby must be set on the anchor');
       }
-      this.#anchor = properties.anchor;
+      this.#anchor = anchor;
     }
   }
 
@@ -281,7 +344,7 @@ export class Tooltip extends HTMLElement {
     Lit.render(html`
       <style>${tooltipStyles}</style>
       <!-- Wrapping it into a container, so that the tooltip doesn't disappear when the mouse moves from the anchor to the tooltip. -->
-      <div class="container">
+      <div class="container ${this.padding === 'large' ? 'large-padding' : ''}">
         <slot></slot>
       </div>
     `, this.#shadow, {host: this});
@@ -334,9 +397,7 @@ export class Tooltip extends HTMLElement {
     if (this.open && Tooltip.lastOpenedTooltipId === this.id) {
       Tooltip.lastOpenedTooltipId = null;
     }
-    this.#timeout = window.setTimeout(() => {
-      this.hidePopover();
-    }, this.hoverDelay);
+    this.hidePopover();
   };
 
   toggle = (): void => {
@@ -367,11 +428,19 @@ export class Tooltip extends HTMLElement {
     this.#previousPopoverRect = currentPopoverRect;
 
     const inspectorViewRect = UI.InspectorView.InspectorView.instance().element.getBoundingClientRect();
+    const preferredPositions =
+        this.preferSpanLeft ? [PositionOption.BOTTOM_SPAN_LEFT, PositionOption.TOP_SPAN_LEFT] : [];
     const proposedPopoverRect = this.variant === 'rich' ?
-        proposedRectForRichTooltip({inspectorViewRect, anchorRect, currentPopoverRect}) :
+        proposedRectForRichTooltip({inspectorViewRect, anchorRect, currentPopoverRect, preferredPositions}) :
         proposedRectForSimpleTooltip({inspectorViewRect, anchorRect, currentPopoverRect});
     this.style.left = `${proposedPopoverRect.left}px`;
-    this.style.top = `${proposedPopoverRect.top}px`;
+
+    // If the tooltip is above its anchor, we need to decrease the tooltip's
+    // y-coordinate to increase the distance between tooltip and anchor.
+    // If the tooltip is below its anchor, we add to the tooltip's y-coord.
+    const actualVerticalOffset =
+        anchorRect.top < proposedPopoverRect.top ? this.verticalDistanceIncrease : -this.verticalDistanceIncrease;
+    this.style.top = `${proposedPopoverRect.top + actualVerticalOffset}px`;
     this.style.visibility = 'visible';
     requestAnimationFrame(this.#positionPopover);
   };
@@ -410,8 +479,25 @@ export class Tooltip extends HTMLElement {
     }
   };
 
+  #globalKeyDown = (event: KeyboardEvent): void => {
+    if (!this.open || event.key !== 'Escape') {
+      return;
+    }
+
+    this.#openedViaHotkey = false;
+    this.toggle();
+    event.consume(true);
+  };
+
   #keyDown = (event: KeyboardEvent): void => {
-    if ((event.altKey && event.key === 'ArrowDown') || (event.key === 'Escape' && this.open)) {
+    // This supports the scenario where the user uses Alt+ArrowDown in hotkey
+    // mode to toggle the visibility.
+    // Note that the "Escape to close" scenario is handled in the global
+    // keydown function so we capture Escape presses even if the tooltip does
+    // not have focus.
+    const shouldToggleVisibility = (this.useHotkey && event.altKey && event.key === 'ArrowDown');
+
+    if (shouldToggleVisibility) {
       this.#openedViaHotkey = !this.open;
       this.toggle();
       event.consume(true);
@@ -419,19 +505,24 @@ export class Tooltip extends HTMLElement {
   };
 
   #registerEventListeners(): void {
+    document.body.addEventListener('keydown', this.#globalKeyDown);
     if (this.#anchor) {
+      // We bind the keydown listener regardless of if use-hotkey is enabled
+      // as we always want to support ESC to close.
+      this.#anchor.addEventListener('keydown', this.#keyDown);
+
       if (this.useClick) {
         this.#anchor.addEventListener('click', this.toggle);
       } else {
         this.#anchor.addEventListener('mouseenter', this.showTooltip);
-        if (this.useHotkey) {
-          this.#anchor.addEventListener('keydown', this.#keyDown);
-        } else {
+        if (!this.useHotkey) {
           this.#anchor.addEventListener('focus', this.showTooltip);
         }
+
         this.#anchor.addEventListener('blur', this.hideTooltip);
         this.#anchor.addEventListener('mouseleave', this.hideTooltip);
         this.addEventListener('mouseleave', this.hideTooltip);
+        this.addEventListener('focusout', this.hideTooltip);
       }
     }
     // Prevent interaction with the parent element.
@@ -446,6 +537,11 @@ export class Tooltip extends HTMLElement {
     if (this.#timeout) {
       window.clearTimeout(this.#timeout);
     }
+
+    // Should always exist when this component is used, but in test
+    // environments on Chromium this isn't always the case, hence the body? check.
+    document.body?.removeEventListener('keydown', this.#globalKeyDown);
+
     if (this.#anchor) {
       this.#anchor.removeEventListener('click', this.toggle);
       this.#anchor.removeEventListener('mouseenter', this.showTooltip);

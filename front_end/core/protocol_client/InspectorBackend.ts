@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2011 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2011 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
 import type * as Protocol from '../../generated/protocol.js';
@@ -179,14 +153,16 @@ export class InspectorBackend {
 let connectionFactory: () => Connection;
 
 export class Connection {
-  onMessage!: ((arg0: Object) => void)|null;
+  declare onMessage: ((arg0: Object) => void)|null;
 
-  setOnMessage(_onMessage: (arg0: (Object|string)) => void): void {
+  // on message from browser
+  setOnMessage(_onMessage: (arg0: Object|string) => void): void {
   }
 
   setOnDisconnect(_onDisconnect: (arg0: string) => void): void {
   }
 
+  // send raw CDP message to browser
   sendRawMessage(_message: string): void {
   }
 
@@ -246,26 +222,26 @@ export const test = {
 const LongPollingMethods = new Set<string>(['CSS.takeComputedStyleUpdates']);
 
 export class SessionRouter {
-  readonly #connectionInternal: Connection;
+  readonly #connection: Connection;
   #lastMessageId = 1;
   #pendingResponsesCount = 0;
   readonly #pendingLongPollingMessageIds = new Set<number>();
   readonly #sessions = new Map<string, {
     target: TargetBase,
     callbacks: Map<number, CallbackWithDebugInfo>,
-    proxyConnection: ((Connection | undefined)|null),
+    proxyConnection: Connection|undefined|null,
   }>();
   #pendingScripts: Array<() => void> = [];
 
   constructor(connection: Connection) {
-    this.#connectionInternal = connection;
+    this.#connection = connection;
 
     test.deprecatedRunAfterPendingDispatches = this.deprecatedRunAfterPendingDispatches.bind(this);
     test.sendRawMessage = this.sendRawMessageForTesting.bind(this);
 
-    this.#connectionInternal.setOnMessage(this.onMessage.bind(this));
+    this.#connection.setOnMessage(this.onMessage.bind(this));
 
-    this.#connectionInternal.setOnDisconnect(reason => {
+    this.#connection.setOnDisconnect(reason => {
       const session = this.#sessions.get('');
       if (session) {
         session.target.dispose(reason);
@@ -312,7 +288,7 @@ export class SessionRouter {
   }
 
   connection(): Connection {
-    return this.#connectionInternal;
+    return this.#connection;
   }
 
   sendMessage(sessionId: string, domain: string, method: QualifiedName, params: Object|null, callback: Callback): void {
@@ -350,7 +326,7 @@ export class SessionRouter {
       return;
     }
     session.callbacks.set(messageId, {callback, method});
-    this.#connectionInternal.sendRawMessage(JSON.stringify(messageObject));
+    this.#connection.sendRawMessage(JSON.stringify(messageObject));
   }
 
   private sendRawMessageForTesting(method: QualifiedName, params: Object|null, callback: Callback|null, sessionId = ''):
@@ -507,7 +483,7 @@ interface DispatcherMap extends Map<ProtocolDomainName, ProtocolProxyApi.Protoco
 export class TargetBase {
   needsNodeJSPatching: boolean;
   readonly sessionId: string;
-  routerInternal: SessionRouter|null;
+  #router: SessionRouter|null;
   #agents: AgentsMap = new Map();
   #dispatchers: DispatcherMap = new Map();
 
@@ -521,15 +497,15 @@ export class TargetBase {
     }
 
     let router: SessionRouter;
-    if (sessionId && parentTarget?.routerInternal) {
-      router = parentTarget.routerInternal;
+    if (sessionId && parentTarget && parentTarget.#router) {
+      router = parentTarget.#router;
     } else if (connection) {
       router = new SessionRouter(connection);
     } else {
       router = new SessionRouter(connectionFactory());
     }
 
-    this.routerInternal = router;
+    this.#router = router;
 
     router.registerSession(this, this.sessionId);
 
@@ -557,15 +533,15 @@ export class TargetBase {
   }
 
   dispose(_reason: string): void {
-    if (!this.routerInternal) {
+    if (!this.#router) {
       return;
     }
-    this.routerInternal.unregisterSession(this.sessionId);
-    this.routerInternal = null;
+    this.#router.unregisterSession(this.sessionId);
+    this.#router = null;
   }
 
   isDisposed(): boolean {
-    return !this.routerInternal;
+    return !this.#router;
   }
 
   markAsNodeJSForTest(): void {
@@ -573,7 +549,7 @@ export class TargetBase {
   }
 
   router(): SessionRouter|null {
-    return this.routerInternal;
+    return this.#router;
   }
 
   // Agent accessors, keep alphabetically sorted.

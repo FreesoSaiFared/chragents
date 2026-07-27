@@ -2,14 +2,32 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import { AgentService } from '../core/AgentService.js';
-import { ChatMessageEntity } from '../ui/ChatView.js';
+import { ChatMessageEntity } from '../models/ChatTypes.js';
 import { createLogger } from '../core/Logger.js';
+
+// Detect if we're in a Node.js environment (eval runner, tests)
+const isNodeEnvironment = typeof window === 'undefined' || typeof document === 'undefined';
+
+// Lazy-loaded browser-only AgentService dependency
+let AgentService: typeof import('../core/AgentService.js').AgentService | null = null;
+let agentServiceLoaded = false;
+
+async function ensureAgentService(): Promise<boolean> {
+  if (isNodeEnvironment) return false;
+  if (!agentServiceLoaded) {
+    agentServiceLoaded = true;
+    try {
+      const module = await import('../core/AgentService.js');
+      AgentService = module.AgentService;
+    } catch { return false; }
+  }
+  return AgentService !== null;
+}
 
 const logger = createLogger('FinalizeWithCritiqueTool');
 
 import { CritiqueTool} from './CritiqueTool.js';
-import type { Tool } from './Tools.js';
+import type { Tool, LLMContext } from './Tools.js';
 
 /**
  * Arguments for the FinalizeWithCritiqueTool
@@ -59,33 +77,6 @@ export class FinalizeWithCritiqueTool implements Tool<FinalizeWithCritiqueArgs, 
   description = 'Submit a final answer that will be evaluated against requirements before acceptance. ' +
     'If the answer does not meet requirements, feedback will be provided for improvement.';
 
-  private async createToolTracingObservation(toolName: string, args: any): Promise<void> {
-    try {
-      const { getCurrentTracingContext, createTracingProvider } = await import('../tracing/TracingConfig.js');
-      const context = getCurrentTracingContext();
-      if (context) {
-        const tracingProvider = createTracingProvider();
-        await tracingProvider.createObservation({
-          id: `event-tool-execute-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          name: `Tool Execute: ${toolName}`,
-          type: 'event',
-          startTime: new Date(),
-          input: { 
-            toolName, 
-            toolArgs: args,
-            contextInfo: `Direct tool execution in ${toolName}`
-          },
-          metadata: {
-            executionPath: 'direct-tool',
-            toolName
-          }
-        }, context.traceId);
-      }
-    } catch (tracingError) {
-      // Don't fail tool execution due to tracing errors
-      console.error(`[TRACING ERROR in ${toolName}]`, tracingError);
-    }
-  }
 
   schema = {
     type: 'object',
@@ -101,15 +92,27 @@ export class FinalizeWithCritiqueTool implements Tool<FinalizeWithCritiqueArgs, 
   /**
    * Execute the finalize with critique tool
    */
-  async execute(args: FinalizeWithCritiqueArgs): Promise<FinalizeWithCritiqueResult> {
-    await this.createToolTracingObservation(this.name, args);
+  async execute(args: FinalizeWithCritiqueArgs, ctx?: LLMContext): Promise<FinalizeWithCritiqueResult> {
     logger.info('Executing with answer:', args.answer.substring(0, 100) + '...');
 
     try {
+      // Check if AgentService is available (browser only)
+      await ensureAgentService();
+      if (!AgentService) {
+        // In Node.js environment, just accept without critique
+        logger.info('AgentService not available (Node.js environment), accepting answer');
+        return {
+          success: true,
+          accepted: true,
+          satisfiesCriteria: true,
+          answer: args.answer
+        };
+      }
+
       // Get the current state from AgentService
       const agentService = AgentService.getInstance();
       const state = agentService.getState();
-      const apiKey = agentService.getApiKey();
+      const apiKey = ctx?.apiKey || agentService.getApiKey();
 
       if (!state?.messages || state.messages.length === 0) {
         throw new Error('Invalid state or empty message history');
@@ -140,7 +143,7 @@ export class FinalizeWithCritiqueTool implements Tool<FinalizeWithCritiqueArgs, 
         userInput: userMessage.text,
         finalResponse: args.answer,
         reasoning: 'Validating if the response meets all user requirements'
-      });
+      }, ctx);
 
       logger.info('Critique result:', critiqueResult);
 

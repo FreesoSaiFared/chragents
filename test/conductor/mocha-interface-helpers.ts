@@ -1,47 +1,21 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import type * as Mocha from 'mocha';
-import * as os from 'os';
 
 import {AsyncScope} from './async-scope.js';
+import type {Platform} from './platform.js';
 import {getBrowserAndPages} from './puppeteer-state.js';
 import {ScreenshotError} from './screenshot-error.js';
 import {TestConfig} from './test_config.js';
 
 declare global {
-  /*
-  * For tests containing screenshots.
-  */
-  let itScreenshot: {
-    (title: string, fn: Mocha.AsyncFunc): void,
-
-    skip: (title: string, fn: Mocha.AsyncFunc) => void,
-
-    skipOnPlatforms: (platforms: Platform[], title: string, fn: Mocha.AsyncFunc) => void,
-  };
   namespace Mocha {
     export interface TestFunction {
       skipOnPlatforms: (platforms: Platform[], title: string, fn: Mocha.AsyncFunc) => void;
     }
   }
-}
-
-export type Platform = 'mac'|'win32'|'linux';
-export let platform: Platform;
-switch (os.platform()) {
-  case 'darwin':
-    platform = 'mac';
-    break;
-
-  case 'win32':
-    platform = 'win32';
-    break;
-
-  default:
-    platform = 'linux';
-    break;
 }
 
 async function takeScreenshots(): Promise<{target?: string, frontend?: string}> {

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,8 +15,8 @@ const cwd = process.cwd();
 /**
  * Execs a command.
  *
- * @param {string} cmd
- * @return {string}
+ * @param cmd
+ * @returns
  */
 async function exec(cmd) {
   const env = process.env;
@@ -42,12 +42,12 @@ async function exec(cmd) {
 
 /**
  *
- * @param {string} buildDir
- * @param {string} gnTarget
+ * @param buildDir
+ * @param gnTarget
  */
 async function buildTargetInfo(buildDir, gnTarget) {
   /**
-   * @param {string} outputList
+   * @param outputList
    */
   const flattenOutput = outputList => {
     try {

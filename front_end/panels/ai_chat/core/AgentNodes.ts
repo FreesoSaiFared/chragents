@@ -3,36 +3,47 @@
 // found in the LICENSE file.
 
 import type { getTools } from '../tools/Tools.js';
-import { ChatMessageEntity, type ModelChatMessage, type ToolResultMessage, type ChatMessage } from '../ui/ChatView.js';
+import { ChatMessageEntity, type ModelChatMessage, type ToolResultMessage, type ChatMessage, type AgentSessionMessage } from '../models/ChatTypes.js';
+import { ConfigurableAgentTool, ToolRegistry } from '../agent_framework/ConfigurableAgentTool.js';
 
 import { LLMClient } from '../LLM/LLMClient.js';
 import type { LLMMessage } from '../LLM/LLMTypes.js';
-import { AIChatPanel } from '../ui/AIChatPanel.js';
-import { createSystemPromptAsync, getAgentToolsFromState } from './GraphHelpers.js';
+import type { LLMProvider } from '../LLM/LLMTypes.js';
+import { createSystemPromptAsync } from './GraphHelpers.js';
+import * as BaseOrchestratorAgent from './BaseOrchestratorAgent.js';
+import { ToolSurfaceProvider } from './ToolSurfaceProvider.js';
 import { createLogger } from './Logger.js';
 import type { AgentState } from './State.js';
 import type { Runnable } from './Types.js';
+import { LLMConfigurationManager } from './LLMConfigurationManager.js';
+import { AgentErrorHandler } from './AgentErrorHandler.js';
 import { createTracingProvider, withTracingContext } from '../tracing/TracingConfig.js';
+import * as ToolNameMap from './ToolNameMap.js';
 import type { TracingProvider } from '../tracing/TracingProvider.js';
+import { AgentDescriptorRegistry } from './AgentDescriptorRegistry.js';
 
 const logger = createLogger('AgentNodes');
 
-export function createAgentNode(modelName: string, temperature: number): Runnable<AgentState, AgentState> {
+export function createAgentNode(modelName: string, provider: LLMProvider, temperature: number): Runnable<AgentState, AgentState> {
   const agentNode = new class AgentNode implements Runnable<AgentState, AgentState> {
-    private modelName: string;
-    private temperature: number;
+    private modelName: string = modelName;
+    private provider: LLMProvider = provider;
+    private temperature: number = temperature;
     private callCount = 0;
     private readonly MAX_CALLS_PER_INTERACTION = 50;
     private tracingProvider: TracingProvider;
 
-    constructor(modelName: string, temperature: number) {
-      this.modelName = modelName;
-      this.temperature = temperature;
-      this.tracingProvider = createTracingProvider();
-    }
+    constructor() { this.tracingProvider = createTracingProvider(); }
 
-    async invoke(state: AgentState): Promise<AgentState> {
-      console.log('[AGENT NODE DEBUG] AgentNode invoke called, messages count:', state.messages.length);
+
+    async invoke(state: AgentState, signal?: AbortSignal): Promise<AgentState> {
+      // Check if execution has been aborted
+      if (signal?.aborted) {
+        logger.info('AgentNode execution aborted');
+        throw new DOMException('Agent execution was cancelled', 'AbortError');
+      }
+
+      logger.debug('AgentNode invoke called, messages count:', state.messages.length);
       logger.debug('AgentNode: Invoked with state. Last message:',
         state.messages.length > 0 ? state.messages[state.messages.length - 1] : 'No messages');
 
@@ -93,7 +104,13 @@ export function createAgentNode(modelName: string, temperature: number): Runnabl
 
       // 2. Call the LLM with the message array
       this.callCount++;
-      
+
+      // Check for abort before potentially long-running LLM call
+      if (signal?.aborted) {
+        logger.info('AgentNode execution aborted before LLM call');
+        throw new DOMException('Agent execution was cancelled', 'AbortError');
+      }
+
       if (this.callCount > this.MAX_CALLS_PER_INTERACTION) {
         logger.warn('Max calls per interaction reached:', this.callCount);
         throw new Error(`Maximum calls (${this.MAX_CALLS_PER_INTERACTION}) per interaction exceeded. This might be an infinite loop.`);
@@ -107,10 +124,11 @@ export function createAgentNode(modelName: string, temperature: number): Runnabl
 
       // Create generation observation for LLM call
       const tracingContext = state.context?.tracingContext;
+      const agentDescriptor = state.context?.agentDescriptor;
       let generationId: string | undefined;
       const generationStartTime = new Date();
 
-      if (tracingContext?.traceId) {
+      if (tracingContext?.traceId) {        
         generationId = `gen-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         await this.tracingProvider.createObservation({
           id: generationId,
@@ -121,75 +139,183 @@ export function createAgentNode(modelName: string, temperature: number): Runnabl
           model: this.modelName,
           modelParameters: {
             temperature: this.temperature,
-            provider: AIChatPanel.getProviderForModel(this.modelName)
+            provider: this.provider
           },
           input: {
             systemPrompt: systemPrompt.substring(0, 1000) + '...', // Truncate for tracing
             messages: state.messages.length,
-            tools: getAgentToolsFromState(state).map(t => t.name)
+            tools: [],
+            lastMessage: state.messages.length > 0 ? {
+              entity: state.messages[state.messages.length - 1].entity,
+              content: JSON.stringify(state.messages[state.messages.length - 1]).substring(0, 500)
+            } : null
+          },
+          metadata: {
+            executionLevel: 'stategraph',
+            source: 'AgentNode',
+            selectedAgentType: state.selectedAgentType ?? 'default',
+            ...(agentDescriptor ? {
+              agentName: agentDescriptor.name,
+              agentVersion: agentDescriptor.version,
+              promptHash: agentDescriptor.promptHash,
+              toolsetHash: agentDescriptor.toolsetHash
+            } : {})
           }
         }, tracingContext.traceId);
+
+        // Update tracing context with current generation ID
+        tracingContext.currentGenerationId = generationId;
       }
 
       try {
         const llm = LLMClient.getInstance();
         
-        // Get provider for the specific model
-        const provider = AIChatPanel.getProviderForModel(this.modelName);
+        // Use provider passed at graph initialization
+        const provider = this.provider as LLMProvider;
         
         // Get tools for the current agent type
-        const tools = getAgentToolsFromState(state);
+        const baseTools = BaseOrchestratorAgent.getAgentTools(state.selectedAgentType ?? '') as any;
+        const selection = await ToolSurfaceProvider.select(state, baseTools);
+        // Persist selection in context so ToolExecutorNode can resolve the same set
+        if (!state.context) { (state as any).context = {}; }
+        (state.context as any).selectedToolNames = selection.selectedNames;
+        const tools = selection.tools;
         
-        // Convert ChatMessage[] to LLMMessage[]
-        const llmMessages = this.convertChatMessagesToLLMMessages(state.messages);
-        
-        // Call LLM with the new API
-        const response = await llm.call({
-          provider,
-          model: this.modelName,
-          messages: llmMessages,
-          systemPrompt,
-          tools: tools.map(tool => ({
-            type: 'function',
-            function: {
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.schema,
-            }
-          })),
-          temperature: this.temperature,
+        // Update the generation observation with the actual tool list now that selection is known
+        if (tracingContext?.traceId && generationId) {
+          try {
+            await this.tracingProvider.updateObservation(generationId, {
+              input: {
+                systemPrompt: systemPrompt.substring(0, 1000) + '...',
+                messages: state.messages.length,
+                tools: tools.map(t => t.name),
+                lastMessage: state.messages.length > 0 ? {
+                  entity: state.messages[state.messages.length - 1].entity,
+                  content: JSON.stringify(state.messages[state.messages.length - 1]).substring(0, 500)
+                } : null
+              }
+            });
+          } catch (err) {
+            logger.warn('Failed to update generation observation with tools list', err);
+          }
+        }
+
+        // Build mapping from original tool names to sanitized names for message conversion
+        const originalToSanitized: Record<string, string> = {};
+        tools.forEach(tool => {
+          const sanitized = ToolNameMap.getSanitized(tool.name);
+          originalToSanitized[tool.name] = sanitized;
         });
 
-        // Parse the response
-        const parsedAction = llm.parseResponse(response);
+        // Convert ChatMessage[] to LLMMessage[]
+        const llmMessages = this.convertChatMessagesToLLMMessages(state.messages, originalToSanitized);
+        
+        // Create error handler for retry logic
+        const errorHandler = AgentErrorHandler.createErrorHandler({
+          continueOnError: true,
+          agentName: `AgentNode-${this.modelName}`,
+          availableTools: tools.map(t => t.name)
+        });
+        
+        // Resolve agent name for provider-specific routing
+        const agentName = agentDescriptor?.name || state.selectedAgentType || 'default';
+
+        // Execute LLM call with retry logic
+        const retryResult = await errorHandler.executeWithRetry(
+          async () => {
+            // Call LLM
+            const response = await llm.call({
+              provider,
+              model: this.modelName,
+              messages: llmMessages,
+              systemPrompt,
+              tools: tools.map(tool => ({
+                type: 'function',
+                function: {
+                  name: ToolNameMap.getSanitized(tool.name),
+                  description: tool.description,
+                  parameters: tool.schema,
+                }
+              })),
+              temperature: this.temperature,
+              agentName: agentName,
+              // Pass tracing metadata explicitly from state context for Langfuse integration
+              tracingMetadata: state.context?.tracingContext?.metadata,
+            });
+            
+            // Parse the response
+            const parsed = llm.parseResponse(response);
+            
+            // Return both response and parsed action
+            return { response, parsedAction: parsed };
+          },
+          // Validation function - check if parsing was successful
+          (result) => result.parsedAction.type !== 'error',
+          // Retry configuration
+          {
+            maxRetries: 5,
+            baseDelayMs: 1000,
+            maxDelayMs: 5000,
+            backoffMultiplier: 2
+          }
+        );
+        
+        // Handle retry result
+        if (!retryResult.success) {
+          throw new Error(`Failed after ${retryResult.attemptsMade} attempts: ${retryResult.error}`);
+        }
+        
+        const { response, parsedAction } = retryResult.result!;
 
         // Update generation observation with output
         if (generationId && tracingContext?.traceId) {
-          await this.tracingProvider.createObservation({
-            id: generationId,
-            name: 'LLM Generation', // Include name when updating
-            type: 'generation',
+          // Extract token usage from rawResponse if available
+          const rawUsage = response.rawResponse?.usage;
+          const usage = rawUsage ? {
+            promptTokens: rawUsage.prompt_tokens || rawUsage.input_tokens || 0,
+            completionTokens: rawUsage.completion_tokens || rawUsage.output_tokens || 0,
+            totalTokens: rawUsage.total_tokens || 0
+          } : undefined;
+
+          await this.tracingProvider.updateObservation(generationId, {
             endTime: new Date(),
             output: parsedAction,
-            // Note: Usage tracking would need to be extracted from response.rawResponse if needed
-          }, tracingContext.traceId);
+            ...(usage && { usage }),
+            metadata: {
+              executionLevel: 'stategraph',
+              source: 'AgentNode',
+              selectedAgentType: state.selectedAgentType ?? 'default',
+              ...(agentDescriptor ? {
+                agentName: agentDescriptor.name,
+                agentVersion: agentDescriptor.version,
+                promptHash: agentDescriptor.promptHash,
+                toolsetHash: agentDescriptor.toolsetHash
+              } : {})
+            }
+          });
         }
 
         // Directly create the ModelChatMessage object
         let newModelMessage: ModelChatMessage;
         if (parsedAction.type === 'tool_call') {
           const toolCallId = crypto.randomUUID(); // Generate unique ID for OpenAI format
+          const sanitizedToolName = ToolNameMap.getSanitized(parsedAction.name);
+          const resolvedToolName = ToolNameMap.resolveOriginal(parsedAction.name)
+            || ToolNameMap.resolveOriginal(sanitizedToolName)
+            || parsedAction.name;
           
           // Create tool-call event observation
           const tracingContext = state.context?.tracingContext;
           if (tracingContext?.traceId) {
+            const toolCallObservationId = `tool-call-${resolvedToolName}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
             await this.tracingProvider.createObservation({
-              id: `event-tool-call-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-              name: `Tool Call: ${parsedAction.name}`,
+              id: toolCallObservationId,
+              name: `Tool Call Decision: ${resolvedToolName}`,
               type: 'event',
               startTime: new Date(),
+              parentObservationId: tracingContext.currentGenerationId || tracingContext.parentObservationId,
               input: {
-                toolName: parsedAction.name,
+                toolName: resolvedToolName,
                 toolArgs: parsedAction.args,
                 toolCallId,
                 reasoning: response.reasoning?.summary
@@ -199,23 +325,31 @@ export function createAgentNode(modelName: string, temperature: number): Runnabl
                 callCount: this.callCount,
                 toolCallId,
                 phase: 'tool_call_decision',
-                provider: AIChatPanel.getProviderForModel(this.modelName)
+                provider: this.provider
               }
             }, tracingContext.traceId);
+            
+            // Update tracing context with tool call observation ID for tool execution
+            tracingContext.currentToolCallId = toolCallObservationId;
           }
           
+          // Determine lane: agent tools render in agent lane only
+          const regTool = ToolRegistry.getRegisteredTool(resolvedToolName as any);
+          const isAgentTool = !!regTool && (regTool instanceof ConfigurableAgentTool);
+
           newModelMessage = {
             entity: ChatMessageEntity.MODEL,
             action: 'tool',
-            toolName: parsedAction.name,
-            toolArgs: parsedAction.args,
-            toolCallId, // Add for linking with tool response
-            isFinalAnswer: false,
-            reasoning: response.reasoning?.summary,
+            toolName: resolvedToolName,
+             toolArgs: parsedAction.args,
+             toolCallId, // Add for linking with tool response
+             isFinalAnswer: false,
+             reasoning: response.reasoning?.summary,
+             uiLane: isAgentTool ? 'agent' : 'chat',
           };
 
-          logger.debug('AgentNode: Created tool message', { toolName: parsedAction.name, toolCallId });
-          if (parsedAction.name === 'finalize_with_critique') {
+          logger.debug('AgentNode: Created tool message', { toolName: resolvedToolName, toolCallId });
+          if (resolvedToolName === 'finalize_with_critique') {
             logger.debug('AgentNode: finalize_with_critique call with args:', JSON.stringify(parsedAction.args));
           }
         } else if (parsedAction.type === 'final_answer') {
@@ -253,13 +387,21 @@ export function createAgentNode(modelName: string, temperature: number): Runnabl
         
         // Update generation observation with error
         if (generationId && tracingContext?.traceId) {
-          await this.tracingProvider.createObservation({
-            id: generationId,
-            name: 'LLM Generation', // Include name when updating
-            type: 'generation',
+          await this.tracingProvider.updateObservation(generationId, {
             endTime: new Date(),
-            error: error instanceof Error ? error.message : String(error)
-          }, tracingContext.traceId);
+            error: error instanceof Error ? error.message : String(error),
+            metadata: {
+              executionLevel: 'stategraph',
+              source: 'AgentNode',
+              selectedAgentType: state.selectedAgentType ?? 'default',
+              ...(agentDescriptor ? {
+                agentName: agentDescriptor.name,
+                agentVersion: agentDescriptor.version,
+                promptHash: agentDescriptor.promptHash,
+                toolsetHash: agentDescriptor.toolsetHash
+              } : {})
+            }
+          });
         }
         
         throw error;
@@ -271,13 +413,41 @@ export function createAgentNode(modelName: string, temperature: number): Runnabl
       this.callCount = 0;
     }
 
+    /**
+     * Sanitizes tool result data for text representation by removing fields
+     * that shouldn't be sent to the LLM (imageData, success, etc.)
+     */
+    private sanitizeToolResultForText(toolResultData: any): any {
+      if (typeof toolResultData !== 'object' || toolResultData === null) {
+        return toolResultData;
+      }
+
+      // Create a shallow copy
+      const sanitized = { ...toolResultData };
+
+      // Remove fields that shouldn't be sent to LLM
+      const fieldsToRemove = [
+        'imageData',    // Prevents token waste from base64 strings
+        'success',      // LLM should infer success from error presence
+        'dataUrl',      // Legacy image field if any
+        'agentSession', // Avoid sending session data to LLM
+      ];
+
+      fieldsToRemove.forEach(field => {
+        if (sanitized.hasOwnProperty(field)) {
+          delete sanitized[field];
+        }
+      });
+
+      return sanitized;
+    }
 
     /**
      * Convert ChatMessage[] to LLMMessage[]
      */
-    private convertChatMessagesToLLMMessages(messages: ChatMessage[]): LLMMessage[] {
+    private convertChatMessagesToLLMMessages(messages: ChatMessage[], originalToSanitized?: Record<string,string>): LLMMessage[] {
       const llmMessages: LLMMessage[] = [];
-      
+      logger.info('Converting ChatMessages to LLMMessages. Messages:', messages);
       for (const msg of messages) {
         if (msg.entity === ChatMessageEntity.USER) {
           // User message
@@ -296,6 +466,7 @@ export function createAgentNode(modelName: string, temperature: number): Runnabl
             });
           } else if ('action' in msg && msg.action === 'tool' && 'toolName' in msg && 'toolArgs' in msg && 'toolCallId' in msg) {
             // Tool call message - convert from ModelChatMessage structure
+            const fnName = originalToSanitized?.[msg.toolName!] || ToolNameMap.getSanitized(msg.toolName!);
             llmMessages.push({
               role: 'assistant',
               content: undefined,
@@ -303,7 +474,7 @@ export function createAgentNode(modelName: string, temperature: number): Runnabl
                 id: msg.toolCallId!,
                 type: 'function' as const,
                 function: {
-                  name: msg.toolName!,
+                  name: fnName,
                   arguments: JSON.stringify(msg.toolArgs),
                 }
               }],
@@ -312,9 +483,16 @@ export function createAgentNode(modelName: string, temperature: number): Runnabl
         } else if (msg.entity === ChatMessageEntity.TOOL_RESULT) {
           // Tool result message
           if ('toolCallId' in msg && 'resultText' in msg) {
+            const toolResultData = msg.resultText || null; // Use resultText if available
+            // Sanitize object payloads to avoid leaking session data and large fields
+            const sanitized = typeof toolResultData === 'object' && toolResultData !== null
+              ? this.sanitizeToolResultForText(toolResultData)
+              : toolResultData;
+
             llmMessages.push({
               role: 'tool',
-              content: String(msg.resultText),
+              // Ensure objects are serialized as JSON instead of "[object Object]"
+              content: typeof sanitized === 'string' ? sanitized : JSON.stringify(sanitized),
               tool_call_id: msg.toolCallId,
             });
           }
@@ -323,25 +501,77 @@ export function createAgentNode(modelName: string, temperature: number): Runnabl
       
       return llmMessages;
     }
-  }(modelName, temperature);
+  }();
   return agentNode;
 }
 
-export function createToolExecutorNode(state: AgentState): Runnable<AgentState, AgentState> {
-  const tools = getAgentToolsFromState(state); // Adjusted to use getAgentToolsFromState
+export function createToolExecutorNode(state: AgentState, provider: LLMProvider, modelName: string, miniModel?: string, nanoModel?: string): Runnable<AgentState, AgentState> {
+    // If AgentNode has pre-selected tool names, honor that set to ensure consistency
+  const selectedNames: string[] | undefined = (state.context as any)?.selectedToolNames;
+  let tools: ReturnType<typeof getTools>;
+  if (selectedNames && selectedNames.length > 0) {
+    const resolved: any[] = [];
+    for (const name of selectedNames) {
+      const inst = ToolRegistry.getRegisteredTool(name as any);
+      if (inst) { resolved.push(inst as any); }
+    }
+    tools = resolved as any;
+  } else {
+    tools = [] as unknown as ReturnType<typeof getTools>;
+  }
   const toolMap = new Map<string, ReturnType<typeof getTools>[number]>();
-  tools.forEach((tool: ReturnType<typeof getTools>[number]) => toolMap.set(tool.name, tool));
+  (tools as any[]).forEach((tool: any) => {
+    // Map original name
+    toolMap.set(tool.name, tool);
+
+    // Map sanitized name
+    const sanitized = ToolNameMap.getSanitized(tool.name);
+    if (sanitized && sanitized !== tool.name) {
+      toolMap.set(sanitized, tool);
+    }
+
+    // Also try to resolve any existing mapping from ToolNameMap
+    const resolvedOriginal = ToolNameMap.resolveOriginal(sanitized);
+    if (resolvedOriginal && resolvedOriginal !== tool.name && resolvedOriginal !== sanitized) {
+      toolMap.set(resolvedOriginal, tool);
+    }
+
+    // Debug logging for MCP tools
+    if (tool.name.includes('mcp:')) {
+      logger.debug('ToolExecutorNode: Mapped MCP tool', {
+        original: tool.name,
+        sanitized: sanitized,
+        resolvedOriginal: resolvedOriginal
+      });
+    }
+  });
+
+  logger.debug('ToolExecutorNode: Created toolMap with keys', Array.from(toolMap.keys()));
 
   const toolExecutorNode = new class ToolExecutorNode implements Runnable<AgentState, AgentState> {
     private toolMap: Map<string, ReturnType<typeof getTools>[number]>;
     private tracingProvider: TracingProvider;
+    private provider: LLMProvider;
+    private modelName: string;
+    private miniModel?: string;
+    private nanoModel?: string;
 
-    constructor(toolMap: Map<string, ReturnType<typeof getTools>[number]>) {
+    constructor(toolMap: Map<string, ReturnType<typeof getTools>[number]>, provider: LLMProvider, modelName: string, miniModel?: string, nanoModel?: string) {
       this.toolMap = toolMap;
       this.tracingProvider = createTracingProvider();
+      this.provider = provider;
+      this.modelName = modelName;
+      this.miniModel = miniModel;
+      this.nanoModel = nanoModel;
     }
 
-    async invoke(state: AgentState): Promise<AgentState> {
+    async invoke(state: AgentState, signal?: AbortSignal): Promise<AgentState> {
+      // Check if execution has been aborted
+      if (signal?.aborted) {
+        logger.info('ToolExecutorNode execution aborted');
+        throw new DOMException('Tool execution was cancelled', 'AbortError');
+      }
+
       const lastMessage = state.messages[state.messages.length - 1];
 
       // Expect the last message to be the MODEL action requesting the tool
@@ -356,35 +586,193 @@ export function createToolExecutorNode(state: AgentState): Runnable<AgentState, 
       const toolCallId = lastMessage.toolCallId; // Extract tool call ID for linking
       let resultText: string;
       let isError = false;
+      
+      // Initialize messages array with current state
+      const messages = [...state.messages];
+
+      const sanitizedToolName = ToolNameMap.getSanitized(toolName);
+      const resolvedOriginalName = ToolNameMap.resolveOriginal(toolName) || ToolNameMap.resolveOriginal(sanitizedToolName);
+
+      // Extract tool name for smart naming (declared here for reuse in fallback)
+      let extractedToolName: string | null = null;
+      if (toolName.startsWith('mcp:') && toolName.includes(':')) {
+        // Extract tool name from "mcp:server_id:tool_name" format
+        const parts = toolName.split(':');
+        if (parts.length >= 3) {
+          extractedToolName = parts.slice(2).join(':'); // Handle tool names with colons
+        }
+      } else if (toolName.includes('mcp_')) {
+        // Handle sanitized format "mcp_server_id_tool_name"
+        const mcpPrefix = toolName.match(/^mcp_[^_]+_(.+)$/);
+        if (mcpPrefix) {
+          extractedToolName = mcpPrefix[1].replace(/_/g, ':'); // Convert back underscores in tool name
+        }
+      }
+
+      // Debug logging for tool resolution
+      logger.debug('ToolExecutorNode: Resolving tool', {
+        requested: toolName,
+        sanitized: sanitizedToolName,
+        resolved: resolvedOriginalName,
+        availableTools: Array.from(this.toolMap.keys())
+      });
+
+      // Try multiple resolution strategies
+      let selectedTool = this.toolMap.get(toolName)
+        || (resolvedOriginalName ? this.toolMap.get(resolvedOriginalName) : undefined)
+        || this.toolMap.get(sanitizedToolName);
+
+      // Last resort: try to get tool directly from ToolRegistry
+      if (!selectedTool) {
+        logger.debug('ToolExecutorNode: Trying direct ToolRegistry lookup as fallback');
+
+        // Try all possible name variants
+        const namesToTry = [
+          toolName,
+          sanitizedToolName,
+          resolvedOriginalName,
+          extractedToolName
+        ].filter(Boolean) as string[];
+
+        for (const name of namesToTry) {
+          try {
+            const registryTool = ToolRegistry.getRegisteredTool(name as any);
+            if (registryTool) {
+              selectedTool = registryTool;
+              logger.debug('ToolExecutorNode: Found tool via direct registry lookup', {
+                requested: toolName,
+                foundAs: name,
+                toolType: registryTool.constructor.name
+              });
+              break;
+            }
+          } catch (error) {
+            // Ignore registry lookup errors
+          }
+        }
+      }
+
+      if (!selectedTool) {
+        // Gracefully handle missing tools: satisfy the tool call with an error result
+        // and route back to the Agent for a fresh LLM decision (retry without crashing the graph).
+        logger.error('ToolExecutorNode: Tool not found', {
+          requested: toolName,
+          sanitized: sanitizedToolName,
+          resolved: resolvedOriginalName,
+          availableTools: Array.from(this.toolMap.keys())
+        });
+
+        // Tracing: emit an event so we can diagnose missing tool issues in traces
+        try {
+          const tracingContext = state.context?.tracingContext;
+          if (tracingContext?.traceId) {
+            const available = Array.from(this.toolMap.keys());
+            await this.tracingProvider.createObservation({
+              id: `event-missing-tool-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+              name: `Missing Tool: ${toolName}`,
+              type: 'event',
+              startTime: new Date(),
+              parentObservationId: tracingContext.currentToolCallId || tracingContext.parentObservationId,
+              error: `Tool ${toolName} not found`,
+              input: {
+                requested: toolName,
+                sanitized: sanitizedToolName,
+                resolvedOriginal: resolvedOriginalName,
+                availableCount: available.length,
+                // Avoid huge payloads: include first 25 names
+                availableSample: available.slice(0, 25),
+              },
+              metadata: {
+                source: 'ToolExecutorNode',
+                phase: 'error',
+                category: 'missing-tool',
+                executionLevel: 'tool',
+              }
+            }, tracingContext.traceId);
+          }
+        } catch (traceErr) {
+          console.error('[HIERARCHICAL_TRACING] ToolExecutorNode: Failed to record missing-tool event', traceErr);
+        }
+
+        const resultText = `Error: Tool "${toolName}" is not available. Please choose another tool or provide a direct answer.`;
+        const toolResultMessage: ToolResultMessage = {
+          entity: ChatMessageEntity.TOOL_RESULT,
+          toolName,
+          resultText,
+          isError: true,
+          toolCallId,
+          error: resultText,
+          uiLane: 'chat',
+        };
+        messages.push(toolResultMessage);
+
+        const newState = {
+          ...state,
+          messages: [...messages],
+          error: resultText,
+        };
+        // Returning here makes the last message a TOOL_RESULT so routeNextNode() sends execution back to the AgentNode.
+        return newState;
+      }
 
       // Create span for tool execution
       const tracingContext = state.context?.tracingContext;
       let spanId: string | undefined;
       const spanStartTime = new Date();
+      const isConfigurableAgent = selectedTool instanceof ConfigurableAgentTool;
+      const configurableDescriptor = isConfigurableAgent ? await AgentDescriptorRegistry.getDescriptor(selectedTool.name) : null;
+
+      logger.debug(`ToolExecutorNode: Creating span for ${toolName}:`, {
+        hasTracingContext: !!tracingContext,
+        traceId: tracingContext?.traceId,
+        currentToolCallId: tracingContext?.currentToolCallId,
+        parentObservationId: tracingContext?.parentObservationId,
+        toolName,
+        toolCallId,
+        isConfigurableAgent,
+        executionLevel: isConfigurableAgent ? 'agentrunner' : 'tool'
+      });
 
       if (tracingContext?.traceId) {
-        spanId = `tool-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        spanId = `tool-exec-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         // Tool execution should be a span since it has duration
-        await this.tracingProvider.createObservation({
-          id: spanId,
-          name: `Tool: ${toolName}`,
-          type: 'span',
-          startTime: spanStartTime,
-          parentObservationId: tracingContext.parentObservationId,
-          input: toolArgs,
-          metadata: {
+        try {
+          await this.tracingProvider.createObservation({
+            id: spanId,
+            name: isConfigurableAgent ? `Agent Execution: ${toolName}` : `Tool Execution: ${toolName}`,
+            type: 'span',
+            startTime: spanStartTime,
+            parentObservationId: tracingContext.currentToolCallId || tracingContext.parentObservationId,
+            input: toolArgs,
+            metadata: {
+              toolName,
+              toolCallId,
+              phase: 'execution',
+              executionLevel: isConfigurableAgent ? 'agentrunner' : 'tool',
+              source: 'ToolExecutorNode',
+              isConfigurableAgent,
+              ...(configurableDescriptor ? {
+                agentVersion: configurableDescriptor.version,
+                agentName: configurableDescriptor.name,
+                promptHash: configurableDescriptor.promptHash,
+                toolsetHash: configurableDescriptor.toolsetHash
+              } : {})
+            }
+          }, tracingContext.traceId);
+          logger.debug(`ToolExecutorNode: Successfully created span:`, {
+            spanId,
             toolName,
-            toolCallId,
-            phase: 'execution'
-          }
-        }, tracingContext.traceId);
+            isConfigurableAgent,
+            spanName: isConfigurableAgent ? `Agent Execution: ${toolName}` : `Tool Execution: ${toolName}`
+          });
+        } catch (error) {
+          console.error(`[HIERARCHICAL_TRACING] ToolExecutorNode: Failed to create span:`, error);
+        }
+      } else {
+        logger.debug(`ToolExecutorNode: No tracing context or traceId available`);
       }
 
       try {
-        const selectedTool = this.toolMap.get(toolName);
-        if (!selectedTool) {
-          throw new Error(`Tool ${toolName} not found`);
-        }
 
         // Execute the tool with tracing context, casting toolArgs to any to satisfy the specific tool signature
         logger.info(`Executing tool ${toolName} with tracing context:`, { 
@@ -392,102 +780,282 @@ export function createToolExecutorNode(state: AgentState): Runnable<AgentState, 
           traceId: tracingContext?.traceId,
           toolName 
         });
-        console.log(`[TRACING DEBUG] Executing tool ${toolName} with tracing context:`, { 
-          hasTracingContext: !!tracingContext, 
+        logger.debug(`Executing tool ${toolName} with tracing context:`, {
+          hasTracingContext: !!tracingContext,
           traceId: tracingContext?.traceId,
-          toolName 
+          toolName
         });
         
-        console.log(`[TOOL EXECUTION PATH 1] ToolExecutorNode about to execute tool: ${toolName}`);
-        const result = await withTracingContext(tracingContext, async () => {
-          console.log(`[TOOL EXECUTION PATH 1] Inside withTracingContext for tool: ${toolName}`);
-          return await selectedTool.execute(toolArgs as any);
-        });
-        console.log(`[TOOL EXECUTION PATH 1] ToolExecutorNode completed tool: ${toolName}`);
+        logger.debug(`ToolExecutorNode about to execute tool: ${toolName}`);
+        
+        // Create enhanced tracing context for ConfigurableAgentTool execution
+        let executionContext = tracingContext || null;
+        if (isConfigurableAgent && tracingContext && spanId) {
+          executionContext = {
+            ...tracingContext,
+            currentAgentSpanId: spanId,
+            parentObservationId: spanId, // Agent span becomes parent for AgentRunner operations
+            executionLevel: 'agentrunner' as const,
+            agentContext: {
+              agentName: toolName,
+              agentType: toolName,
+              iterationCount: 0
+            }
+          };
+          logger.debug(`ToolExecutorNode: Created enhanced tracing context for agent:`, {
+            agentSpanId: spanId,
+            agentName: toolName,
+            executionLevel: executionContext.executionLevel,
+            parentObservationId: executionContext.parentObservationId,
+            currentAgentSpanId: executionContext.currentAgentSpanId
+          });
+        }  
+              
+        // Check for abort before tool execution
+        if (signal?.aborted) {
+          logger.info('ToolExecutorNode execution aborted before tool execution');
+          throw new DOMException('Tool execution was cancelled', 'AbortError');
+        }
 
-        // Special handling for finalize_with_critique tool results to ensure proper format
-        if (toolName === 'finalize_with_critique') {
+        const result = await withTracingContext(executionContext, async () => {
+          logger.debug(`Inside withTracingContext for tool: ${toolName}`);
+
+          // Get configuration from manager (supports overrides)
+          const configManager = LLMConfigurationManager.getInstance();
+          const config = configManager.getConfiguration();
+
+          return await selectedTool.execute(toolArgs as any, {
+            apiKey: config.apiKey,
+            provider: config.provider,
+            model: config.mainModel,
+            miniModel: config.miniModel,
+            nanoModel: config.nanoModel,
+            abortSignal: signal || state.context.abortSignal,
+            ...(configurableDescriptor ? { agentDescriptor: configurableDescriptor } : {})
+          });
+        });
+        logger.debug(`ToolExecutorNode completed tool: ${toolName}`);
+
+        // Check if result contains agentSession (ConfigurableAgentTool result)
+        if (selectedTool instanceof ConfigurableAgentTool && result && typeof result === 'object' && 'agentSession' in result) {
+          const agentSession = result.agentSession as any;
+          logger.debug(`Captured agent session from ${toolName}:`, agentSession);
+          
+          // Log detailed session information
+          logger.debug(`Session Details:`, {
+            sessionId: agentSession.sessionId,
+            agentName: agentSession.agentName,
+            status: agentSession.status,
+            messageCount: agentSession.messages?.length || 0,
+            messages: agentSession.messages,
+            nestedSessionCount: agentSession.nestedSessions?.length || 0,
+            nestedSessions: agentSession.nestedSessions,
+            tools: agentSession.tools,
+            iterationCount: agentSession.iterationCount,
+            maxIterations: agentSession.maxIterations,
+            terminationReason: agentSession.terminationReason
+          });
+          
+          // Log tool calls specifically
+          if (agentSession.messages) {
+            const toolCalls = agentSession.messages.filter((msg: any) => msg.type === 'tool_call');
+            const toolResults = agentSession.messages.filter((msg: any) => msg.type === 'tool_result');
+            logger.debug(`Tool Analysis:`, {
+              totalMessages: agentSession.messages.length,
+              toolCallCount: toolCalls.length,
+              toolResultCount: toolResults.length,
+              toolCalls: toolCalls,
+              toolResults: toolResults,
+              messageTypes: agentSession.messages.map((msg: any) => ({ type: msg.type, id: msg.id }))
+            });
+          }
+          
+          // Create AgentSessionMessage for UI rendering ONLY if this is a top-level agent (no parent)
+          const parentSessionId = (agentSession && typeof agentSession === 'object') ? agentSession.parentSessionId : undefined;
+          if (!parentSessionId) {
+            const agentSessionMessage: AgentSessionMessage = {
+              entity: ChatMessageEntity.AGENT_SESSION,
+              agentSession: result.agentSession as any,
+              summary: `Agent ${toolName} execution completed`
+            };
+            logger.debug(`Created top-level AgentSessionMessage:`, {
+              sessionId: (result.agentSession as any).sessionId,
+              agentName: (result.agentSession as any).agentName,
+              status: (result.agentSession as any).status
+            });
+            messages.push(agentSessionMessage);
+          } else {
+            logger.debug(`Skipping top-level AgentSessionMessage for nested child`, {
+              sessionId: (result.agentSession as any).sessionId,
+              parentSessionId
+            });
+          }
+        }
+
+        // Special handling for ConfigurableAgentTool results
+        if (selectedTool instanceof ConfigurableAgentTool && result && typeof result === 'object' &&
+            ('output' in result || 'error' in result || 'success' in result)) {
+          // For ConfigurableAgentTool, only send the output/error fields to the LLM, never intermediateSteps
+          const agentResult = result as any; // Cast to any to access ConfigurableAgentResult properties
+          // Prioritize summary.content (detailed LLM analysis), fallback to output/error
+          resultText = agentResult.summary?.content
+            || agentResult.output
+            || (agentResult.error ? `Error: ${agentResult.error}` : 'No output');
+          logger.debug(`Filtered ConfigurableAgentTool result for LLM:`, {
+            toolName,
+            originalResult: result,
+            filteredResult: resultText,
+            hasSummary: !!agentResult.summary?.content
+          });
+        } else if (toolName === 'finalize_with_critique') {
           logger.debug('ToolExecutorNode: finalize_with_critique result:', result);
           // Make sure the result is properly stringified
           resultText = typeof result === 'string' ? result : JSON.stringify(result);
         } else {
-          resultText = JSON.stringify(result, null, 2);
+          // If the result is effectively image-only, replace with placeholder to avoid sending large base64 blobs
+          const isObject = typeof result === 'object' && result !== null;
+          const likelyOnlyImage = isObject && (('imageData' in (result as any)) || ('dataUrl' in (result as any))) &&
+            Object.keys(result as any).filter(k => !['imageData', 'dataUrl', 'success', 'agentSession'].includes(k)).length === 0;
+          resultText = likelyOnlyImage
+            ? 'Image omitted (model lacks vision).'
+            : JSON.stringify(result, null, 2);
         }
 
         isError = (typeof result === 'object' && result !== null && 'error' in result);
 
         // Complete the span with success
         if (spanId && tracingContext?.traceId) {
-          await this.tracingProvider.createObservation({
-            id: `${spanId}-complete`,
-            name: `Tool Complete: ${toolName}`,
-            type: 'span',
-            startTime: new Date(),
-            endTime: new Date(),
-            parentObservationId: tracingContext.parentObservationId,
-            output: result,
-            metadata: {
+          try {
+            const completionMetadata = {
               toolName,
               toolCallId,
-              phase: 'complete',
+              phase: 'completed',
               duration: Date.now() - spanStartTime.getTime(),
-              parentSpanId: spanId
-            }
-          }, tracingContext.traceId);
+              success: !isError,
+              executionLevel: isConfigurableAgent ? 'agentrunner' : 'tool',
+              source: 'ToolExecutorNode',
+              isConfigurableAgent,
+              ...(isConfigurableAgent && {
+                agentName: toolName,
+                agentType: toolName,
+                resultType: result && typeof result === 'object' && 'agentSession' in result ? 'agent_result' : 'unknown'
+              }),
+              ...(configurableDescriptor ? {
+                agentVersion: configurableDescriptor.version,
+                promptHash: configurableDescriptor.promptHash,
+                toolsetHash: configurableDescriptor.toolsetHash
+              } : {})
+            };
+
+            await this.tracingProvider.updateObservation(spanId, {
+              endTime: new Date(),
+              output: isConfigurableAgent && result && typeof result === 'object' && 'output' in result 
+                ? (result as any).output 
+                : result,
+              metadata: completionMetadata
+            });
+            logger.debug(`ToolExecutorNode: Successfully completed span:`, {
+              spanId,
+              toolName,
+              success: !isError,
+              isConfigurableAgent,
+              duration: Date.now() - spanStartTime.getTime()
+            });
+          } catch (error) {
+            console.error(`[HIERARCHICAL_TRACING] ToolExecutorNode: Failed to complete span:`, error);
+          }
         }
 
       } catch (err) {
+        // Propagate cancellation so the graph can handle AbortError cleanly
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          throw err;
+        }
         resultText = `Error during tool execution: ${err instanceof Error ? err.message : String(err)}`;
         logger.error(resultText, { tool: toolName, args: toolArgs });
         isError = true;
 
         // Complete the span with error
         if (spanId && tracingContext?.traceId) {
-          await this.tracingProvider.createObservation({
-            id: `${spanId}-error`,
-            name: `Tool Error: ${toolName}`,
-            type: 'span',
-            startTime: new Date(),
-            endTime: new Date(),
-            parentObservationId: tracingContext.parentObservationId,
-            error: err instanceof Error ? err.message : String(err),
-            metadata: {
+          try {
+            const errorMetadata = {
               toolName,
               toolCallId,
               phase: 'error',
               duration: Date.now() - spanStartTime.getTime(),
-              parentSpanId: spanId
-            }
-          }, tracingContext.traceId);
+              success: false,
+              executionLevel: isConfigurableAgent ? 'agentrunner' : 'tool',
+              source: 'ToolExecutorNode',
+              isConfigurableAgent,
+              ...(isConfigurableAgent && {
+                agentName: toolName,
+                agentType: toolName
+              }),
+              ...(configurableDescriptor ? {
+                agentVersion: configurableDescriptor.version,
+                promptHash: configurableDescriptor.promptHash,
+                toolsetHash: configurableDescriptor.toolsetHash
+              } : {})
+            };
+
+            await this.tracingProvider.updateObservation(spanId, {
+              endTime: new Date(),
+              error: err instanceof Error ? err.message : String(err),
+              metadata: errorMetadata
+            });
+            logger.debug(`ToolExecutorNode: Successfully completed span with error:`, {
+              spanId,
+              toolName,
+              error: err instanceof Error ? err.message : String(err),
+              isConfigurableAgent
+            });
+          } catch (error) {
+            console.error(`[HIERARCHICAL_TRACING] ToolExecutorNode: Failed to complete span with error:`, error);
+          }
         }
       }
 
       // Create the NEW ToolResultMessage
+      const isAgentTool = selectedTool instanceof ConfigurableAgentTool;
       const toolResultMessage: ToolResultMessage = {
         entity: ChatMessageEntity.TOOL_RESULT,
         toolName,
         resultText,
         isError,
         toolCallId, // Link back to the tool call for OpenAI format
-        ...(isError && { error: resultText })
+        ...(isError && { error: resultText }),
+        uiLane: isAgentTool ? 'agent' as const : 'chat',
       };
 
       logger.debug('ToolExecutorNode: Adding tool result message with toolCallId:', { toolCallId, toolResultMessage });
 
+      // Add the result message to the final messages array
+      messages.push(toolResultMessage);
+      
       // Add the result message to the state
-      return {
+      const newState = {
         ...state,
-        messages: [...state.messages, toolResultMessage],
+        messages: [...messages],
         error: isError ? resultText : undefined,
       };
+      
+      logger.debug(`Returning state with ${newState.messages.length} messages`);
+      
+      return newState;
     }
-  }(toolMap);
+  }(toolMap, provider, modelName, miniModel, nanoModel);
   return toolExecutorNode;
 }
 
 export function createFinalNode(): Runnable<AgentState, AgentState> {
   const finalNode = new class FinalNode implements Runnable<AgentState, AgentState> {
-    async invoke(state: AgentState): Promise<AgentState> {
+    async invoke(state: AgentState, signal?: AbortSignal): Promise<AgentState> {
+      // Check if execution has been aborted (for consistency)
+      if (signal?.aborted) {
+        logger.info('FinalNode execution aborted');
+        throw new DOMException('Execution was cancelled', 'AbortError');
+      }
+
       const lastMessage = state.messages[state.messages.length - 1];
       if (lastMessage?.entity !== ChatMessageEntity.MODEL || !lastMessage.isFinalAnswer) {
         logger.warn('FinalNode: Invoked, but last message was not a final MODEL answer as expected.');
@@ -501,3 +1069,4 @@ export function createFinalNode(): Runnable<AgentState, AgentState> {
   }();
   return finalNode;
 }
+

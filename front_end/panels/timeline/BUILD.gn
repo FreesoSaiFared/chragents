@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -41,6 +41,7 @@ devtools_pre_built("easter-egg") {
 generate_css("css_files") {
   sources = [
     "thirdPartyTreeView.css",
+    "timelineDetailsView.css",
     "timelineFlameChartView.css",
     "timelineFlamechartPopover.css",
     "timelineHistoryManager.css",
@@ -64,10 +65,8 @@ devtools_module("timeline") {
     "CompatibilityTracksAppender.ts",
     "CountersGraph.ts",
     "EntriesFilter.ts",
-    "EventsSerializer.ts",
     "EventsTimelineTreeView.ts",
     "ExtensionTrackAppender.ts",
-    "FreshRecording.ts",
     "GPUTrackAppender.ts",
     "Initiators.ts",
     "InteractionsTrackAppender.ts",
@@ -100,6 +99,7 @@ devtools_module("timeline") {
     "TimelineUIUtils.ts",
     "TimingsTrackAppender.ts",
     "TracingLayerTree.ts",
+    "TrackConfigBanner.ts",
     "TrackConfiguration.ts",
     "UIDevtoolsController.ts",
     "UIDevtoolsUtils.ts",
@@ -112,9 +112,11 @@ devtools_module("timeline") {
     "../../generated:protocol",
     "../../models/cpu_profile:bundle",
     "../../models/extensions:bundle",
+    "../../models/geometry:bundle",
     "../../models/source_map_scopes:bundle",
     "../../models/text_utils:bundle",
     "../../models/trace:bundle",
+    "../../models/trace_source_maps_resolver:bundle",
     "../../models/workspace:bundle",
     "../../panels/coverage:bundle",
     "../../panels/layer_viewer:bundle",
@@ -196,8 +198,6 @@ ts_library("unittests") {
     "Breadcrumbs.test.ts",
     "CountersGraph.test.ts",
     "EntriesFilter.test.ts",
-    "EventsSerializer.test.ts",
-    "FreshRecording.test.ts",
     "Initiators.test.ts",
     "ModificationsManager.test.ts",
     "RecordingMetadata.test.ts",
@@ -216,6 +216,7 @@ ts_library("unittests") {
     "TimelineSelection.test.ts",
     "TimelineTreeView.test.ts",
     "TimelineUIUtils.test.ts",
+    "TrackConfigBanner.test.ts",
     "TrackConfiguration.test.ts",
   ]
 

@@ -2,16 +2,34 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as SDK from '../../../core/sdk/sdk.js';
 import * as Protocol from '../../../generated/protocol.js';
-import * as Utils from '../common/utils.js';
+import * as UtilsUniversal from '../common/utils-universal.js';
 import type { AccessibilityNode } from '../common/context.js';
-import { AgentService } from '../core/AgentService.js';
 import { createLogger } from '../core/Logger.js';
-import { LLMClient } from '../LLM/LLMClient.js';
-import { AIChatPanel } from '../ui/AIChatPanel.js';
+import { callLLMWithTracing } from './LLMTracingWrapper.js';
+import type { Tool, LLMContext } from './Tools.js';
+import { LLMResponseParser } from '../LLM/LLMResponseParser.js';
+import { getAdapter } from '../cdp/getAdapter.js';
+import type { CDPSessionAdapter } from '../cdp/CDPSessionAdapter.js';
 
-import type { Tool } from './Tools.js';
+// Detect if we're in a Node.js environment (eval runner, tests)
+const isNodeEnvironment = typeof window === 'undefined' || typeof document === 'undefined';
+
+// Lazy-loaded browser-only dependencies for API key fallback
+let AgentService: typeof import('../core/AgentService.js').AgentService | null = null;
+let agentServiceLoaded = false;
+
+async function ensureAgentService(): Promise<boolean> {
+  if (isNodeEnvironment) return false;
+  if (!agentServiceLoaded) {
+    agentServiceLoaded = true;
+    try {
+      const agentServiceModule = await import('../core/AgentService.js');
+      AgentService = agentServiceModule.AgentService;
+    } catch { return false; }
+  }
+  return AgentService !== null;
+}
 
 const logger = createLogger('Tool:StreamlinedSchemaExtractor');
 
@@ -39,37 +57,27 @@ export class StreamlinedSchemaExtractorTool implements Tool<StreamlinedSchemaExt
   description = `Tool for extracting structured data from web pages using JSON schema.
   - Returns: { success, data, error (if any) }`;
 
-  private async createToolTracingObservation(toolName: string, args: any): Promise<void> {
-    try {
-      const { getCurrentTracingContext, createTracingProvider } = await import('../tracing/TracingConfig.js');
-      const context = getCurrentTracingContext();
-      if (context) {
-        const tracingProvider = createTracingProvider();
-        await tracingProvider.createObservation({
-          id: `event-tool-execute-${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          name: `Tool Execute: ${toolName}`,
-          type: 'event',
-          startTime: new Date(),
-          input: { 
-            toolName, 
-            toolArgs: args,
-            contextInfo: `Direct tool execution in ${toolName}`
-          },
-          metadata: {
-            executionPath: 'direct-tool',
-            toolName
-          }
-        }, context.traceId);
-      }
-    } catch (tracingError) {
-      // Don't fail tool execution due to tracing errors
-      console.error(`[TRACING ERROR in ${toolName}]`, tracingError);
-    }
-  }
 
   private readonly MAX_URL_RETRIES = 4;
   private readonly MAX_JSON_RETRIES = 2;
   private readonly RETRY_DELAY_MS = 10000; // 10 second delay between retries
+
+  private async sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      if (!ms) return resolve();
+      const timer = setTimeout(() => { cleanup(); resolve(); }, ms);
+      const onAbort = () => { clearTimeout(timer); cleanup(); reject(new DOMException('The operation was aborted', 'AbortError')); };
+      const cleanup = () => { signal?.removeEventListener('abort', onAbort); };
+      if (signal) {
+        if (signal.aborted) {
+          clearTimeout(timer);
+          cleanup();
+          return reject(new DOMException('The operation was aborted', 'AbortError'));
+        }
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    });
+  }
 
   schema = {
     type: 'object',
@@ -91,16 +99,15 @@ export class StreamlinedSchemaExtractorTool implements Tool<StreamlinedSchemaExt
   };
 
 
-  async execute(args: StreamlinedSchemaExtractionArgs): Promise<StreamlinedExtractionResult> {
-    await this.createToolTracingObservation(this.name, args);
+  async execute(args: StreamlinedSchemaExtractionArgs, ctx?: LLMContext): Promise<StreamlinedExtractionResult> {
     try {
-      const context = await this.setupExecution(args);
+      const context = await this.setupExecution(args, ctx);
       if (context.success !== true) {
         return context as StreamlinedExtractionResult;
       }
 
-      const extractionResult = await this.performExtraction(context as ExecutionContext);
-      const finalData = await this.resolveUrlsWithRetry(extractionResult, context as ExecutionContext);
+      const extractionResult = await this.performExtraction(context as ExecutionContext, ctx);
+      const finalData = await this.resolveUrlsWithRetry(extractionResult, context as ExecutionContext, ctx);
 
       return {
         success: true,
@@ -108,7 +115,7 @@ export class StreamlinedSchemaExtractorTool implements Tool<StreamlinedSchemaExt
       };
 
     } catch (error) {
-      logger.error('Execution Error:', error);
+      logger.error('Execution Error:', error instanceof Error ? error.message : String(error));
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
@@ -117,12 +124,35 @@ export class StreamlinedSchemaExtractorTool implements Tool<StreamlinedSchemaExt
     }
   }
 
-  private async setupExecution(args: StreamlinedSchemaExtractionArgs): Promise<ExecutionContext | StreamlinedExtractionResult> {
+  private async setupExecution(args: StreamlinedSchemaExtractionArgs, ctx?: LLMContext): Promise<ExecutionContext | StreamlinedExtractionResult> {
     const { schema, instruction } = args;
-    const agentService = AgentService.getInstance();
-    const apiKey = agentService.getApiKey();
 
-    if (!apiKey) {
+    // Get CDP adapter (works in both DevTools and eval runner)
+    const adapter = await getAdapter(ctx);
+    if (!adapter) {
+      return {
+        success: false,
+        data: null,
+        error: 'No browser connection available'
+      };
+    }
+
+    // Get API key from context first, fallback to AgentService in browser
+    let apiKey = ctx?.apiKey;
+    if (!apiKey && !isNodeEnvironment) {
+      await ensureAgentService();
+      if (AgentService) {
+        apiKey = AgentService.getInstance().getApiKey() ?? undefined;
+      }
+    }
+
+    // Get provider from context
+    const provider = ctx?.provider;
+
+    // LiteLLM and BrowserOperator have optional API keys
+    const requiresApiKey = provider !== 'litellm' && provider !== 'browseroperator';
+
+    if (requiresApiKey && !apiKey) {
       return {
         success: false,
         data: null,
@@ -138,46 +168,77 @@ export class StreamlinedSchemaExtractorTool implements Tool<StreamlinedSchemaExt
       };
     }
 
-    const target = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
-    if (!target) {
-      return {
-        success: false,
-        error: 'No page target available',
-        data: null
-      };
-    }
-
-    const accessibilityData = await this.getAccessibilityData(target);
+    const accessibilityData = await this.getAccessibilityData(adapter);
 
     return {
       success: true,
       schema,
       instruction,
-      apiKey,
+      apiKey: apiKey || '',  // Use empty string for BrowserOperator
       urlMappings: accessibilityData.urlMappings,
       treeText: accessibilityData.treeText
     };
   }
 
-  private async getAccessibilityData(target: SDK.Target.Target): Promise<{urlMappings: Record<string, string>, treeText: string}> {
-    const processedTreeResult = await Utils.getAccessibilityTree(target);
+  private async getAccessibilityData(adapter: CDPSessionAdapter): Promise<{urlMappings: Record<string, string>, treeText: string}> {
+    // Get raw accessibility tree nodes to build URL mapping
+    const accessibilityAgent = adapter.accessibilityAgent();
+    const rawAxTree = await accessibilityAgent.invoke<{nodes: Protocol.Accessibility.AXNode[]}>('getFullAXTree', {});
+
+    // Build URL mapping from raw accessibility nodes
+    const urlMappings = this.buildUrlMapping(rawAxTree?.nodes || []);
+    logger.debug(`Built URL mapping with ${Object.keys(urlMappings).length} entries`);
+
+    // Get the processed accessibility tree text
+    const processedTreeResult = await UtilsUniversal.getAccessibilityTree(adapter);
+
     return {
       treeText: processedTreeResult.simplified,
-      urlMappings: processedTreeResult.idToUrl || {}
+      urlMappings
     };
   }
 
-  private async performExtraction(context: ExecutionContext): Promise<any> {
+  /**
+   * Build a mapping from accessibility node IDs to URLs
+   * Extracts URLs from nodes that have the Url property
+   */
+  private buildUrlMapping(nodes: Protocol.Accessibility.AXNode[]): Record<string, string> {
+    const urlMapping: Record<string, string> = {};
+
+    for (const node of nodes) {
+      // Find the URL property in node properties
+      const urlProperty = node.properties?.find(p =>
+        p.name === Protocol.Accessibility.AXPropertyName.Url
+      );
+
+      // If URL property exists and has a string value, add to mapping
+      if (urlProperty?.value?.type === 'string' && urlProperty.value.value && node.nodeId) {
+        urlMapping[node.nodeId] = String(urlProperty.value.value);
+      }
+    }
+
+    // Log some sample entries for debugging
+    const mappingSize = Object.keys(urlMapping).length;
+    if (mappingSize > 0) {
+      const sampleEntries = Object.entries(urlMapping).slice(0, 3);
+      logger.debug('Sample URL mappings:', sampleEntries);
+    }
+
+    return urlMapping;
+  }
+
+  private async performExtraction(context: ExecutionContext, ctx?: LLMContext): Promise<any> {
     return await this.extractWithJsonRetry(
-      context.schema, 
-      context.treeText, 
-      context.instruction, 
-      context.apiKey,
-      this.MAX_JSON_RETRIES
+      context.schema,
+      context.treeText,
+      context.instruction,
+      context.apiKey || '',  // Use empty string for BrowserOperator
+      this.MAX_JSON_RETRIES,
+      ctx
     );
   }
 
-  private async resolveUrlsWithRetry(extractionResult: any, context: ExecutionContext): Promise<any> {
+  private async resolveUrlsWithRetry(extractionResult: any, context: ExecutionContext, ctx?: LLMContext): Promise<any> {
     const urlFields = this.findUrlFields(context.schema);
     let finalData = this.resolveUrlsDirectly(extractionResult, context.urlMappings, urlFields);
 
@@ -191,9 +252,9 @@ export class StreamlinedSchemaExtractorTool implements Tool<StreamlinedSchemaExt
 
       logger.debug(`Attempt ${attempt}: Found ${unresolvedNodeIds.length} unresolved nodeIDs, asking LLM to try different ones`);
       
-      // Add delay before retry to prevent overloading the LLM
+      // Add delay before retry to prevent overloading the LLM (abortable)
       if (attempt > 1) {
-        await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY_MS));
+        await this.sleep(this.RETRY_DELAY_MS, ctx?.abortSignal);
       }
       
       const retryResult = await this.retryUrlResolution(
@@ -202,11 +263,12 @@ export class StreamlinedSchemaExtractorTool implements Tool<StreamlinedSchemaExt
         context.instruction,
         extractionResult,
         unresolvedNodeIds,
-        context.apiKey,
-        attempt
+        context.apiKey || '',  // Use empty string for BrowserOperator
+        attempt,
+        ctx
       );
       
-      if (retryResult) {
+      if (retryResult && typeof retryResult === 'object') {
         finalData = this.resolveUrlsDirectly(retryResult, context.urlMappings, urlFields);
         extractionResult = retryResult; // Update for next iteration
       } else {
@@ -223,7 +285,8 @@ export class StreamlinedSchemaExtractorTool implements Tool<StreamlinedSchemaExt
     treeText: string,
     instruction: string,
     apiKey: string,
-    maxRetries: number
+    maxRetries: number,
+    ctx?: LLMContext
   ): Promise<any> {
     const systemPrompt = `You are a data extraction agent. Extract structured data from the accessibility tree according to the provided schema.
 
@@ -266,30 +329,57 @@ IMPORTANT: Only extract data that you can see in the accessibility tree above. D
           extractionPrompt += `\n\nIMPORTANT: Previous attempt ${attempt - 1} failed due to invalid JSON. Please ensure you return ONLY valid JSON that can be parsed. Do not hallucinate any data - only extract what actually exists in the tree.`;
         }
 
-        const { model, provider } = AIChatPanel.getMiniModelWithProvider();
-        const llm = LLMClient.getInstance();
-        const llmResponse = await llm.call({
-          provider,
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: extractionPrompt }
-          ],
-          systemPrompt: systemPrompt,
-          temperature: 0.1
-        });
-        const result = llmResponse.text;
+        if (!ctx?.provider || !ctx.miniModel) {
+          throw new Error('Missing LLM context (provider/miniModel) for streamlined extraction');
+        }
+        const provider = ctx.provider;
+        const model = ctx.miniModel;
+        const llmResponse = await callLLMWithTracing(
+          {
+            provider,
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: extractionPrompt }
+            ],
+            systemPrompt: systemPrompt,
+            temperature: 0.1,
+            options: { retryConfig: { maxRetries: 3, baseDelayMs: 1500 } }
+          },
+          {
+            toolName: this.name,
+            operationName: 'streamlined_extraction',
+            context: 'json_extraction_with_retry',
+            additionalMetadata: {
+              attempt,
+              maxRetries,
+              instructionLength: instruction.length,
+              treeTextLength: treeText.length
+            }
+          }
+        );
+        const text = llmResponse.text || '';
+        // Parse using LLMResponseParser with strict mode then fallbacks
+        let parsed: any;
+        try {
+          parsed = LLMResponseParser.parseStrictJSON(text);
+        } catch {
+          parsed = LLMResponseParser.parseJSONWithFallbacks(text);
+        }
         
-        logger.debug(`JSON extraction successful on attempt ${attempt}`);
-        return result;
+        if (parsed && typeof parsed === 'object') {
+          logger.debug(`JSON extraction successful on attempt ${attempt}`);
+          return parsed;
+        }
+        throw new Error('Parsed extraction result is not an object/array');
 
       } catch (error) {
         if (attempt <= maxRetries) {
           logger.warn(`JSON parsing failed on attempt ${attempt}, retrying...`, error);
-          // Add delay before next attempt to prevent overloading the LLM
-          await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY_MS));
+          // Add delay before next attempt to prevent overloading the LLM (abortable)
+          await this.sleep(this.RETRY_DELAY_MS, ctx?.abortSignal);
         } else {
-          logger.error(`JSON extraction failed after ${attempt} attempts:`, error);
+          logger.error(`JSON extraction failed after ${attempt} attempts:`, error instanceof Error ? error.message : String(error));
           throw new Error(`Data extraction failed after ${attempt} attempts: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
@@ -345,7 +435,8 @@ IMPORTANT: Only extract data that you can see in the accessibility tree above. D
     originalResult: any,
     unresolvedNodeIds: string[],
     apiKey: string,
-    attemptNumber: number
+    attemptNumber: number,
+    ctx?: LLMContext
   ): Promise<any> {
     const systemPrompt = `You are a data extraction agent. A previous extraction attempt was made but some nodeIDs could not be resolved to URLs.
 
@@ -392,23 +483,47 @@ Extract data according to the schema. For URL fields, return different nodeId nu
 CRITICAL: Only use nodeIds that you can actually see in the accessibility tree above. Do not invent, guess, or make up any nodeIds.`;
 
     try {
-      const { model, provider } = AIChatPanel.getMiniModelWithProvider();
-      const llm = LLMClient.getInstance();
-      const llmResponse = await llm.call({
-        provider,
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: extractionPrompt }
-        ],
-        systemPrompt: systemPrompt,
-        temperature: 0.1
-      });
-      const result = llmResponse.text;
-      
-      return result;
+      if (!ctx?.provider || !ctx.miniModel) {
+        throw new Error('Missing LLM context (provider/miniModel) for URL retry extraction');
+      }
+      const provider = ctx.provider;
+      const model = ctx.miniModel;
+      const llmResponse = await callLLMWithTracing(
+        {
+          provider,
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: extractionPrompt }
+          ],
+          systemPrompt: systemPrompt,
+          temperature: 0.1,
+          options: { retryConfig: { maxRetries: 3, baseDelayMs: 1500 } }
+        },
+        {
+          toolName: this.name,
+          operationName: 'retry_url_resolution',
+          context: 'url_resolution_retry',
+          additionalMetadata: {
+            attemptNumber,
+            unresolvedCount: unresolvedNodeIds.length,
+            failedNodeIds: unresolvedNodeIds
+          }
+        }
+      );
+      const text = llmResponse.text || '';
+      try {
+        return LLMResponseParser.parseStrictJSON(text);
+      } catch {
+        try {
+          return LLMResponseParser.parseJSONWithFallbacks(text);
+        } catch {
+          logger.warn('Retry URL resolution returned non-JSON; aborting this attempt');
+          return null;
+        }
+      }
     } catch (error) {
-      logger.error(`Error in URL retry attempt ${attemptNumber}:`, error);
+      logger.error(`Error in URL retry attempt ${attemptNumber}:`, error instanceof Error ? error.message : String(error));
       return null;
     }
   }

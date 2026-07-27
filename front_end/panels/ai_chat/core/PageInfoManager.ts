@@ -2,12 +2,57 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as SDK from '../../../core/sdk/sdk.js';
-import * as Utils from '../common/utils.js'; // Path relative to core/ assuming utils.ts will be in common/ later, this will be common/utils.js
-import { VisitHistoryManager } from '../tools/VisitHistoryManager.js'; // Path relative to core/ assuming VisitHistoryManager.ts will be in core/
 import { createLogger } from './Logger.js';
 
 const logger = createLogger('PageInfoManager');
+
+// Detect if we're in a Node.js environment (eval runner, tests)
+const isNodeEnvironment = typeof window === 'undefined' || typeof document === 'undefined';
+
+// Dynamic imports for browser-only dependencies (SDK, etc.)
+// These are only loaded when needed and only in browser context
+let SDK: typeof import('../../../core/sdk/sdk.js') | null = null;
+let Utils: typeof import('../common/utils.js') | null = null;
+let VisitHistoryManager: typeof import('../tools/VisitHistoryManager.js').VisitHistoryManager | null = null;
+let FileStorageManager: typeof import('../tools/FileStorageManager.js').FileStorageManager | null = null;
+let MemoryBlockManager: typeof import('../memory/index.js').MemoryBlockManager | null = null;
+let injectShadowPiercer: typeof import('../dom/ShadowPiercer.js').injectShadowPiercer | null = null;
+
+// Initialize browser-only dependencies
+async function initializeBrowserDependencies(): Promise<boolean> {
+  if (isNodeEnvironment) {
+    logger.debug('Skipping browser dependencies in Node environment');
+    return false;
+  }
+
+  try {
+    const [sdkModule, utilsModule, visitHistoryModule, fileStorageModule, memoryModule, shadowPiercerModule] = await Promise.all([
+      import('../../../core/sdk/sdk.js'),
+      import('../common/utils.js'),
+      import('../tools/VisitHistoryManager.js'),
+      import('../tools/FileStorageManager.js'),
+      import('../memory/index.js'),
+      import('../dom/ShadowPiercer.js'),
+    ]);
+
+    SDK = sdkModule;
+    Utils = utilsModule;
+    VisitHistoryManager = visitHistoryModule.VisitHistoryManager;
+    FileStorageManager = fileStorageModule.FileStorageManager;
+    MemoryBlockManager = memoryModule.MemoryBlockManager;
+    injectShadowPiercer = shadowPiercerModule.injectShadowPiercer;
+
+    logger.debug('Browser dependencies loaded successfully');
+    return true;
+  } catch (error) {
+    logger.warn('Failed to load browser dependencies:', error);
+    return false;
+  }
+}
+
+// Flag to track if we've tried to initialize
+let browserDepsInitialized = false;
+let browserDepsAvailable = false;
 
 // Add PageInfoManager class after imports but before other code
 export class PageInfoManager {
@@ -16,6 +61,7 @@ export class PageInfoManager {
   private accessibilityTree: string | null = null;
   private iframeContent: Array<{ role: string, name?: string, contentSimplified?: string }> | null = null;
   private listeners = new Set<(info: { url: string, title: string } | null) => void>();
+  private initialized = false;
 
   static getInstance(): PageInfoManager {
     if (!PageInfoManager.instance) {
@@ -25,11 +71,46 @@ export class PageInfoManager {
   }
 
   private constructor() {
+    // Defer initialization to async method
+    // Browser-specific setup will happen in ensureInitialized()
+  }
+
+  /**
+   * Ensures browser dependencies are loaded and SDK listeners are set up.
+   * Safe to call multiple times - only initializes once.
+   */
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+    this.initialized = true;
+
+    // Skip browser initialization in Node environment
+    if (isNodeEnvironment) {
+      logger.debug('PageInfoManager running in Node environment - SDK features disabled');
+      return;
+    }
+
+    // Load browser dependencies if not already loaded
+    if (!browserDepsInitialized) {
+      browserDepsInitialized = true;
+      browserDepsAvailable = await initializeBrowserDependencies();
+    }
+
+    if (!browserDepsAvailable || !SDK) {
+      logger.debug('Browser dependencies not available');
+      return;
+    }
+
     // Set up navigation event listeners
+    if (!SDK) {
+      logger.warn('SDK not loaded, skipping target observation');
+      return;
+    }
     SDK.TargetManager.TargetManager.instance().observeTargets({
-      targetAdded: (target: SDK.Target.Target) => {
-        if (target.type() === SDK.Target.Type.FRAME) {
+      targetAdded: (target) => {
+        if (SDK && target.type() === SDK.Target.Type.FRAME) {
           this.updatePageInfo();
+          // Inject shadow piercer for shadow DOM access
+          this.injectShadowPiercerForTarget(target);
         }
       },
       targetRemoved: () => { }
@@ -38,11 +119,38 @@ export class PageInfoManager {
     // Listen for target info changed events (includes navigation)
     SDK.TargetManager.TargetManager.instance().addEventListener(
       SDK.TargetManager.Events.INSPECTED_URL_CHANGED,
-      () => this.updatePageInfo()
+      () => {
+        this.updatePageInfo();
+        // Re-inject shadow piercer after navigation
+        const target = SDK?.TargetManager.TargetManager.instance().primaryPageTarget();
+        if (target) {
+          this.injectShadowPiercerForTarget(target);
+        }
+      }
     );
 
-    // Initialize with current info
+    // Initialize with current info and inject shadow piercer
     this.updatePageInfo();
+    const initialTarget = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
+    if (initialTarget) {
+      this.injectShadowPiercerForTarget(initialTarget);
+    }
+  }
+
+  /**
+   * Injects the shadow piercer runtime script into a target for shadow DOM access.
+   * The piercer patches Element.attachShadow to capture closed shadow roots.
+   */
+  private async injectShadowPiercerForTarget(target: any): Promise<void> {
+    if (!injectShadowPiercer) {
+      return;
+    }
+    try {
+      await injectShadowPiercer(target);
+      logger.debug('Shadow piercer injected for target:', target.id());
+    } catch (error) {
+      logger.warn('Failed to inject shadow piercer:', error);
+    }
   }
 
   /**
@@ -50,6 +158,13 @@ export class PageInfoManager {
    * This method is used to explicitly refresh the data before each agent iteration
    */
   async updatePageInfoWithFullTree(): Promise<void> {
+    await this.ensureInitialized();
+
+    // In Node environment, just return - page context comes from cdpAdapter
+    if (isNodeEnvironment || !SDK) {
+      return;
+    }
+
     const target = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
     if (!target) {
       this.setInfo(null);
@@ -80,6 +195,11 @@ export class PageInfoManager {
   }
 
   private async updatePageInfo(): Promise<void> {
+    // Skip in Node environment
+    if (isNodeEnvironment || !SDK) {
+      return;
+    }
+
     try {
       const target = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
       if (!target) {
@@ -106,7 +226,12 @@ export class PageInfoManager {
     }
   }
 
-  private async fetchAccessibilityTree(target: SDK.Target.Target): Promise<void> {
+  private async fetchAccessibilityTree(target: any): Promise<void> {
+    // Skip if Utils not available (Node environment)
+    if (!Utils) {
+      return;
+    }
+
     try {
       // Call the getVisibleAccessibilityTree function from Utils
       const treeResult = await Utils.getVisibleAccessibilityTree(target);
@@ -130,7 +255,7 @@ export class PageInfoManager {
 
       // Keep this storeVisit call - it has the most complete data (page info + accessibility tree)
       const pageInfo = this.getCurrentInfo();
-      if (pageInfo?.url) {
+      if (pageInfo?.url && VisitHistoryManager) {
         // Store with the accessibility tree
         VisitHistoryManager.getInstance().storeVisit(pageInfo, this.accessibilityTree);
       }
@@ -181,6 +306,11 @@ PageInfoManager.getInstance();
  * @returns The enhanced system prompt with page context information if available
  */
 export async function enhancePromptWithPageContext(basePrompt: string): Promise<string> {
+  // In Node environment, just return the base prompt - context comes from cdpAdapter
+  if (isNodeEnvironment) {
+    return basePrompt;
+  }
+
   // Fetch the latest accessibility tree before generating the prompt
   await PageInfoManager.getInstance().updatePageInfoWithFullTree();
 
@@ -188,6 +318,28 @@ export async function enhancePromptWithPageContext(basePrompt: string): Promise<
   const pageInfo = PageInfoManager.getInstance().getCurrentInfo();
   const accessibilityTree = PageInfoManager.getInstance().getAccessibilityTree();
   const iframeContent = PageInfoManager.getInstance().getIframeContent();
+
+  // Get current session files (only if FileStorageManager is available)
+  let files: any[] = [];
+  if (FileStorageManager) {
+    try {
+      const fileManager = FileStorageManager.getInstance();
+      files = await fileManager.listFiles();
+    } catch (error) {
+      logger.warn('Failed to fetch files for context:', error);
+    }
+  }
+
+  // Get memory context (global across sessions) - only if MemoryBlockManager is available
+  let memoryContext = '';
+  if (MemoryBlockManager) {
+    try {
+      const memoryManager = new MemoryBlockManager();
+      memoryContext = await memoryManager.compileMemoryContext();
+    } catch (error) {
+      logger.warn('Failed to fetch memory context:', error);
+    }
+  }
 
   // If no page info is available, return the original prompt
   if (!pageInfo) {
@@ -202,11 +354,10 @@ export async function enhancePromptWithPageContext(basePrompt: string): Promise<
 <Context>
   <User>
     <Date>${new Date().toLocaleDateString()}</Date>
-    <Time>${new Date().toLocaleTimeString()}</Time>
   </User>
+  ${memoryContext}
   <Page>
     <Title>${pageInfo.title}</Title>
-    <URL>${pageInfo.url}</URL>
     <PartialAccessibility>
       <!-- This tree represents only the currently visible (viewport) section of the page, not the full page. -->
       ${accessibilityTree ? `<Tree>\n${accessibilityTree}\n</Tree>` : 'Unavailable'}
@@ -222,6 +373,18 @@ ${iframe.contentSimplified}
       ).join('\n      ')}
     </Iframes>` : ''}
   </Page>
+  ${files.length > 0 ?
+    `<Files>
+    <!-- Files created during this session -->
+    ${files.map((file) =>
+      `<File>
+      <Name>${file.fileName}</Name>
+      <Created>${new Date(file.createdAt).toLocaleString()}</Created>
+      <Updated>${new Date(file.updatedAt).toLocaleString()}</Updated>
+      <Size>${file.size} characters</Size>
+    </File>`
+    ).join('\n    ')}
+  </Files>` : ''}
 </Context>
 
 Instructions:
@@ -230,9 +393,10 @@ Instructions:
 - If you need the full page accessibility tree to answer the user's query, you have the ability to request it at any time.
 - Use the page title, URL, and partial accessibility tree to inform your answers.
 ${iframeContent && iframeContent.length > 0 ? '- The page contains embedded iframes with their own content, which is included above.' : ''}
+${files.length > 0 ? `- ${files.length} file${files.length === 1 ? '' : 's'} ${files.length === 1 ? 'has' : 'have'} been created during this session. You can read, update, or reference ${files.length === 1 ? 'this file' : 'these files'} using the file management tools (read_file, update_file, create_file, delete_file, list_files).` : ''}
 - If the user asks about the page, refer to this context.
 - If the partial accessibility tree is present, use it to answer questions about visible page structure, elements, or accessibility.
-- If you need to extract any data from the entire page, you must always use the extract_schema_data tool to do so. Do not attempt to extract data from the full page by any other means.
+- If you need to extract any data from the entire page, you must always use the extract_data tool to do so. Do not attempt to extract data from the full page by any other means.
 - If information is missing, answer based on what is available, or request the full page accessibility tree if necessary.
 - Always be concise, accurate, and helpful.
 
