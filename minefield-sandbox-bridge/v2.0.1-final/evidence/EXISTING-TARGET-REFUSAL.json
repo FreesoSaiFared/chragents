@@ -1,0 +1,48 @@
+{
+  "at": "2026-07-30T13:51:09.4307898Z",
+  "data": {
+    "envelope": {
+      "id": "mf-existing-commit",
+      "kind": "artifact",
+      "originUrl": "https://chatgpt.com/g/g-p-6a5173aac2ec81919ad34808f3b9840d/c/6a68bdc1-7180-83eb-a990-521592229624",
+      "tabId": 971547886,
+      "payload": {
+        "action": "push.commit",
+        "uploadId": "existingtarget20260730"
+      }
+    },
+    "result": {
+      "at": "2026-07-30T13:51:09.4307898Z",
+      "autoIngest": true,
+      "bytes": 143,
+      "durationMs": 35,
+      "error": "target directory already exists; refusing merge or overwrite",
+      "id": "mf-existing-commit",
+      "kind": "artifact",
+      "ok": false,
+      "outcome": "UPLOAD_COMMITTED",
+      "path": "C:\\Users\\Admin\\Downloads\\MF-SANDBOX-BRIDGE-EXISTING-TARGET-20260730.zip",
+      "receipt": {
+        "schema": "minefield.artifact-intake/1",
+        "id": "artifact-30dc5e22af324449aaa54968",
+        "status": "OUT_OF_SYNC_TARGET_EXISTS",
+        "archivePath": "C:\\Users\\Admin\\Downloads\\MF-SANDBOX-BRIDGE-EXISTING-TARGET-20260730.zip",
+        "archiveName": "MF-SANDBOX-BRIDGE-EXISTING-TARGET-20260730.zip",
+        "targetDirectory": "C:\\Users\\Admin\\Downloads\\MF-SANDBOX-BRIDGE-EXISTING-TARGET-20260730",
+        "origin": {
+          "schema": "minefield.artifact-intake/1",
+          "expectedName": "MF-SANDBOX-BRIDGE-EXISTING-TARGET-20260730.zip",
+          "finalPath": "C:\\Users\\Admin\\Downloads\\MF-SANDBOX-BRIDGE-EXISTING-TARGET-20260730.zip",
+          "originUrl": "https://chatgpt.com/g/g-p-6a5173aac2ec81919ad34808f3b9840d/c/6a68bdc1-7180-83eb-a990-521592229624",
+          "tabId": 971547886,
+          "registeredAt": "2026-07-30T13:51:09.3988965Z"
+        },
+        "startedAt": "2026-07-30T13:51:09.405107Z",
+        "completedAt": "",
+        "error": "target directory already exists; refusing merge or overwrite"
+      },
+      "sha256": "8a940e16bbc37fbb08ffcba172a1b6ec64886883aaa01277e1f33e45030c90ce"
+    }
+  },
+  "kind": "command.artifact"
+}

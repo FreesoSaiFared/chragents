@@ -1,0 +1,87 @@
+{
+    "schema":  "minefield.sandbox-bridge.negative-and-shell-acceptance/1",
+    "begin":  {
+                  "at":  "2026-07-30T13:43:30.5458996Z",
+                  "durationMs":  2,
+                  "id":  "mf-error-begin",
+                  "kind":  "artifact",
+                  "manifest":  {
+                                   "schema":  "minefield.artifact-push/1",
+                                   "id":  "errorprobe20260730",
+                                   "state":  "RECEIVING",
+                                   "fileName":  "MF-SANDBOX-BRIDGE-ERROR-PROBE-20260730.zip",
+                                   "expectedSha256":  "8666beb4e0bba44c40cc53bc53e7dfc3d71f9d80278ff98f5f4d544c8ee19326",
+                                   "totalBytes":  19,
+                                   "chunkCount":  1,
+                                   "originUrl":  "https://chatgpt.com/g/g-p-6a5173aac2ec81919ad34808f3b9840d/c/6a68bdc1-7180-83eb-a990-521592229624",
+                                   "conversationKey":  "\u003cnil\u003e",
+                                   "tabActorId":  "\u003cnil\u003e",
+                                   "tabId":  971547886,
+                                   "autoIngest":  false,
+                                   "createdAt":  "2026-07-30T13:43:30.5433821Z",
+                                   "updatedAt":  "2026-07-30T13:43:30.5433821Z"
+                               },
+                  "ok":  true,
+                  "outcome":  "UPLOAD_READY"
+              },
+    "chunk":  {
+                  "at":  "2026-07-30T13:43:30.7362542Z",
+                  "bytes":  19,
+                  "durationMs":  4,
+                  "id":  "mf-error-chunk",
+                  "index":  0,
+                  "kind":  "artifact",
+                  "ok":  true,
+                  "outcome":  "UPLOAD_CHUNK_ACCEPTED",
+                  "sha256":  "8666beb4e0bba44c40cc53bc53e7dfc3d71f9d80278ff98f5f4d544c8ee19326"
+              },
+    "conflictingChunk":  {
+                             "at":  "2026-07-30T13:43:30.758448Z",
+                             "durationMs":  0,
+                             "error":  "UPLOAD_CHUNK_CONFLICT",
+                             "existingSha256":  "8666beb4e0bba44c40cc53bc53e7dfc3d71f9d80278ff98f5f4d544c8ee19326",
+                             "id":  "mf-error-conflict",
+                             "incomingSha256":  "a4b499e0bb67c9bc5d7fc5953ff88f12c2f7b93ccadbf89631caeee06f3aa90d",
+                             "index":  0,
+                             "kind":  "artifact",
+                             "ok":  false
+                         },
+    "wrongOrigin":  {
+                        "at":  "2026-07-30T13:43:30.8132077Z",
+                        "durationMs":  0,
+                        "error":  "UPLOAD_ORIGIN_MISMATCH",
+                        "id":  "mf-error-origin",
+                        "kind":  "artifact",
+                        "ok":  false
+                    },
+    "numberedDuplicate":  {
+                              "at":  "2026-07-30T13:43:30.8189333Z",
+                              "durationMs":  0,
+                              "error":  "OUT_OF_SYNC_DUPLICATE_FILENAME",
+                              "id":  "mf-error-numbered",
+                              "kind":  "artifact",
+                              "ok":  false
+                          },
+    "abort":  {
+                  "at":  "2026-07-30T13:43:30.8327063Z",
+                  "durationMs":  2,
+                  "id":  "mf-error-abort",
+                  "kind":  "artifact",
+                  "ok":  true,
+                  "outcome":  "UPLOAD_ABORTED",
+                  "uploadId":  "errorprobe20260730"
+              },
+    "shell":  {
+                  "at":  "2026-07-30T13:43:30.8523189Z",
+                  "durationMs":  0,
+                  "error":  "SHELL_NOT_SUPPORTED",
+                  "id":  "mf-shell-live",
+                  "kind":  "powershell",
+                  "ok":  false,
+                  "shell":  "\u003cnil\u003e"
+              },
+    "shellFileExists":  false,
+    "shellFileContent":  {
+
+                         }
+}

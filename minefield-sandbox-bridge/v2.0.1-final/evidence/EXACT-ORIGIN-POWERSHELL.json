@@ -1,0 +1,32 @@
+{
+  "at": "2026-07-30T13:47:53.621974Z",
+  "data": {
+    "envelope": {
+      "id": "mf-shell-live-fixed",
+      "kind": "powershell",
+      "originUrl": "https://chatgpt.com/g/g-p-6a5173aac2ec81919ad34808f3b9840d/c/6a68bdc1-7180-83eb-a990-521592229624",
+      "tabId": 971547886,
+      "payload": {
+        "cwd": "C:\\Users\\Admin\\Downloads\\_DT_SANDBOX_BRIDGE",
+        "script": "$p=\"C:\\Users\\Admin\\Downloads\\_DT_SANDBOX_BRIDGE\\BROKER-SHELL-PROBE.txt\"; [IO.File]::WriteAllText($p,\"broker-shell-live-fixed\"); Write-Output \"MF_BROKER_SHELL_OK\"",
+        "timeoutSeconds": 30
+      }
+    },
+    "result": {
+      "at": "2026-07-30T13:47:53.621974Z",
+      "cwd": "C:\\Users\\Admin\\Downloads\\_DT_SANDBOX_BRIDGE",
+      "durationMs": 1148,
+      "executable": "C:\\Program Files\\PowerShell\\7-preview\\pwsh.exe",
+      "exitCode": 0,
+      "id": "mf-shell-live-fixed",
+      "kind": "powershell",
+      "ok": true,
+      "shell": "powershell",
+      "stderr": "",
+      "stdout": "MF_BROKER_SHELL_OK\r\n",
+      "timedOut": false,
+      "truncated": false
+    }
+  },
+  "kind": "command.powershell"
+}

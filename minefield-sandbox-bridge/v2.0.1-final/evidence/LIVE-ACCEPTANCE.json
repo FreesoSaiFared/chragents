@@ -1,0 +1,143 @@
+{
+    "schema":  "minefield.sandbox-bridge.live-acceptance/1",
+    "at":  "2026-07-30T13:40:34.5316394Z",
+    "sourceZip":  "C:\\Users\\Admin\\Downloads\\_DT_SANDBOX_BRIDGE\\run-20260730-1455\\MF-SANDBOX-BRIDGE-LIVE-PROBE-20260730.zip",
+    "sourceSha256":  "329fb04cddfeb8f0e55b9fb2b28e46431b5aaa511e7d78e6ba3b1d968a5f5a9e",
+    "sourceBytes":  312,
+    "begin":  {
+                  "at":  "2026-07-30T13:40:32.2907745Z",
+                  "durationMs":  3,
+                  "id":  "mf-push-begin-liveprobe",
+                  "kind":  "artifact",
+                  "manifest":  {
+                                   "schema":  "minefield.artifact-push/1",
+                                   "id":  "liveprobe20260730b",
+                                   "state":  "RECEIVING",
+                                   "fileName":  "MF-SANDBOX-BRIDGE-LIVE-PROBE-20260730.zip",
+                                   "expectedSha256":  "329fb04cddfeb8f0e55b9fb2b28e46431b5aaa511e7d78e6ba3b1d968a5f5a9e",
+                                   "totalBytes":  312,
+                                   "chunkCount":  2,
+                                   "originUrl":  "https://chatgpt.com/g/g-p-6a5173aac2ec81919ad34808f3b9840d/c/6a68bdc1-7180-83eb-a990-521592229624",
+                                   "conversationKey":  "chatgpt:6a68bdc1-7180-83eb-a990-521592229624",
+                                   "tabActorId":  "chat:current",
+                                   "tabId":  971547886,
+                                   "autoIngest":  true,
+                                   "createdAt":  "2026-07-30T13:40:32.2869553Z",
+                                   "updatedAt":  "2026-07-30T13:40:32.2869553Z"
+                               },
+                  "ok":  true,
+                  "outcome":  "UPLOAD_READY"
+              },
+    "chunks":  [
+                   {
+                       "at":  "2026-07-30T13:40:32.3634368Z",
+                       "bytes":  156,
+                       "durationMs":  2,
+                       "id":  "mf-push-chunk-0",
+                       "index":  0,
+                       "kind":  "artifact",
+                       "ok":  true,
+                       "outcome":  "UPLOAD_CHUNK_ACCEPTED",
+                       "sha256":  "682b3a005ab0b0b5164f700f2f68fd6080925ad9ece4c2ff60ad92c305d310a2"
+                   },
+                   {
+                       "at":  "2026-07-30T13:40:32.379129Z",
+                       "bytes":  156,
+                       "durationMs":  8,
+                       "id":  "mf-push-chunk-1",
+                       "index":  1,
+                       "kind":  "artifact",
+                       "ok":  true,
+                       "outcome":  "UPLOAD_CHUNK_ACCEPTED",
+                       "sha256":  "f2afb1412463f339a352dea6325d8917c13165bc7551a4da6756b8f98512a764"
+                   }
+               ],
+    "duplicateChunk":  {
+                           "at":  "2026-07-30T13:40:32.3909732Z",
+                           "durationMs":  5,
+                           "id":  "mf-push-chunk-dup",
+                           "index":  0,
+                           "kind":  "artifact",
+                           "ok":  true,
+                           "outcome":  "UPLOAD_CHUNK_DUPLICATE_SUPPRESSED",
+                           "sha256":  "682b3a005ab0b0b5164f700f2f68fd6080925ad9ece4c2ff60ad92c305d310a2"
+                       },
+    "conflictingChunk":  null,
+    "wrongOrigin":  null,
+    "statusBeforeCommit":  {
+                               "at":  "2026-07-30T13:40:32.4626774Z",
+                               "durationMs":  1,
+                               "id":  "mf-push-status",
+                               "kind":  "artifact",
+                               "manifest":  {
+                                                "schema":  "minefield.artifact-push/1",
+                                                "id":  "liveprobe20260730b",
+                                                "state":  "RECEIVING",
+                                                "fileName":  "MF-SANDBOX-BRIDGE-LIVE-PROBE-20260730.zip",
+                                                "expectedSha256":  "329fb04cddfeb8f0e55b9fb2b28e46431b5aaa511e7d78e6ba3b1d968a5f5a9e",
+                                                "totalBytes":  312,
+                                                "chunkCount":  2,
+                                                "originUrl":  "https://chatgpt.com/g/g-p-6a5173aac2ec81919ad34808f3b9840d/c/6a68bdc1-7180-83eb-a990-521592229624",
+                                                "conversationKey":  "chatgpt:6a68bdc1-7180-83eb-a990-521592229624",
+                                                "tabActorId":  "chat:current",
+                                                "tabId":  971547886,
+                                                "autoIngest":  true,
+                                                "createdAt":  "2026-07-30T13:40:32.2869553Z",
+                                                "updatedAt":  "2026-07-30T13:40:32.3780662Z"
+                                            },
+                               "missingCount":  0,
+                               "ok":  true,
+                               "receivedCount":  2,
+                               "receivedIndexes":  [
+                                                       0,
+                                                       1
+                                                   ]
+                           },
+    "commit":  {
+                   "at":  "2026-07-30T13:40:32.506001Z",
+                   "autoIngest":  true,
+                   "bytes":  312,
+                   "durationMs":  39,
+                   "id":  "mf-push-commit",
+                   "kind":  "artifact",
+                   "ok":  true,
+                   "outcome":  "UPLOAD_COMMITTED",
+                   "path":  "C:\\Users\\Admin\\Downloads\\MF-SANDBOX-BRIDGE-LIVE-PROBE-20260730.zip",
+                   "receipt":  {
+                                   "schema":  "minefield.artifact-intake/1",
+                                   "id":  "artifact-5bc96af1ac8d6634bc24340e",
+                                   "status":  "EXTRACTED",
+                                   "archivePath":  "C:\\Users\\Admin\\Downloads\\MF-SANDBOX-BRIDGE-LIVE-PROBE-20260730.zip",
+                                   "archiveName":  "MF-SANDBOX-BRIDGE-LIVE-PROBE-20260730.zip",
+                                   "archiveSha256":  "329fb04cddfeb8f0e55b9fb2b28e46431b5aaa511e7d78e6ba3b1d968a5f5a9e",
+                                   "targetDirectory":  "C:\\Users\\Admin\\Downloads\\MF-SANDBOX-BRIDGE-LIVE-PROBE-20260730",
+                                   "entryCount":  2,
+                                   "expandedBytes":  90,
+                                   "compressedBytes":  94,
+                                   "origin":  {
+                                                  "schema":  "minefield.artifact-intake/1",
+                                                  "expectedName":  "MF-SANDBOX-BRIDGE-LIVE-PROBE-20260730.zip",
+                                                  "finalPath":  "C:\\Users\\Admin\\Downloads\\MF-SANDBOX-BRIDGE-LIVE-PROBE-20260730.zip",
+                                                  "originUrl":  "https://chatgpt.com/g/g-p-6a5173aac2ec81919ad34808f3b9840d/c/6a68bdc1-7180-83eb-a990-521592229624",
+                                                  "conversationKey":  "chatgpt:6a68bdc1-7180-83eb-a990-521592229624",
+                                                  "tabActorId":  "chat:current",
+                                                  "tabId":  971547886,
+                                                  "registeredAt":  "2026-07-30T13:40:32.4725856Z"
+                                              },
+                                   "startedAt":  "2026-07-30T13:40:32.4769603Z",
+                                   "completedAt":  "2026-07-30T13:40:32.4950292Z",
+                                   "evidence":  {
+                                                    "zipDeleted":  true
+                                                }
+                               },
+                   "sha256":  "329fb04cddfeb8f0e55b9fb2b28e46431b5aaa511e7d78e6ba3b1d968a5f5a9e"
+               },
+    "downloadZipExists":  false,
+    "targetExists":  true,
+    "targetFiles":  [
+                        ".minefield-artifact-receipt.json",
+                        "contract.json",
+                        "hello.txt"
+                    ],
+    "pendingReturns":  1
+}
